@@ -1,0 +1,12 @@
+# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+
+services:
+  asnsn:
+    restart: always
+    image: registry.amiasys.com/asnsn:25.7.0
+    ports:
+      - "50052:50052"
+    volumes:
+      - ./config/:/asn/config
+      - ./log/:/var/log/asn/servicenode
+      - ./services:/usr/local/asn/servicenode/services

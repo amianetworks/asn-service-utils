@@ -1,0 +1,376 @@
+network-tiers: [ core, clos ]
+
+networks:
+  - name: net-dc
+    desc: "Amia Networks Data Center Network"
+    location:
+      desc: "Amia Networks Data Center"
+      address: "Palo Alto, CA"
+      coordinates: { latitude: 37.432803, longitude: -122.107064, altitude: 10.97 }
+    nodes:
+      - dc-ep1
+      - dc-ep2
+      - dc-ep3
+    networks:
+      - name: net-core
+        desc: "Core Network for Core Router and Switch"
+        tiers: [ core ]
+        nodes:
+          - core-r
+          - core-s
+      - name: net-clos
+        desc: "Clos Network for Spine and Leaf"
+        tiers: [ clos ]
+        nodes:
+          - spine1
+          - spine2
+          - leaf1
+          - leaf2
+          - leaf3
+
+nodes:
+  core-r:
+    type: router
+    desc: "main router for the whole data center"
+    managed: true
+    ipmi:
+      ip: 192.168.100.1
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: core-r.amia.local
+      ip: 192.168.100.1
+    info:
+      vendor: Cisco
+      model: ISR4431
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.0.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.1.2/24
+        tags: [ data ]
+      eth2:
+        ip: 172.16.0.1/24
+        tags: [ control ]
+  core-s:
+    type: switch
+    desc: "main switch for the whole data center"
+    managed: true
+    ipmi:
+      ip: 192.168.100.2
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: core-s.amia.local
+      ip: 192.168.100.2
+    info:
+      vendor: Cisco
+      model: C9407R
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.2.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.3.1/24
+        tags: [ data ]
+      eth2:
+        ip: 10.0.4.1/24
+        tags: [ control ]
+      eth4:
+        ip: 172.16.1.1/24
+        tags: [ control ]
+  spine1:
+    type: switch
+    desc: "spine switch 1 in Clos fabric"
+    managed: true
+    ipmi:
+      ip: 192.168.100.3
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: spine1.amia.local
+      ip: 192.168.100.3
+    info:
+      vendor: Cisco
+      model: N9K-C9364C-GX
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.5.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.6.1/24
+        tags: [ data ]
+      eth2:
+        ip: 10.0.7.1/24
+        tags: [ data ]
+      eth3:
+        ip: 10.0.8.1/24
+        tags: [ data ]
+      eth4:
+        ip: 172.16.2.1/24
+        tags: [ control ]
+  spine2:
+    type: switch
+    desc: "spine switch 2 in Clos fabric"
+    managed: true
+    ipmi:
+      ip: 192.168.100.4
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: spine2.amia.local
+      ip: 192.168.100.4
+    info:
+      vendor: Cisco
+      model: N9K-C9364C-GX
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.9.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.10.1/24
+        tags: [ data ]
+      eth2:
+        ip: 10.0.11.1/24
+        tags: [ data ]
+      eth3:
+        ip: 10.0.12.1/24
+        tags: [ data ]
+      eth4:
+        ip: 172.16.3.1/24
+        tags: [ control ]
+  leaf1:
+    type: switch
+    desc: "leaf switch 1 in Clos fabric"
+    managed: true
+    ipmi:
+      ip: 192.168.100.5
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: leaf1.amia.local
+      ip: 192.168.100.5
+    info:
+      vendor: Cisco
+      model: N9K-C93180YC-FX3
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.13.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.14.1/24
+        tags: [ data ]
+      eth2:
+        ip: 10.0.15.1/24
+        tags: [ data ]
+      eth3:
+        ip: 10.0.16.1/24
+        tags: [ data ]
+      eth4:
+        ip: 172.16.4.1/24
+        tags: [ control ]
+  leaf2:
+    type: switch
+    desc: "leaf switch 2 in Clos fabric"
+    managed: true
+    ipmi:
+      ip: 192.168.100.6
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: leaf2.amia.local
+      ip: 192.168.100.6
+    info:
+      vendor: Cisco
+      model: N9K-C93180YC-FX3
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.17.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.18.1/24
+        tags: [ data ]
+      eth2:
+        ip: 10.0.19.1/24
+        tags: [ data ]
+      eth3:
+        ip: 10.0.20.1/24
+        tags: [ data ]
+      eth4:
+        ip: 172.16.5.1/24
+        tags: [ control ]
+  leaf3:
+    type: switch
+    desc: "leaf switch 3 in Clos fabric"
+    managed: true
+    ipmi:
+      ip: 192.168.100.7
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: leaf3.amia.local
+      ip: 192.168.100.7
+    info:
+      vendor: Cisco
+      model: N9K-C93180YC-FX3
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.21.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.22.1/24
+        tags: [ data ]
+      eth2:
+        ip: 10.0.23.1/24
+        tags: [ data ]
+      eth3:
+        ip: 10.0.24.1/24
+        tags: [ data ]
+      eth4:
+        ip: 172.16.6.1/24
+        tags: [ control ]
+  dc-ep1:
+    type: server
+    desc: "endpoint server 1"
+    managed: true
+    ipmi:
+      ip: 192.168.100.8
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: ep1.amia.local
+      ip: 192.168.100.8
+    info:
+      vendor: Supermicro
+      model: SYS-6029P
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.25.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.26.1/24
+        tags: [ data ]
+      eth2:
+        ip: 172.16.7.1/24
+        tags: [ control ]
+  dc-ep2:
+    type: server
+    desc: "endpoint server 2"
+    managed: true
+    ipmi:
+      ip: 192.168.100.9
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: ep2.amia.local
+      ip: 192.168.100.9
+    info:
+      vendor: Supermicro
+      model: SYS-6029P
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.27.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.28.1/24
+        tags: [ data ]
+      eth2:
+        ip: 172.16.8.1/24
+        tags: [ control ]
+  dc-ep3:
+    type: server
+    desc: "endpoint server 3"
+    managed: true
+    ipmi:
+      ip: 192.168.100.10
+      username: admin
+      key: amia_key_123
+    management:
+      hostname: ep3.amia.local
+      ip: 192.168.100.10
+    info:
+      vendor: Supermicro
+      model: SYS-6029P
+      sn: <SN>
+    interfaces:
+      eth0:
+        ip: 10.0.29.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.30.1/24
+        tags: [ data ]
+      eth2:
+        ip: 172.16.9.1/24
+        tags: [ control ]
+
+links:
+  - from: { node: core-r, interface: eth1 }
+    to: { node: core-s, interface: eth0 }
+    bandwidth: 100000
+    desc: "main router to main switch"
+  - from: { node: core-s, interface: eth1 }
+    to: { node: spine1, interface: eth0 }
+    bandwidth: 100000
+    desc: "main switch to spine 1"
+  - from: { node: core-s, interface: eth2 }
+    to: { node: spine2, interface: eth0 }
+    bandwidth: 100000
+    desc: "main switch to spine 2"
+  - from: { node: spine1, interface: eth1 }
+    to: { node: leaf1, interface: eth0 }
+    bandwidth: 100000
+    desc: "spine 1 to leaf 1"
+  - from: { node: spine1, interface: eth2 }
+    to: { node: leaf2, interface: eth0 }
+    bandwidth: 100000
+    desc: "spine 1 to leaf 2"
+  - from: { node: spine1, interface: eth3 }
+    to: { node: leaf3, interface: eth0 }
+    bandwidth: 100000
+    desc: "spine 1 to leaf 3"
+  - from: { node: spine2, interface: eth1 }
+    to: { node: leaf1, interface: eth1 }
+    bandwidth: 100000
+    desc: "spine 2 to leaf 1"
+  - from: { node: spine2, interface: eth2 }
+    to: { node: leaf2, interface: eth1 }
+    bandwidth: 100000
+    desc: "spine 2 to leaf 2"
+  - from: { node: spine2, interface: eth3 }
+    to: { node: leaf3, interface: eth1 }
+    bandwidth: 100000
+    desc: "spine 2 to leaf 3"
+  - from: { node: leaf1, interface: eth2 }
+    to: { node: dc-ep1, interface: eth0 }
+    bandwidth: 100000
+    desc: "leaf 1 to endpoint 1"
+  - from: { node: leaf1, interface: eth3 }
+    to: { node: dc-ep2, interface: eth0 }
+    bandwidth: 100000
+    desc: "leaf 1 to endpoint 2"
+  - from: { node: leaf2, interface: eth2 }
+    to: { node: dc-ep2, interface: eth1 }
+    bandwidth: 100000
+    desc: "leaf 2 to endpoint 2"
+  - from: { node: leaf2, interface: eth3 }
+    to: { node: dc-ep3, interface: eth0 }
+    bandwidth: 100000
+    desc: "leaf 2 to endpoint 3"
+  - from: { node: leaf3, interface: eth2 }
+    to: { node: dc-ep1, interface: eth1 }
+    bandwidth: 100000
+    desc: "leaf 3 to endpoint 1"
+  - from: { node: leaf3, interface: eth3 }
+    to: { node: dc-ep3, interface: eth1 }
+    bandwidth: 100000
+    desc: "leaf 3 to endpoint 3"

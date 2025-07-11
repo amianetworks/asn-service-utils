@@ -1,0 +1,288 @@
+network-tiers: [ core, edge, access ]
+
+networks:
+  - name: ceni
+    desc: "CENI Network"
+    networks:
+      - name: beijing
+        desc: "Core Network for Beijing"
+        tiers: [ core ]
+        location:
+          desc: "Beijing"
+          coordinates: { latitude: 40.2539, longitude: 116.4551 }
+        nodes:
+          - beijing-s1
+        networks:
+          - name: shenyang
+            desc: "Edge and Access Node for Shenyang"
+            tiers: [ edge, access ]
+            location:
+              desc: "Shenyang"
+              coordinates: { latitude: 41.855133, longitude: 123.444632 }
+            nodes:
+              - shenyang-s1
+          - name: jinan
+            desc: "Edge Node for Jinan"
+            tiers: [ edge ]
+            location:
+              desc: "Jinan"
+              coordinates: { latitude: 36.69228, longitude: 117.116872 }
+            nodes:
+              - jinan-s1
+          - name: qingdao
+            desc: "Access Node for Qingdao"
+            tiers: [ access ]
+            location:
+              desc: "Qingdao"
+              coordinates: { latitude: 36.119236, longitude: 120.356464 }
+            nodes:
+              - qingdao-s1
+      - name: guangzhou
+        desc: "Core Network for Guangzhou"
+        tiers: [ core ]
+        location:
+          desc: "Guangzhou"
+          coordinates: { latitude: 23.109565, longitude: 113.267028 }
+        nodes:
+          - guangzhou-s1
+        networks:
+          - name: shenzhen
+            desc: "Edge and Access Node for Shenzhen"
+            tiers: [ edge, access ]
+            location:
+              desc: "Shenzhen"
+              coordinates: { latitude: 22.538335, longitude: 114.041722 }
+            nodes:
+              - shenzhen-s1
+          - name: xiamen
+            desc: "Access Node for Xiamen"
+            tiers: [ access ]
+            location:
+              desc: "Xiamen"
+              coordinates: { latitude: 24.507683, longitude: 118.106423 }
+            nodes:
+              - xiamen-s1
+      - name: jiangsu
+        desc: "Core Network for Jiangsu"
+        tiers: [ core ]
+        location:
+          desc: "Jiangsu"
+        networks:
+          - name: shanghai
+            desc: "Core Network for Shanghai"
+            tiers: [ core ]
+            location:
+              desc: "Shanghai"
+              coordinates: { latitude: 31.210974, longitude: 121.458463 }
+            nodes:
+              - shanghai-s1
+            networks:
+              - name: suzhou
+                desc: "Edge Node for Suzhou"
+                tiers: [ edge ]
+                location:
+                  desc: "Suzhou"
+                  coordinates: { latitude: 31.27087, longitude: 120.541443 }
+                nodes:
+                  - suzhou-s1
+              - name: hangzhou
+                desc: "Access Node for Hangzhou"
+                tiers: [ access ]
+                location:
+                  desc: "Hangzhou"
+                  coordinates: { latitude: 30.321859, longitude: 120.125055 }
+                nodes:
+                  - hangzhou-s1
+          - name: nanjing
+            desc: "Core Network for Nanjing"
+            tiers: [ core ]
+            location:
+              desc: "Nanjing"
+              coordinates: { latitude: 32.084999, longitude: 118.800887 }
+            nodes:
+              - nanjing-s1
+            networks:
+              - name: hefei
+                desc: "Edge and Access Node for Hefei"
+                tiers: [ edge, access ]
+                location:
+                  desc: "Hefei"
+                  coordinates: { latitude: 31.825031, longitude: 117.226665 }
+                nodes:
+                  - hefei-s1
+              - name: yangzhou
+                desc: "Edge and Access Node for Yangzhou"
+                tiers: [ edge, access ]
+                location:
+                  desc: "Yangzhou"
+                  coordinates: { latitude: 32.399412, longitude: 119.412344 }
+                nodes:
+                  - yangzhou-s1
+              - name: changzhou
+                desc: "Edge Node for Changzhou"
+                tiers: [ edge ]
+                location:
+                  desc: "Changzhou"
+                  coordinates: { latitude: 31.808248, longitude: 119.975696 }
+                nodes:
+                  - changzhou-s1
+              - name: wuxi
+                desc: "Access Node for Wuxi"
+                tiers: [ access ]
+                location:
+                  desc: "Wuxi"
+                  coordinates: { latitude: 31.493314, longitude: 120.316230 }
+                nodes:
+                  - wuxi-s1
+
+nodes:
+  # CENI core network
+  beijing-s1:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: ...
+        tags: [ data ]
+      eth1:
+        ip: ...
+        tags: [ data ]
+  guangzhou-s1:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: ...
+        tags: [ data ]
+      eth1:
+        ip: ...
+        tags: [ data ]
+  shanghai-s1:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: ...
+        tags: [ data ]
+      eth1:
+        ip: ...
+        tags: [ data ]
+  nanjing-s1:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: ...
+        tags: [ data ]
+      eth1:
+        ip: ...
+        tags: [ data ]
+  
+  # Beijing subnet
+  shenyang-s1:
+    type: switch
+    managed: true
+  jinan-s1:
+    type: switch
+    managed: true
+  qingdao-s1:
+    type: switch
+    managed: true
+
+  # Guangzhou subnet
+  shenzhen-s1:
+    type: switch
+    managed: true
+  xiamen-s1:
+    type: switch
+    managed: true
+
+  # Shanghai subnet
+  suzhou-s1:
+    type: switch
+    managed: true
+  hangzhou-s1:
+    type: switch
+    managed: true
+
+  # Nanjing subnet
+  hefei-s1:
+    type: switch
+    managed: true
+  yangzhou-s1:
+    type: switch
+    managed: true
+  changzhou-s1:
+    type: switch
+    managed: true
+  wuxi-s1:
+    type: switch
+    managed: true
+
+links:
+  # CENI core network
+  - from: { node: beijing-s1, interface: eth0 }
+    to: { node: guangzhou-s1, interface: eth0 }
+    bandwidth: 100000
+  - from: { node: beijing-s1, interface: eth1 }
+    to: { node: nanjing-s1, interface: eth0 }
+    bandwidth: 100000
+  - from: { node: nanjing-s1, interface: eth1 }
+    to: { node: shanghai-s1, interface: eth0 }
+    bandwidth: 100000
+  - from: { node: guangzhou-s1, interface: eth1 }
+    to: { node: shanghai-s1, interface: eth1 }
+    bandwidth: 100000
+
+  # Beijing subnet
+  - from: { node: beijing-s1 }
+    to: { node: shenyang-s1 }
+    bandwidth: 100000
+  - from: { node: beijing-s1 }
+    to: { node: jinan-s1 }
+    bandwidth: 100000
+  - from: { node: jinan-s1 }
+    to: { node: qingdao-s1 }
+    bandwidth: 100000
+
+  # Guangzhou subnet
+  - from: { node: guangzhou-s1 }
+    to: { node: shenzhen-s1 }
+    bandwidth: 100000
+  - from: { node: shenzhen-s1 }
+    to: { node: xiamen-s1 }
+    bandwidth: 100000
+
+  # Shanghai subnet
+  - from: { node: shanghai-s1 }
+    to: { node: suzhou-s1 }
+    bandwidth: 100000
+  - from: { node: nanjing-s1 }
+    to: { node: suzhou-s1 }
+    bandwidth: 100000
+  - from: { node: suzhou-s1 }
+    to: { node: hangzhou-s1 }
+    bandwidth: 100000
+
+  # Nanjing subnet
+  - from: { node: nanjing-s1 }
+    to: { node: hefei-s1 }
+    bandwidth: 100000
+  - from: { node: shanghai-s1 }
+    to: { node: hefei-s1 }
+    bandwidth: 100000
+  - from: { node: nanjing-s1 }
+    to: { node: yangzhou-s1 }
+    bandwidth: 100000
+  - from: { node: shanghai-s1 }
+    to: { node: yangzhou-s1 }
+    bandwidth: 100000
+  - from: { node: nanjing-s1 }
+    to: { node: changzhou-s1 }
+    bandwidth: 100000
+  - from: { node: shanghai-s1 }
+    to: { node: changzhou-s1 }
+    bandwidth: 100000
+  - from: { node: changzhou-s1 }
+    to: { node: wuxi-s1 }
+    bandwidth: 100000

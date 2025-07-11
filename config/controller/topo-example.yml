@@ -1,0 +1,218 @@
+# ============================================================================
+# Network Topology Schema - Flexible, Hierarchical, and Location-Aware
+# ============================================================================
+# This YAML describes a multi-layered network topology with optional hierarchy,
+# location mapping, and node-level configuration. It is designed to be flexible
+# for real-world deployment variations.
+#
+# SCHEMA OVERVIEW:
+# ----------------------------------------------------------------------------
+# location-tiers: [tier1, tier2, ...]
+#   - Optional: defines logical or physical location hierarchy.
+#
+# network-tiers: [core, edge, ...]
+#   - Optional: defines roles of networks in backbone, DC, etc.
+#
+# networks:
+#   - name: <network-name>
+#     desc: <text>                          # Optional
+#     tiers: [...]                     # Optional (must match network-tiers if set)
+#     location:                             # Optional
+#       desc: <text>                        # Optional
+#       tier: <tier-name>                   # Optional (must match location-tiers if set)
+#       address: <text>                     # Optional, usually omitted
+#       coordinates: {latitude: <float>, longitude: <float>, altitude: <float>} # Optional
+#     nodes:                                # Optional
+#       - <node-name>
+#       - ...
+#     networks:                             # Optional
+#       - name: <sub-network-name>
+#         desc: <text>
+#         tiers: [...]
+#         nodes:
+#           - ...
+#         networks: [...]                   # Recursive nesting allowed
+#
+# nodes:
+#   <node-name>:
+#     type: router | switch | appliance | firewall | lb | ap | server | device
+#     desc: <text>                          # Optional
+#     location:                             # Optional
+#       desc: <text>                        # Optional
+#       tier: <tier-name>                   # Optional (must match location-tiers if set)
+#       address: <text>                     # Optional, usually omitted
+#       coordinates: {latitude: <float>, longitude: <float>, altitude: <float>} # Optional
+#     managed: true | false                 # Default: false
+#     ipmi:                                 # Optional
+#       ip: <ip>
+#       username: <text>
+#       key: <text>
+#     management:                           # Optional, usually omitted
+#       hostname: <name.domain>
+#       ip: <ip>
+#     info:                                 # Optional
+#       vendor: <text>
+#       model: <text>
+#       sn: <text>
+#     interfaces:                           # Optional
+#       <if-name>:
+#         ip: <CIDR>
+#         tags: [control | data | management]
+#
+# links:
+#   - from: { node: <node>, interface: <if-name> }  # Interface optional
+#     to:   { node: <node>, interface: <if-name> }
+#     bandwidth: <Mbps>                             # Optional
+#     desc: <text>                                  # Optional
+#
+# ----------------------------------------------------------------------------
+# Notes:
+#   - Fields marked as optional can be omitted for flexibility.
+#   - Nodes inherit properties like location if not explicitly set.
+#   - Networks without coordinates will attempt to aggregate locations from their children.
+#   - Networks without aggregated coordinates will inherit from their parent networks.
+#   - All links are bidirectional and should be unique.
+# ============================================================================
+
+## Location Tiers (optional)
+# Defines the geographic hierarchy, such as state > city > institution.
+location-tiers: [ state, city, school ]
+
+## Network Tiers (optional)
+# Defines tiering in backbone or data center scenarios.
+# Alternative examples:
+# network-tiers: [ core, edge ]
+# network-tiers: [ core, aggregate, access ]
+# network-tiers: [ core, public, backend, data ]
+network-tiers: [ core, clos, spine, leaf ]
+
+## Network Topology
+# High-level structure: each network may contain nodes and/or subnetworks.
+networks:
+  - name: asn
+    desc: "ASN root network"
+    nodes:
+      - asn-r1
+      - asn-s1
+    networks:
+      - name: sf-datacenter
+        desc: "Datacenter in SF"
+        location:
+          desc: "San Francisco"
+          tier: city
+        nodes:
+          - dc-r1
+          - dc-s1
+          - dc-s2
+          - dc-l1
+          - dc-l2
+      - name: la-educational
+        desc: "Educational network in LA"
+        location:
+          desc: "Los Angeles"
+          tier: city
+        networks:
+          - name: ucla
+            desc: "Educational subnetwork in UCLA"
+            location:
+              desc: "UCLA"
+              tier: school
+              address: "1 UCLA Ave, LA, CA"
+              coordinates: { latitude: 34.069945, longitude: -118.443828 }
+            nodes:
+              - ucla-r1
+              - ucla-s1
+              - ucla-ep1
+          - name: usc
+            desc: "Educational subnetwork in USC"
+            location:
+              desc: "USC"
+              tier: school
+              address: "2 USC Street, LA, CA"
+              coordinates: { latitude: 34.022549, longitude: -118.285217 }
+            nodes:
+              - usc-r1
+              - usc-s1
+              - usc-ep1
+
+## Node Info
+# Device inventory with flexible metadata. Interfaces and addresses are optional.
+nodes:
+  asn-r1:
+    type: router
+    desc: "California core router"
+    managed: true
+    ipmi:
+      ip: 192.168.1.10
+      username: <USERNAME>
+      key: <KEY>
+    management:
+      hostname: r1.asn.net
+      ip: 192.168.100.100
+    info:
+      vendor: xxx
+      model: xxx
+      sn: xxx
+    interfaces:
+      eth0:
+        ip: 10.0.1.1/24
+        tags: [ control ]
+      eth1:
+        ip: 10.0.2.1/24
+        tags: [ data ]
+      eth2:
+        ip: 10.0.3.1/24
+        tags: [ data ]
+  asn-s1:
+    type: switch
+    desc: "California core switch"
+    managed: true
+    ipmi:
+      ip: 192.168.1.20
+      username: <USERNAME>
+      key: <KEY>
+    management:
+      hostname: s1.asn.net
+      ip: 192.168.100.100
+    info:
+      vendor: xxx
+      model: xxx
+      sn: xxx
+  dc-r1:
+    type: router
+    managed: true
+  dc-s1:
+    type: switch
+    managed: true
+  dc-s2:
+    type: switch
+    managed: true
+  dc-l1:
+    type: device
+    managed: true
+  dc-l2:
+    type: device
+    managed: true
+  ucla-r1:
+    type: router
+    managed: true
+  ucla-s1:
+    type: switch
+    managed: true
+  ucla-ep1:
+    type: device
+    managed: true
+  usc-r1:
+    type: router
+  usc-s1:
+    type: switch
+  usc-ep1:
+    type: device
+
+## Link Info
+# All links are bidirectional and unique.
+links:
+  - from: { node: dc-r1 }
+    to: { node: dc-s1 }
+    bandwidth: 10000
+    desc: "SF datacenter main router to switch 1"
