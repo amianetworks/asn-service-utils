@@ -44,7 +44,7 @@ service Manager {
   // Nodes API
   rpc GetNodesOfNetwork   (Id)          returns (Nodes);
   rpc GetNodesInNodeGroup (Id)          returns (Nodes);
-  rpc GetNodeByIdk        (Id)          returns (Node);
+  rpc GetNodeById         (Id)          returns (Nodes);
   rpc CreateNode          (Node.Create) returns (Empty);
   rpc UpdateNode          (Node.Update) returns (Empty);
   rpc DeleteNode          (Id)          returns (Empty);
@@ -270,8 +270,7 @@ message ConfigRequest {
   string group = 2;
   repeated string service_nodes = 3;
   string service_name = 4;
-  bytes cluster_config = 5;
-  bytes instance_config = 6;
+  bytes config = 5;
 }
 
 message ConfigResponse {
@@ -383,8 +382,8 @@ message Network {
 
 message Nodes {
   repeated Node nodes = 1;
-  repeated Node.Link.Internal internal_links = 2;
-  repeated Node.Link.External external_links = 3;
+  repeated Node.Link internal_links = 2;
+  repeated Node.Link external_links = 3;
 }
 
 message Node {
@@ -484,29 +483,15 @@ message Node {
       string description = 7;
     }
 
-    message Internal {
-      string id = 1;
-      string description = 2;
-      string from_node = 3;
-      string from_interface = 4;
-      string to_node = 5;
-      string to_interface = 6;
-      uint64 bandwidth = 7;
+    string id = 1;
+    string description = 2;
+    string from_node = 3;
+    string from_interface = 4;
+    string to_node = 5;
+    string to_interface = 6;
+    uint64 bandwidth = 7;
 
-      LinkStats stats = 8;
-    }
-
-    message External {
-      string id = 1;
-      string description = 2;
-      string from_node = 3;
-      string from_interface = 4;
-      Node to_node = 5;
-      string to_interface = 6;
-      uint64 bandwidth = 7;
-
-      LinkStats stats = 8;
-    }
+    LinkStats stats = 8;
   }
 }
 
