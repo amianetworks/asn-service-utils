@@ -21,13 +21,15 @@ services:
     ports:
       - "8086:8086"
     volumes:
-      - influxdb_data:/var/lib/influxdb
+      - influxdb_data:/var/lib/influxdb2
     environment:
-      INFLUXDB_DB: asn
-      INFLUXDB_ADMIN_USER: amia
-      INFLUXDB_ADMIN_PASSWORD: 2022
-      INFLUXDB_USER: amia
-      INFLUXDB_USER_PASSWORD: 2022
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: amia
+      DOCKER_INFLUXDB_INIT_PASSWORD: 2022
+      DOCKER_INFLUXDB_INIT_ORG: amia
+      DOCKER_INFLUXDB_INIT_BUCKET: asn
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: 2022
+      DOCKER_INFLUXDB_INIT_RETENTION: 0
   sapphire-iam:
     image: registry.amiasys.com/sapphire.iam:25.6.2
     container_name: sapphire-iam
