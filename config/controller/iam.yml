@@ -1,0 +1,178 @@
+# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+
+## Log Configurations
+#log:
+#  level: "info" # Supported log level: panic | fatal | error | warning | info | debug | trace. Default: info
+#  file: "/var/log/sapphire/iam.log" # Default: "/var/log/sapphire/iam.log"
+
+## Database Configurations
+#db:
+#  provider: "mongodb" # Supported: "mongodb" | "filedb". Default: "mongodb"
+#  url: "localhost:27017" # Default: "localhost:27017"
+#  username: "amia" # Default: "amia"
+#  password: "2022" # Default: "2022"
+
+## LDAP Configurations
+#ldap:
+#  enabled: false # Default: false
+#  interval: 15 # Sync interval in minutes, Default: 15
+#  url: "ldap://localhost:389" # Default: "ldap://localhost:389"
+#  base_dn: "dc=amianetworks,dc=com" # Default: "dc=amianetworks,dc=com"
+#  password_cn: "cn=admin" # Default: "cn=admin"
+#  password: "2022" # Default: "2022"
+#  mapping:
+#    account: # other fields will be added to descriptions, name will be filled to cn and sn by default
+#      ou: "account" # Default: "account"
+#      name: "uid" # Default: "uid"
+#      password: "userPassword" # Default: "userPassword"
+#      email: "mail" # Default: "mail"
+#      phone: "telephoneNumber" # Default: "telephoneNumber"
+#      description:
+#        id: "id" # Default: "id"
+#        created_at: "createdAt" # Default: "createdAt"
+#        updated_at: "updatedAt" # Default: "updatedAt"
+#        type: "type" # Default: "type"
+#        totp: "totp" # Default: "totp"
+#        mfa_config: "mfaConfig" # Default: "mfaConfig"
+#        metadata: "metadata" # Default: "metadata"
+#    group: # other fields will be added to descriptions
+#      ou: "group" # Default: "group"
+#      name: "cn" # Default: "cn"
+#      accounts: "member" # Default: "member"
+#      description:
+#        id: "id" # Default: "id"
+#        created_at: "createdAt" # Default: "createdAt"
+#        updated_at: "updatedAt" # Default: "updatedAt"
+#        metadata: "metadata" # Default: "metadata"
+
+## API Configurations
+#api:
+#  grpc:
+#    port: 17930 # gRPC API port. Default:17930
+#    tls:
+#      enabled: false # Default: false
+#      root_ca: "/etc/sapphire/cert/ca.crt"
+#      pem_file: "/etc/sapphire/cert/server.pem"
+#      key_file: "/etc/sapphire/cert/server.key"
+
+# Lock
+#
+# Default mode is standalone.
+# To config "distributed" mode, uncomment "redis" config section.
+#   - Redis "standard" is a single-instance locker
+#   - Redis "redlock" is used to implement distributed locks with multiple Redis instance.
+#lock:
+#  mode: "standalone" # (standalone | distributed) Default: "standalone"
+#  waiting_limit: 10 # Default: 10 (Seconds)
+#  holding_limit: 5 # Default: 5 (Seconds)
+#  redis: # used only in distributed mode
+#    mode: "standard" # (standard | redlock) Default: "standard"
+#    nodes: # list of redis nodes. Only the first one is used in standard mode
+#      urls:
+#        - "localhost:6379" # Default: "localhost:6379"
+#      passwords:
+#        - "2023"
+#      dbs:
+#        - 0 # index: 0 ~ 15 (Default: 0)
+
+## Email Service
+#smtp: # SMTP email server config
+#  enabled: false # Default: false
+#  tls: true
+#  host: "smtp.office365.com"
+#  email: "email@amiasys.com"
+#  username: "email@amiasys.com"
+#  password: ""
+#  port: 587
+
+## Account Configurations
+#account:
+#  special_key: "SpecialAccount@AmiaNetworks2025"
+#
+#  # Regular expressions are used here to specify the format of username, password, and user group.
+#  # ^, $: start-of-line and end-of-line respectively.
+#  # [...]: Accept ANY ONE of the character within the square bracket, e.g., [aeiou] matches "a", "e", "i", "o" or "u".
+#  # [.-.] (Range Expression): Accept ANY ONE of the character in the range, e.g., [0-9] matches any digit; [A-Za-z] matches any uppercase or lowercase letters.
+#  # {m,n}: m to n (both inclusive)
+#  # If you need to customize the format, please refer to the regular expression syntax.
+#  format:
+#    name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#    password: "^[0-9a-zA-Z!@$._-]{6,128}$"
+#    email: "^(?:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})?$"
+#    country_code: "^(?:\\d{1,3})?$"
+#    phone: "^(?:$|[\\d\\s\\-\\(\\)\\.]{6,15})$"
+#
+#  # You can recover the account through email or SMS(TBD).
+#  # If none of the above methods are available, the admin can reset the account through the cli command line.
+#  # TBD: recover account by SMS
+#  recovery:
+#    email: # Sending a code to your recovery email # Code format:  "^[0-9a-zA-Z-:.]{6,128}$"
+#      expire: 5 # Expiration time in minutes. Default 5 minutes.
+#      resend_interval: 1 # Resending interval in minutes. Default 1 minute
+
+## Authentication Configurations
+#authentication:
+#  service:
+#    mtls: false # Default: false
+#    client_ca: "/etc/sapphire/cert/ca.crt"
+#    name: "^[0-9a-zA-Z_-]{2,36}$"
+#
+#  # Attempt frequency can limit the frequency of user attempts to log in.
+#  attempt_frequency:
+#    wait_min: 1 # Minimum wait time after an attempt in second. Default: 1 Seconds
+#    wait_max: 43200 # Maximum waiting time after an attempt in second. Default: 43200 Seconds
+#    amp_factor: 2 # The waiting time after each failure will be extended according to the amplification factor. Default: 3
+#
+#  # Config the concurrent authentication to limit the number of concurrent authentication entity allowed per user.
+#  # You can configure the maximum number of entities allowed to log in, and if exceeded, it will be handled according to the auto replacement policy.
+#  # Supported auto replacement policies: disable | random | oldest | latest. Default: disable
+#  concurrent_authentication:
+#    entity_allowed: 3 # maximum number of entities allowed, 0 means disable;  less than 0 means login is prohibited. Default: 3
+#    auto_replacement: "disable"
+#
+#  # Configure MFA(Multi-Factor Authentication) information
+#  # By using the TOTP(Time-Based One Time Password) method, one time password is created on the user side through a smartphone application.
+#  # Applications that are known to work with TOTP： Microsoft Authenticator、Google Authenticator）
+#  # TBD: SMS
+#  mfa:
+#    totp:
+#      # The issuer indicates the provider or service this account is associated with, URL-encoded according to RFC 3986.
+#      issuer: "Amianetworks"
+
+## Authorization Configurations
+#authorization:
+#  # JWT（JSON Web Token）is an open source standard (RFC 7519) that defines the format for how communicating parties can exchange information securely.
+#  # TBD: JWT provides different token strategies for different entity types
+#  jwt:
+#    issuer: "amianetworks.com"
+#    # RS256 Key Set for JWT signature.
+#    # [NOT RECOMMENDED!!!] If either is set to empty, a random set will be used.
+#    public_key_file: ""
+#    private_key_file: ""
+#    access_token:
+#      expire: 60   # Access token expiration time in minutes. Default: 60 minutes.
+#    refresh_token:
+#      enabled: true # Support automatically obtaining access token through refresh token. Default: true
+#      expire: 600  # Refresh token expiration time in minutes. Default: 600 minutes.
+#
+#  access_control:
+#    format:
+#      role:
+#        name: "^[0-9a-zA-Z!@$._-]{6,128}$"
+#      policy:
+#        name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#        scope: "^[0-9a-zA-Z!@$._-/*?%&]{6,128}$"
+#        operation: "^[0-9a-zA-Z!@$._-]{6,128}$"
+#        time: "^[0-9a-zA-Z-:.]{6,128}$"
+
+## Group Configurations
+#group:
+#  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+
+## Role Configurations
+#role:
+#  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+
+## Policy Configurations
+#policy:
+#  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"

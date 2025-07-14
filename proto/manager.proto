@@ -1,0 +1,550 @@
+// Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+
+syntax = "proto3";
+
+option go_package = "./;proto";
+
+package asn_controller;
+
+service Manager {
+  // ASNC related operations
+  rpc GetInfo     (Empty)         returns (ControllerInfo);
+  rpc UpdatePort  (UpdatePortReq) returns (Empty);
+
+  // Authentication & Authorization API
+  rpc Login           (LoginRequest)        returns (LoginResponse);
+  rpc MfaLogin        (MfaLoginRequest)     returns (LoginResponse);
+  rpc TokenRefresh    (TokenRefreshRequest) returns (LoginResponse);
+  rpc ResetPassword   (LoginRequest)        returns (Empty);
+  rpc Logout          (Empty)               returns (Empty);
+  rpc GetUserByToken  (Empty)               returns (User);
+
+  // User API
+  rpc GetUserByName (Username)          returns (User);
+  rpc ListUsers     (PageRequest)       returns (Users);
+  rpc CreateUser    (CreateUserRequest) returns (Empty);
+  rpc DeleteUser    (Username)          returns (Empty);
+
+  // User Group API
+  rpc ListUserGroups          (GroupName)         returns (UserGroups);
+  rpc GetUserGroup            (GroupName)         returns (UserGroup);
+  rpc CreateUserGroup         (UserGroupRequest)  returns (Empty);
+  rpc UpdateUserGroup         (UserGroupRequest)  returns (Empty);
+  rpc DeleteUserGroup         (GroupName)         returns (Empty);
+  rpc AddUsersToGroup         (GroupUsersRequest) returns (Empty);
+  rpc RemoveUsersFromGroup    (GroupUsersRequest) returns (Empty);
+
+  // Network API
+  rpc GetRootNetworks (Empty)           returns (RootNetworks);
+  rpc GetNetworksById (GetNetworkReq)   returns (NetworkInfo);
+  rpc CreateNetwork   (Network.Create)  returns (Empty);
+  rpc UpdateNetwork   (Network.Update)  returns (Empty);
+  rpc DeleteNetwork   (Id)              returns (Empty);
+
+  // Nodes API
+  rpc GetNodesOfNetwork   (Id)          returns (Nodes);
+  rpc GetNodesInNodeGroup (Id)          returns (Nodes);
+  rpc GetNodeById         (Id)          returns (Nodes);
+  rpc CreateNode          (Node.Create) returns (Empty);
+  rpc UpdateNode          (Node.Update) returns (Empty);
+  rpc DeleteNode          (Id)          returns (Empty);
+
+  // Node Group API
+  rpc ListNodeGroups           (PageRequest)        returns (NodeGroups);
+  rpc GetNodeGroup             (Id)                 returns (NodeGroup);
+  rpc CreateNodeGroup          (NodeGroupRequest)   returns (Empty);
+  rpc UpdateNodeGroup          (NodeGroupRequest)   returns (Empty);
+  rpc DeleteNodeGroup          (Id)                 returns (Empty);
+
+  // Link API
+  rpc CreateLink  (Node.Link.Create)  returns (Empty);
+  rpc UpdateLink  (Node.Link.Update)  returns (Empty);
+  rpc DeleteLink  (Id)                returns (Empty);
+
+  // Service API
+  rpc ListServices      (Empty)           returns (Services);
+  rpc ApplyServiceOps   (OpsRequest)      returns (OpsResponse);
+  rpc StartService      (ConfigRequest)   returns (ConfigResponse);
+  rpc StopService       (ConfigRequest)   returns (ConfigResponse);
+  rpc ResetService       (ConfigRequest)  returns (ConfigResponse);
+
+  // Get Stats
+  rpc GetCpuUsage(StatsRequest)   returns (Network.Stats.Percentage);
+  rpc GetSystemLoad(StatsRequest) returns (Network.Stats.Percentage);
+  rpc GetRamUsage(StatsRequest)   returns (Network.Stats.Percentage);
+
+  rpc GetReceivedBits(StatsRequest)       returns (Network.Stats.Traffic);
+  rpc GetSentBits(StatsRequest)           returns (Network.Stats.Traffic);
+  rpc GetAsnReceivedPackets(StatsRequest) returns (Network.Stats.Traffic);
+  rpc GetAsnBlockedPackets(StatsRequest)  returns (Network.Stats.Traffic);
+  rpc GetAsnReceivedBits(StatsRequest)    returns (Network.Stats.Traffic);
+  rpc GetAsnBlockedBits(StatsRequest)     returns (Network.Stats.Traffic);
+  rpc GetThroughput(StatsRequest)         returns (Network.Stats);
+
+  rpc GetTotalReceivedBits(StatsRequest)        returns (Network.Stats.Traffic);
+  rpc GetTotalSentBits(StatsRequest)            returns (Network.Stats.Traffic);
+  rpc GetTotalAsnReceivedPackets(StatsRequest)  returns (Network.Stats.Traffic);
+  rpc GetTotalAsnBlockedPackets(StatsRequest)   returns (Network.Stats.Traffic);
+  rpc GetTotalAsnReceivedBits(StatsRequest)     returns (Network.Stats.Traffic);
+  rpc GetTotalAsnBlockedBits(StatsRequest)      returns (Network.Stats.Traffic);
+  rpc GetTotalTraffic(StatsRequest)             returns (Network.Stats);
+
+  rpc GetAsnReceivedPacketsByTime(StatsRequest) returns (TimeSerialTraffics);
+  rpc GetAsnBlockedPacketsByTime(StatsRequest)  returns (TimeSerialTraffics);
+  rpc GetAsnReceivedBitsByTime(StatsRequest)    returns (TimeSerialTraffics);
+  rpc GetAsnBlockedBitsByTime(StatsRequest)     returns (TimeSerialTraffics);
+  rpc GetTimeSerialTraffic(StatsRequest)        returns (Network.StatsList);
+
+  rpc GetNetReceivedBitsByTime(StatsRequest)  returns (TimeSerialTraffics);
+  rpc GetNetSentBitsByTime(StatsRequest)      returns (TimeSerialTraffics);
+}
+
+message Empty {}
+
+/*
+  Request message
+ */
+message PageRequest {
+  int64 page = 2;
+  int64 page_size = 3;
+}
+
+message ControllerInfo {
+  string asnc_version = 1;
+  map<string, string> service_versions = 2;
+  uint32 port = 3;
+  uint32 port_pending = 4;
+}
+
+message UpdatePortReq {
+  uint32 port = 1;
+}
+
+message Id {
+  string id = 1;
+}
+
+message ServiceNameAndId {
+  repeated string service_names = 1;
+  string id = 2;
+}
+
+message Services {
+  repeated string service_names = 2;
+}
+
+message GetSNsServiceStateOfSNsReq {
+  repeated string service_names = 1;
+  repeated string ids = 2;
+  bool include_parents = 3;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  string device_id = 3;
+}
+
+message MfaLoginRequest {
+  string access_token = 1;
+  string code = 2;
+}
+
+message TokenRefreshRequest {
+  string access_token = 1;
+  string refresh_token = 2;
+}
+
+message LoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  bool need_mfa = 3;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string password = 2;
+  string email = 3;
+  Phone phone= 4;
+}
+
+message Username {
+  string username = 1;
+}
+
+message GroupUsersRequest {
+  string service_name = 1;
+  string group_name = 2;
+  repeated string usernames = 3;
+}
+
+message GetNetworkReq {
+  string network_id = 1;
+  repeated string location_tiers = 2;
+  repeated string network_tiers = 3;
+}
+
+message RootNetworks {
+  message Network {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    repeated string location_tiers = 4;
+    repeated string network_tiers = 5;
+  }
+
+  repeated Network networks = 1;
+}
+
+message Users {
+  repeated User users = 1;
+  int64 total = 2;
+}
+
+message User {
+  message Array {
+    repeated string values = 1;
+  }
+
+  string username = 1;
+  string email = 2;
+  Phone phone = 3;
+  map<string, Array> groups = 4;
+  map<string, Array> services = 5;
+  map<string, Array> networks = 6;
+}
+
+message Phone {
+  string country_code = 1;
+  string number = 2;
+}
+
+message UserGroups {
+  repeated UserGroup groups = 1;
+}
+
+message UserGroup {
+  string name = 1;
+  string service_name = 2;
+  int64 type = 3;
+  string remark = 4;
+  repeated string users = 5;
+  repeated string services = 6;
+  repeated string networks = 7;
+  repeated string operations = 8;
+}
+
+message UserGroupRequest {
+  string name = 1;
+  int64 type = 2;
+  string remark = 3;
+  repeated string services = 4;
+  repeated string networks = 5;
+  repeated string operations = 6;
+}
+
+message GroupName {
+  string name = 1;
+  string service_name = 2;
+}
+
+message StatsRequest {
+  string network = 1;
+  string group = 2;
+  repeated string netifs = 3;
+  string start_time = 4;
+  string end_time = 5;
+}
+
+message GetServicesConfigResponse {
+  message ServicesConfig {
+    string service_name = 1;
+    bytes config = 2;
+  }
+
+  repeated ServicesConfig services_configs = 1;
+}
+
+message ConfigRequest {
+  string network = 1;
+  string group = 2;
+  repeated string service_nodes = 3;
+  string service_name = 4;
+  bytes config = 5;
+}
+
+message ConfigResponse {
+  message Response {
+    string id = 1;
+    bool success = 2;
+    string err_msg = 3;
+  }
+
+  repeated Response responses = 1;
+}
+
+message OpsRequest {
+  string network = 1;
+  string group = 2;
+  repeated string service_nodes = 3;
+  string service_name = 4;
+  string command = 5;
+  string params = 6;
+}
+
+message OpsResponse {
+  message Response {
+    string id = 1;
+    bool success = 2;
+    string response = 3;
+    string error = 4;
+  }
+
+  repeated Response responses = 1;
+}
+
+/*
+  Utils message
+ */
+message Location {
+  float latitude = 1;
+  float longitude = 2;
+  float altitude = 3;
+  string address = 4;
+  string description = 5;
+  string location_tier = 6;
+}
+
+/*
+  Network message
+ */
+message NetworkInfo {
+  Network network = 1;
+  repeated Network.Link links = 6;
+}
+
+message Network {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string parent_id = 4;
+  repeated string network_tiers = 5;
+  Location location = 6;
+  repeated Network networks = 7;
+
+  Stats stats = 8;
+
+  message Create {
+    string parent_id = 1;
+    string name = 2;
+    string description = 3;
+    repeated string network_tiers = 4;
+    Location location = 5;
+  }
+
+  message Update {
+    string id = 1;
+    string parent_id = 2;
+    string name = 3;
+    string description = 4;
+    repeated string network_tiers = 5;
+    Location location = 6;
+  }
+
+  message Link {
+    string from_network = 1;
+    string to_network = 2;
+    uint64 bandwidth = 3;
+
+    LinkStats stats = 4;
+  }
+
+  message StatsList {
+    repeated Stats stats_list = 1;
+  }
+
+  message Stats {
+    uint64  received_bits = 1;
+    uint64  sent_bits = 2;
+    uint64  asn_received_bits = 3;
+    uint64  asn_blocked_bits = 4;
+    uint64  asn_received_pkts = 5;
+    uint64  asn_blocked_pkts = 6;
+    string  timestamp = 7;
+    message Percentage {
+      float value = 1;
+    }
+    message Traffic {
+      uint64 value = 1;
+    }
+  }
+}
+
+message Nodes {
+  repeated Node nodes = 1;
+  repeated Node.Link internal_links = 2;
+  repeated Node.Link external_links = 3;
+}
+
+message Node {
+  string id = 1;
+  string type = 2;
+  string name = 3;
+  string description = 4;
+  string network_id = 5;
+  Location location = 6;
+  bool managed = 7;
+  Ipmi ipmi = 8;
+  Management management = 9;
+  Info info = 10;
+  repeated Interface interfaces = 11;
+
+  ServiceNode service_node = 12;
+  Stats stats = 13;
+
+  message Create {
+    string parent_id = 1;
+    string type = 2;
+    string name = 3;
+    string description = 4;
+    Location location = 5;
+    bool managed = 6;
+    Ipmi ipmi = 7;
+    Management management = 8;
+    Info info = 9;
+    repeated Interface interfaces = 10;
+  }
+
+  message Update {
+    string id = 1;
+    string parent_id = 2;
+    string type = 3;
+    string name = 4;
+    string description = 5;
+    Location location = 6;
+    bool managed = 7;
+    Ipmi ipmi = 8;
+    Management management = 9;
+    Info info = 10;
+    repeated Interface interfaces = 11;
+  }
+
+  message Ipmi {
+    string ip = 1;
+    string username = 2;
+    string key = 3;
+  }
+
+  message Management {
+    string hostname = 1;
+    string ip = 2;
+  }
+
+  message Info {
+    string vendor = 1;
+    string model = 2;
+    string serial_number = 3;
+  }
+
+  message Stats {
+    uint64 rx = 1;
+    uint64 tx = 2;
+    uint64 asn_received_packets = 3;
+    uint64 asn_blocked_packets = 4;
+    uint64 asn_received_bits = 5;
+    uint64 asn_blocked_bits = 6;
+    float  cpu_usage = 7;
+  }
+
+  message NetStats {
+    string node_id = 1;
+    string node_name = 2;
+    uint64 send_bits = 3;
+    uint64 received_bits = 4;
+  }
+
+  message Link {
+    message Create {
+      string from_node = 1;
+      string from_interface = 2;
+      string to_node = 3;
+      string to_interface = 4;
+      uint64 bandwidth = 5;
+      string description = 6;
+    }
+
+    message Update {
+      string id = 1;
+      string from_node = 2;
+      string from_interface = 3;
+      string to_node = 4;
+      string to_interface = 5;
+      uint64 bandwidth = 6;
+      string description = 7;
+    }
+
+    string id = 1;
+    string description = 2;
+    string from_node = 3;
+    string from_interface = 4;
+    string to_node = 5;
+    string to_interface = 6;
+    uint64 bandwidth = 7;
+
+    LinkStats stats = 8;
+  }
+}
+
+message ServiceNode {
+  message SystemInfo {
+    string machine_id = 1;
+    int64 cpu_core = 2;
+    int64 memory = 3;
+    int64 disk = 4;
+  }
+
+  int64 state = 1;
+  SystemInfo system_info = 2;
+  repeated Interface interfaces = 11;
+}
+
+message Interface {
+  string name = 1;
+  string ip = 2;
+  repeated string tags = 3;
+}
+
+message NodeGroups {
+  repeated NodeGroup groups = 1;
+  int64 total = 2;
+}
+
+message NodeGroup {
+  string id = 1;
+  string name = 2;
+  string remark = 3;
+  repeated string nodes = 4;
+  map<string, string> services = 5;
+}
+
+message NodeGroupRequest {
+  string id = 1;
+  string name = 2;
+  string remark = 3;
+  repeated string nodes = 4;
+  map<string, string> services = 5;
+}
+
+message LinkStats {
+  uint64 inbound = 1;
+  uint64 outbound = 2;
+}
+
+message TimeSerialTraffics {
+  repeated TimeSerialTraffic time_serial_traffics = 1;
+}
+
+message TimeSerialTraffic {
+  uint64 value = 1;
+  string timestamp = 2;
+}

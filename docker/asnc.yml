@@ -1,0 +1,63 @@
+# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+
+services:
+  asn-mdb:
+    container_name: asn-mdb
+    image: mongo:8  # the mongodb version
+    restart: always   # auto restart the container if it fails
+    ulimits:
+      nofile: 100000
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: amia  # db root username,
+      MONGO_INITDB_ROOT_PASSWORD: 2022  # db root user password
+    ports:
+      - "27017:27017"  # port forwarding (localPort:containerPort)
+    volumes:
+      - mongodb_data:/data/db  # data volumes, (localDirectory:containerDirectory)
+    command: --bind_ip_all --auth
+  asn-idb:
+    image: influxdb:2.7
+    container_name: asn-idb
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: amia
+      DOCKER_INFLUXDB_INIT_PASSWORD: Amiasys2025
+      DOCKER_INFLUXDB_INIT_ORG: amia
+      DOCKER_INFLUXDB_INIT_BUCKET: asn
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: Amiasys2025
+      DOCKER_INFLUXDB_INIT_RETENTION: 0
+  sapphire-iam:
+    image: registry.amiasys.com/sapphire.iam:25.6.2
+    container_name: sapphire-iam
+    privileged: true
+    restart: always
+    depends_on:
+      - "asn-mdb"
+    network_mode: host
+    volumes:
+      - ./iam-cert/:/etc/sapphire/cert/
+      - ./iam-config/:/etc/sapphire/config/
+      - ./iam-log/:/var/log/sapphire/
+  asnc:
+    restart: always
+    image: registry.amiasys.com/asnc:25.7.0
+    network_mode: host
+    depends_on:
+      - "asn-mdb"
+      - "asn-idb"
+      - "sapphire-iam"
+    volumes:
+      - ./asn-config/:/asn/config
+      - ./asn-log/:/var/log/asn/controller
+      - ./asn-services:/usr/local/asn/controller/services
+      - ./asn-web:/var/www/asn/controller
+
+volumes:
+  mongodb_data:
+    driver: local
+  influxdb_data:
+    driver: local

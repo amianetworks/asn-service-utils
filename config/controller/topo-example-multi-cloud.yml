@@ -1,0 +1,404 @@
+location_tiers: [ city ]
+
+networks:
+  - name: cloud-networks
+    desc: "Cloud Network"
+    networks:
+      - name: ln-us-west
+        desc: "US West region VPC"
+        location:
+          desc: "San Francisco"
+          tier: city
+          coordinates: { latitude: 37.7749, longitude: -122.4194 }
+        nodes:
+          - ln-router
+          - vsw-us-west
+          - us-west-srv-1
+          - us-west-srv-2
+          - us-west-srv-3
+          - us-west-srv-4
+          - us-west-srv-5
+      - name: ay-bj-cluster
+        desc: "Beijing compute cluster"
+        location:
+          desc: "Beijing"
+          tier: city
+          coordinates: { latitude: 39.9042, longitude: 116.4074 }
+        nodes:
+          - ay-router
+          - bj-srv-1
+          - bj-srv-2
+          - bj-srv-3
+          - bj-srv-4
+          - bj-srv-5
+      - name: an-nj-dc
+        desc: "Nanjing datacenter"
+        location:
+          desc: "Nanjing"
+          tier: city
+          coordinates: { latitude: 32.0603, longitude: 118.7969 }
+        nodes:
+          - an-router
+          - nj-srv-1
+          - nj-srv-2
+          - nj-srv-3
+          - nj-srv-4
+          - nj-srv-5
+        networks:
+          - name: an-nj-clos
+            desc: "Clos fabric in Nanjing DC"
+            nodes:
+              - clos-spine-1
+              - clos-spine-2
+              - clos-leaf-1
+              - clos-leaf-2
+              - clos-leaf-3
+              - clos-leaf-4
+
+nodes:
+  ln-router:
+    type: router
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.0.0.254/24
+        tags: [ data ]
+  vsw-us-west:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.0.0.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.0.0.2/24
+        tags: [ data ]
+      eth2:
+        ip: 10.0.0.3/24
+        tags: [ data ]
+      eth3:
+        ip: 10.0.0.4/24
+        tags: [ data ]
+      eth4:
+        ip: 10.0.0.5/24
+        tags: [ data ]
+      eth5:
+        ip: 10.0.0.6/24
+        tags: [ data ]
+  ay-router:
+    type: router
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.1.0.1/24
+        tags: [ data ]
+  an-router:
+    type: router
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.2.0.1/24
+        tags: [ data ]
+  us-west-srv-1:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.0.10.1/24
+        tags: [ data ]
+  bj-srv-1:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.1.10.1/24
+        tags: [ data ]
+  nj-srv-1:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.2.10.1/24
+        tags: [ data ]
+  us-west-srv-2:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.0.10.2/24
+        tags: [ data ]
+  bj-srv-2:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.1.10.2/24
+        tags: [ data ]
+  nj-srv-2:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.2.10.2/24
+        tags: [ data ]
+  us-west-srv-3:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.0.10.3/24
+        tags: [ data ]
+  bj-srv-3:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.1.10.3/24
+        tags: [ data ]
+  nj-srv-3:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.2.10.3/24
+        tags: [ data ]
+  us-west-srv-4:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.0.10.4/24
+        tags: [ data ]
+  bj-srv-4:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.1.10.4/24
+        tags: [ data ]
+  nj-srv-4:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.2.10.4/24
+        tags: [ data ]
+  us-west-srv-5:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.0.10.5/24
+        tags: [ data ]
+  bj-srv-5:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.1.10.5/24
+        tags: [ data ]
+  nj-srv-5:
+    type: server
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.2.10.5/24
+        tags: [ data ]
+  clos-spine-1:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.3.1.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.3.1.2/24
+        tags: [ data ]
+      eth2:
+        ip: 10.3.1.3/24
+        tags: [ data ]
+      eth3:
+        ip: 10.3.1.4/24
+        tags: [data]
+  clos-spine-2:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.3.2.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.3.2.2/24
+        tags: [ data ]
+      eth2:
+        ip: 10.3.2.3/24
+        tags: [ data ]
+      eth3:
+        ip: 10.3.2.4/24
+        tags: [ data ]
+  clos-leaf-1:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.3.3.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.3.3.2/24
+        tags: [ data ]
+      eth2:
+        ip: 10.3.7.1/24
+        tags: [ data ]
+  clos-leaf-2:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.3.4.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.3.4.2/24
+        tags: [ data ]
+      eth2:
+        ip: 10.3.8.1/24
+        tags: [ data ]
+  clos-leaf-3:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.3.5.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.3.5.2/24
+        tags: [ data ]
+      eth2:
+        ip: 10.3.9.1/24
+        tags: [ data ]
+  clos-leaf-4:
+    type: switch
+    managed: true
+    interfaces:
+      eth0:
+        ip: 10.3.6.1/24
+        tags: [ data ]
+      eth1:
+        ip: 10.3.6.2/24
+        tags: [ data ]
+      eth2:
+        ip: 10.3.10.1/24
+        tags: [ data ]
+
+links:
+  - from: { node: ln-router, interface: eth0 }
+    to: { node: vsw-us-west, interface: eth0 }
+    bandwidth: 1000
+    desc: "US West router to vswitch"
+  - from: { node: us-west-srv-1, interface: eth0 }
+    to: { node: vsw-us-west, interface: eth1 }
+    bandwidth: 1000
+    desc: "US West server 1 to vswitch"
+  - from: { node: us-west-srv-2, interface: eth0 }
+    to: { node: vsw-us-west, interface: eth2 }
+    bandwidth: 1000
+    desc: "US West server 2 to vswitch"
+  - from: { node: us-west-srv-3, interface: eth0 }
+    to: { node: vsw-us-west, interface: eth3 }
+    bandwidth: 1000
+    desc: "US West server 3 to vswitch"
+  - from: { node: us-west-srv-4, interface: eth0 }
+    to: { node: vsw-us-west, interface: eth4 }
+    bandwidth: 1000
+    desc: "US West server 4 to vswitch"
+  - from: { node: us-west-srv-5, interface: eth0 }
+    to: { node: vsw-us-west, interface: eth5 }
+    bandwidth: 1000
+    desc: "US West server 5 to vswitch"
+  - from: { node: bj-srv-1, interface: eth0 }
+    to: { node: ay-router, interface: eth0 }
+    bandwidth: 1000
+    desc: "Beijing server 1 uplink to router"
+  - from: { node: bj-srv-2, interface: eth0 }
+    to: { node: ay-router, interface: eth0 }
+    bandwidth: 1000
+    desc: "Beijing server 2 uplink to router"
+  - from: { node: bj-srv-3, interface: eth0 }
+    to: { node: ay-router, interface: eth0 }
+    bandwidth: 1000
+    desc: "Beijing server 3 uplink to router"
+  - from: { node: bj-srv-4, interface: eth0 }
+    to: { node: ay-router, interface: eth0 }
+    bandwidth: 1000
+    desc: "Beijing server 4 uplink to router"
+  - from: { node: bj-srv-5, interface: eth0 }
+    to: { node: ay-router, interface: eth0 }
+    bandwidth: 1000
+    desc: "Beijing server 5 uplink to router"
+  - from: { node: an-router, interface: eth0 }
+    to: { node: clos-leaf-1, interface: eth0 }
+    bandwidth: 1000
+    desc: "NJ router to leaf 1"
+  - from: { node: clos-leaf-1, interface: eth1 }
+    to: { node: clos-spine-1, interface: eth1 }
+    bandwidth: 1000
+    desc: "Leaf 1 to Spine 1"
+  - from: { node: clos-leaf-1, interface: eth2 }
+    to: { node: clos-spine-2, interface: eth1 }
+    bandwidth: 1000
+    desc: "Leaf 1 to Spine 2"
+  - from: { node: an-router, interface: eth0 }
+    to: { node: clos-leaf-2, interface: eth0 }
+    bandwidth: 1000
+    desc: "NJ router to leaf 2"
+  - from: { node: clos-leaf-2, interface: eth1 }
+    to: { node: clos-spine-1, interface: eth2 }
+    bandwidth: 1000
+    desc: "Leaf 2 to Spine 1"
+  - from: { node: clos-leaf-2, interface: eth2 }
+    to: { node: clos-spine-2, interface: eth2 }
+    bandwidth: 1000
+    desc: "Leaf 2 to Spine 2"
+  - from: { node: an-router, interface: eth0 }
+    to: { node: clos-leaf-3, interface: eth0 }
+    bandwidth: 1000
+    desc: "NJ router to leaf 3"
+  - from: { node: clos-leaf-3, interface: eth1 }
+    to: { node: clos-spine-1, interface: eth3 }
+    bandwidth: 1000
+    desc: "Leaf 3 to Spine 1"
+  - from: { node: clos-leaf-3, interface: eth2 }
+    to: { node: clos-spine-2, interface: eth3 }
+    bandwidth: 1000
+    desc: "Leaf 3 to Spine 2"
+  - from: { node: an-router, interface: eth0 }
+    to: { node: clos-leaf-4, interface: eth0 }
+    bandwidth: 1000
+    desc: "NJ router to leaf 4"
+  - from: { node: clos-leaf-4, interface: eth1 }
+    to: { node: clos-spine-1, interface: eth4 }
+    bandwidth: 1000
+    desc: "Leaf 4 to Spine 1"
+  - from: { node: clos-leaf-4, interface: eth2 }
+    to: { node: clos-spine-2, interface: eth4 }
+    bandwidth: 1000
+    desc: "Leaf 4 to Spine 2"
+  - from: { node: nj-srv-1, interface: eth0 }
+    to: { node: clos-leaf-2, interface: eth0 }
+    bandwidth: 1000
+    desc: "NJ server 1 to leaf 2"
+  - from: { node: nj-srv-2, interface: eth0 }
+    to: { node: clos-leaf-3, interface: eth0 }
+    bandwidth: 1000
+    desc: "NJ server 2 to leaf 3"
+  - from: { node: nj-srv-3, interface: eth0 }
+    to: { node: clos-leaf-4, interface: eth0 }
+    bandwidth: 1000
+    desc: "NJ server 3 to leaf 4"
+  - from: { node: nj-srv-4, interface: eth0 }
+    to: { node: clos-leaf-1, interface: eth0 }
+    bandwidth: 1000
+    desc: "NJ server 4 to leaf 1"
+  - from: { node: nj-srv-5, interface: eth0 }
+    to: { node: clos-leaf-2, interface: eth0 }
+    bandwidth: 1000
+    desc: "NJ server 5 to leaf 2"
