@@ -124,19 +124,8 @@ message Id {
   string id = 1;
 }
 
-message ServiceNameAndId {
-  repeated string service_names = 1;
-  string id = 2;
-}
-
 message Services {
   repeated string service_names = 2;
-}
-
-message GetSNsServiceStateOfSNsReq {
-  repeated string service_names = 1;
-  repeated string ids = 2;
-  bool include_parents = 3;
 }
 
 message LoginRequest {
