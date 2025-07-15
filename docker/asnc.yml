@@ -31,7 +31,7 @@ services:
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: Amiasys2025
       DOCKER_INFLUXDB_INIT_RETENTION: 0
   sapphire-iam:
-    image: registry.amiasys.com/sapphire.iam:25.6.2
+    image: registry.amiasys.com/sapphire.iam:25.6.3
     container_name: sapphire-iam
     privileged: true
     restart: always

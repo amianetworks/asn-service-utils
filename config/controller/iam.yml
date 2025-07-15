@@ -20,30 +20,14 @@
 #  base_dn: "dc=amianetworks,dc=com" # Default: "dc=amianetworks,dc=com"
 #  password_cn: "cn=admin" # Default: "cn=admin"
 #  password: "2022" # Default: "2022"
-#  mapping:
-#    account: # other fields will be added to descriptions, name will be filled to cn and sn by default
-#      ou: "account" # Default: "account"
-#      name: "uid" # Default: "uid"
-#      password: "userPassword" # Default: "userPassword"
-#      email: "mail" # Default: "mail"
-#      phone: "telephoneNumber" # Default: "telephoneNumber"
-#      description:
-#        id: "id" # Default: "id"
-#        created_at: "createdAt" # Default: "createdAt"
-#        updated_at: "updatedAt" # Default: "updatedAt"
-#        type: "type" # Default: "type"
-#        totp: "totp" # Default: "totp"
-#        mfa_config: "mfaConfig" # Default: "mfaConfig"
-#        metadata: "metadata" # Default: "metadata"
-#    group: # other fields will be added to descriptions
-#      ou: "group" # Default: "group"
-#      name: "cn" # Default: "cn"
-#      accounts: "member" # Default: "member"
-#      description:
-#        id: "id" # Default: "id"
-#        created_at: "createdAt" # Default: "createdAt"
-#        updated_at: "updatedAt" # Default: "updatedAt"
-#        metadata: "metadata" # Default: "metadata"
+#  ous:
+#    account: "People"
+#    group: "Group"
+#  defaults:
+#    account_shadow_warning: "7" # Default: "7"
+#    account_shadow_max: "99999" # Default: "99999"
+#    account_home_directory_prefix: "/home/" # Default: "/home/"
+#    account_login_shell: "/bin/bash" # Default: "/bin/bash"
 
 ## API Configurations
 #api:
