@@ -34,6 +34,9 @@ service Manager {
   rpc AddUsersToGroup         (GroupUsersRequest) returns (Empty);
   rpc RemoveUsersFromGroup    (GroupUsersRequest) returns (Empty);
 
+  // YS: to be added.
+  //  rpc GetUsersinGroup         (GroupName) returns (Users);
+
   // Network API
   rpc GetRootNetworks (Empty)           returns (RootNetworks);
   rpc GetNetworksById (GetNetworkReq)   returns (NetworkInfo);
@@ -41,62 +44,92 @@ service Manager {
   rpc UpdateNetwork   (Network.Update)  returns (Empty);
   rpc DeleteNetwork   (Id)              returns (Empty);
 
+  // YS: to be added.
+  //  rpc GetSubNetworks ()           returns (Networks);
+  
   // Nodes API
-  rpc GetNodesOfNetwork   (Id)          returns (Nodes);
+  rpc GetNodesOfNetwork   (Id)          returns (Nodes); // scope is not clear
+  //  rpc GetNodesInGroup (Id)          returns (Nodes); // shorten the name
   rpc GetNodesInNodeGroup (Id)          returns (Nodes);
-  rpc GetNodeById         (Id)          returns (Nodes);
+  //  rpc GetNodeByName         (NameandNetworkName)          returns (Nodes); // needed
+  rpc GetNodeById         (Id)          returns (Nodes); // Node details
   rpc CreateNode          (Node.Create) returns (Empty);
   rpc UpdateNode          (Node.Update) returns (Empty);
   rpc DeleteNode          (Id)          returns (Empty);
+  //  rpc DeleteNodebyName          (Name)          returns (Empty); // ?
+  //  rpc GetNodeStates ; // All available states of Nodes.
 
   // Node Group API
   rpc ListNodeGroups           (PageRequest)        returns (NodeGroups);
+  //  rpc getNodeGroups        (RootNetwork)        returns (NodeGroups); //
+  //  rpc getNodeGroupsbyService           (PageRequest)        returns (NodeGroups); // List all NG with the service
   rpc GetNodeGroup             (Id)                 returns (NodeGroup);
   rpc CreateNodeGroup          (NodeGroupRequest)   returns (Empty);
   rpc UpdateNodeGroup          (NodeGroupRequest)   returns (Empty);
   rpc DeleteNodeGroup          (Id)                 returns (Empty);
+  //  rpc DeleteNodeGroupbyName          (Name)                 returns (Empty); // ?
 
   // Link API
+  // GetLinksofNode
+  // GetLinksofNetwork (); // All links of a network. Internal and External.
   rpc CreateLink  (Node.Link.Create)  returns (Empty);
   rpc UpdateLink  (Node.Link.Update)  returns (Empty);
   rpc DeleteLink  (Id)                returns (Empty);
 
   // Service API
-  rpc ListServices      (Empty)           returns (Services);
+  rpc ListServices      (Empty)           returns (Services); // ???
+  // All returned services should include their states and status.
+  //  rpc GetServicesofNetwork      (Network)           returns (Services); // Services available on the network.
+  //  rpc GetServicesofNode      (Node)           returns (Services); // Services available on the node.
+  //  rpc GetServicesofNodeGroup      (Node)           returns (Services); // Services available on the node group.
   rpc ApplyServiceOps   (OpsRequest)      returns (OpsResponse);
   rpc StartService      (ConfigRequest)   returns (ConfigResponse);
   rpc StopService       (ConfigRequest)   returns (ConfigResponse);
   rpc ResetService       (ConfigRequest)  returns (ConfigResponse);
+  //  rpc GetStatesofService ; // All available states of services.
+  
 
-  // Get Stats
-  rpc GetCpuUsage(StatsRequest)   returns (Network.Stats.Percentage);
-  rpc GetSystemLoad(StatsRequest) returns (Network.Stats.Percentage);
-  rpc GetRamUsage(StatsRequest)   returns (Network.Stats.Percentage);
+  // Stats
+  rpc GetStatsofNetwork () return(); // Numbers of networks, nodes, links, node groups, etc. of a Network.
+  rpc GetNodeStates (); // Numbers of nodes in different state in a network.
+  rpc GetStatsofNode (); // Numbers of nodes in different state in a network.
+  
+  rpc GetStatsofServices (Network_Services); // Numbers of service nodes in different states of a network. For specified services.
 
-  rpc GetReceivedBits(StatsRequest)       returns (Network.Stats.Traffic);
-  rpc GetSentBits(StatsRequest)           returns (Network.Stats.Traffic);
-  rpc GetAsnReceivedPackets(StatsRequest) returns (Network.Stats.Traffic);
-  rpc GetAsnBlockedPackets(StatsRequest)  returns (Network.Stats.Traffic);
-  rpc GetAsnReceivedBits(StatsRequest)    returns (Network.Stats.Traffic);
-  rpc GetAsnBlockedBits(StatsRequest)     returns (Network.Stats.Traffic);
-  rpc GetThroughput(StatsRequest)         returns (Network.Stats);
+  // Service Metrics
+  rpc GetL1MetricsofService (Network_Service); // Metrics in key:value pairs. ONLY predefined Level 1.
+  rpc GetL2MetricsofService (Network_Service); // Metrics in key:value pairs. ONLY predefined Level 2.
 
-  rpc GetTotalReceivedBits(StatsRequest)        returns (Network.Stats.Traffic);
-  rpc GetTotalSentBits(StatsRequest)            returns (Network.Stats.Traffic);
-  rpc GetTotalAsnReceivedPackets(StatsRequest)  returns (Network.Stats.Traffic);
-  rpc GetTotalAsnBlockedPackets(StatsRequest)   returns (Network.Stats.Traffic);
-  rpc GetTotalAsnReceivedBits(StatsRequest)     returns (Network.Stats.Traffic);
-  rpc GetTotalAsnBlockedBits(StatsRequest)      returns (Network.Stats.Traffic);
-  rpc GetTotalTraffic(StatsRequest)             returns (Network.Stats);
-
-  rpc GetAsnReceivedPacketsByTime(StatsRequest) returns (TimeSerialTraffics);
-  rpc GetAsnBlockedPacketsByTime(StatsRequest)  returns (TimeSerialTraffics);
-  rpc GetAsnReceivedBitsByTime(StatsRequest)    returns (TimeSerialTraffics);
-  rpc GetAsnBlockedBitsByTime(StatsRequest)     returns (TimeSerialTraffics);
-  rpc GetTimeSerialTraffic(StatsRequest)        returns (Network.StatsList);
-
-  rpc GetNetReceivedBitsByTime(StatsRequest)  returns (TimeSerialTraffics);
-  rpc GetNetSentBitsByTime(StatsRequest)      returns (TimeSerialTraffics);
+  
+  // Obsolated API to be deleted.
+//  rpc GetCpuUsage(StatsRequest)   returns (Network.Stats.Percentage);
+//  rpc GetSystemLoad(StatsRequest) returns (Network.Stats.Percentage);
+//  rpc GetRamUsage(StatsRequest)   returns (Network.Stats.Percentage);
+//
+//  rpc GetReceivedBits(StatsRequest)       returns (Network.Stats.Traffic);
+//  rpc GetSentBits(StatsRequest)           returns (Network.Stats.Traffic);
+//  rpc GetAsnReceivedPackets(StatsRequest) returns (Network.Stats.Traffic);
+//  rpc GetAsnBlockedPackets(StatsRequest)  returns (Network.Stats.Traffic);
+//  rpc GetAsnReceivedBits(StatsRequest)    returns (Network.Stats.Traffic);
+//  rpc GetAsnBlockedBits(StatsRequest)     returns (Network.Stats.Traffic);
+//  rpc GetThroughput(StatsRequest)         returns (Network.Stats);
+//
+//  rpc GetTotalReceivedBits(StatsRequest)        returns (Network.Stats.Traffic);
+//  rpc GetTotalSentBits(StatsRequest)            returns (Network.Stats.Traffic);
+//  rpc GetTotalAsnReceivedPackets(StatsRequest)  returns (Network.Stats.Traffic);
+//  rpc GetTotalAsnBlockedPackets(StatsRequest)   returns (Network.Stats.Traffic);
+//  rpc GetTotalAsnReceivedBits(StatsRequest)     returns (Network.Stats.Traffic);
+//  rpc GetTotalAsnBlockedBits(StatsRequest)      returns (Network.Stats.Traffic);
+//  rpc GetTotalTraffic(StatsRequest)             returns (Network.Stats);
+//
+//  rpc GetAsnReceivedPacketsByTime(StatsRequest) returns (TimeSerialTraffics);
+//  rpc GetAsnBlockedPacketsByTime(StatsRequest)  returns (TimeSerialTraffics);
+//  rpc GetAsnReceivedBitsByTime(StatsRequest)    returns (TimeSerialTraffics);
+//  rpc GetAsnBlockedBitsByTime(StatsRequest)     returns (TimeSerialTraffics);
+//  rpc GetTimeSerialTraffic(StatsRequest)        returns (Network.StatsList);
+//
+//  rpc GetNetReceivedBitsByTime(StatsRequest)  returns (TimeSerialTraffics);
+//  rpc GetNetSentBitsByTime(StatsRequest)      returns (TimeSerialTraffics);
 }
 
 message Empty {}
