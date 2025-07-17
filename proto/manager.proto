@@ -258,7 +258,7 @@ message Network {
   string network_id = 1;
   string name = 2;
   string description = 3;
-  string parent_id = 4;
+  string parent_network_id = 4;
   repeated string network_tiers = 5;
   Location location = 6;
   repeated Network networks = 7;
@@ -292,7 +292,7 @@ message Network {
   }
 
   message Create {
-    string parent_id = 1;
+    string parent_network_id = 1;
     string name = 2;
     string description = 3;
     repeated string network_tiers = 4;
@@ -370,7 +370,7 @@ message Node {
   }
 
   message Create {
-    string parent_id = 1;
+    string parent_network_id = 1;
     Type type = 2;
     string name = 3;
     string description = 4;
@@ -384,7 +384,7 @@ message Node {
 
   message Update {
     string node_id = 1;
-    string parent_id = 2;
+    string parent_network_id = 2;
     Type type = 3;
     string name = 4;
     string description = 5;
