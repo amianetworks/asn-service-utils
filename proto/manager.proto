@@ -20,116 +20,79 @@ service Manager {
   rpc GetUserByToken  (Empty)               returns (User);
 
   // User API
-  rpc GetUserByName (Username)          returns (User);
-  rpc ListUsers     (PageRequest)       returns (Users);
-  rpc CreateUser    (CreateUserRequest) returns (Empty);
-  rpc DeleteUser    (Username)          returns (Empty);
+  rpc GetUsersByNames (Usernames)         returns (Users);
+  rpc ListUsers       (ListUsersReq)      returns (Users);
+  rpc CreateUser      (CreateUserRequest) returns (Empty);
+  rpc DeleteUser      (Username)          returns (Empty);
 
   // User Group API
   rpc ListUserGroups          (GroupName)         returns (UserGroups);
   rpc GetUserGroup            (GroupName)         returns (UserGroup);
-  rpc CreateUserGroup         (UserGroupRequest)  returns (Empty);
-  rpc UpdateUserGroup         (UserGroupRequest)  returns (Empty);
+  rpc CreateUserGroup         (UserGroup.Request) returns (Empty);
+  rpc UpdateUserGroup         (UserGroup.Request) returns (Empty);
   rpc DeleteUserGroup         (GroupName)         returns (Empty);
   rpc AddUsersToGroup         (GroupUsersRequest) returns (Empty);
   rpc RemoveUsersFromGroup    (GroupUsersRequest) returns (Empty);
 
-  // YS: to be added.
-  //  rpc GetUsersinGroup         (GroupName) returns (Users);
-
   // Network API
-  rpc GetRootNetworks (Empty)           returns (RootNetworks);
-  rpc GetNetworksById (GetNetworkReq)   returns (NetworkInfo);
+  rpc GetRootNetworks (Empty)           returns (RootNetworks); // Basic info of Root Networks.
+  rpc GetSubNetworks  (GetNetworkReq)   returns (NetworkInfo);  // Get all subnetworks, including itself. With or without Network Links. No Nodes.
   rpc CreateNetwork   (Network.Create)  returns (Empty);
   rpc UpdateNetwork   (Network.Update)  returns (Empty);
   rpc DeleteNetwork   (Id)              returns (Empty);
 
-  // YS: to be added.
-  //  rpc GetSubNetworks ()           returns (Networks);
-  
   // Nodes API
-  rpc GetNodesOfNetwork   (Id)          returns (Nodes); // scope is not clear
-  //  rpc GetNodesInGroup (Id)          returns (Nodes); // shorten the name
-  rpc GetNodesInNodeGroup (Id)          returns (Nodes);
-  //  rpc GetNodeByName         (NameandNetworkName)          returns (Nodes); // needed
+  rpc GetNodesOfNetwork   (Id)          returns (Nodes);
+  rpc GetNodesOfNodeGroup (Id)          returns (Nodes);
   rpc GetNodeById         (Id)          returns (Nodes); // Node details
   rpc CreateNode          (Node.Create) returns (Empty);
   rpc UpdateNode          (Node.Update) returns (Empty);
   rpc DeleteNode          (Id)          returns (Empty);
-  //  rpc DeleteNodebyName          (Name)          returns (Empty); // ?
-  //  rpc GetNodeStates ; // All available states of Nodes.
 
   // Node Group API
-  rpc ListNodeGroups           (PageRequest)        returns (NodeGroups);
-  //  rpc getNodeGroups        (RootNetwork)        returns (NodeGroups); //
-  //  rpc getNodeGroupsbyService           (PageRequest)        returns (NodeGroups); // List all NG with the service
-  rpc GetNodeGroup             (Id)                 returns (NodeGroup);
-  rpc CreateNodeGroup          (NodeGroupRequest)   returns (Empty);
-  rpc UpdateNodeGroup          (NodeGroupRequest)   returns (Empty);
-  rpc DeleteNodeGroup          (Id)                 returns (Empty);
-  //  rpc DeleteNodeGroupbyName          (Name)                 returns (Empty); // ?
+  rpc GetNodeGroups     (GetNodeGroupsReq)  returns (NodeGroups); // NG of Services specified in the request.
+  rpc GetNodeGroupById  (Id)                returns (NodeGroup);
+  rpc CreateNodeGroup   (NodeGroup.Create)  returns (Empty);
+  rpc UpdateNodeGroup   (NodeGroup.Update)  returns (Empty);
+  rpc DeleteNodeGroup   (Id)                returns (Empty);
 
   // Link API
-  // GetLinksofNode
-  // GetLinksofNetwork (); // All links of a network. Internal and External.
-  rpc CreateLink  (Node.Link.Create)  returns (Empty);
-  rpc UpdateLink  (Node.Link.Update)  returns (Empty);
-  rpc DeleteLink  (Id)                returns (Empty);
+  rpc GetLinksOfNetwork (Id)                returns (Node.Links); // All links of a network. Internal and External.
+  rpc CreateLink        (Node.Link.Create)  returns (Empty);
+  rpc UpdateLink        (Node.Link.Update)  returns (Empty);
+  rpc DeleteLink        (Id)                returns (Empty);
 
-  // Service API
-  rpc ListServices      (Empty)           returns (Services); // ???
-  // All returned services should include their states and status.
-  //  rpc GetServicesofNetwork      (Network)           returns (Services); // Services available on the network.
-  //  rpc GetServicesofNode      (Node)           returns (Services); // Services available on the node.
-  //  rpc GetServicesofNodeGroup      (Node)           returns (Services); // Services available on the node group.
-  rpc ApplyServiceOps   (OpsRequest)      returns (OpsResponse);
-  rpc StartService      (ConfigRequest)   returns (ConfigResponse);
-  rpc StopService       (ConfigRequest)   returns (ConfigResponse);
-  rpc ResetService       (ConfigRequest)  returns (ConfigResponse);
-  //  rpc GetStatesofService ; // All available states of services.
-  
+  // Service API: Info
+  rpc GetAllServices          (Empty) returns (Services);
+  rpc GetServicesOfNetwork    (Id)    returns (Services); // Services available in the network.
+  rpc GetServicesOfNode       (Id)    returns (Services); // Services available on the node.
+  rpc GetServicesOfNodeGroup  (Id)    returns (Services); // Services available in the node group.
+
+  // Service API: Start
+  rpc StartServiceOnNetwork   (Config.Request)  returns (Config.Response);
+  rpc StartServiceOnNodeGroup (Config.Request)  returns (Config.Response);
+  rpc StartServiceOnNode      (Config.Request)  returns (Config.Response);
+
+  // Service API: Stop
+  rpc StopServiceOnNetwork    (Config.Request)  returns (Config.Response);
+  rpc StopServiceOnNodeGroup  (Config.Request)  returns (Config.Response);
+  rpc StopServiceOnNode       (Config.Request)  returns (Config.Response);
+
+  // Service API: Reset
+  rpc ResetServiceOnNetwork   (Config.Request)  returns (Config.Response);
+  rpc ResetServiceOnNodeGroup (Config.Request)  returns (Config.Response);
+  rpc ResetServiceOnNode      (Config.Request)  returns (Config.Response);
+
+  // Service API: Apply Ops (Internal Use)
+  rpc ApplyServiceOps (Ops.Request) returns (Ops.Response);
 
   // Stats
-  rpc GetStatsofNetwork () return(); // Numbers of networks, nodes, links, node groups, etc. of a Network.
-  rpc GetNodeStates (); // Numbers of nodes in different state in a network.
-  rpc GetStatsofNode (); // Numbers of nodes in different state in a network.
-  
-  rpc GetStatsofServices (Network_Services); // Numbers of service nodes in different states of a network. For specified services.
+  rpc GetStatsOfNetwork   (Id)            returns (Network.Stats);  // Numbers of networks, nodes, links, node groups, etc., of a Network.
+  rpc GetStatsOfNodes     (Id)            returns (Node.Stats);     // Numbers of nodes in different states in a network.
+  rpc GetStatsOfServices  (IdAndServices) returns (Service.Stats);  // Numbers of service nodes in different states of a network. For specified services.
 
   // Service Metrics
-  rpc GetL1MetricsofService (Network_Service); // Metrics in key:value pairs. ONLY predefined Level 1.
-  rpc GetL2MetricsofService (Network_Service); // Metrics in key:value pairs. ONLY predefined Level 2.
-
-  
-  // Obsolated API to be deleted.
-//  rpc GetCpuUsage(StatsRequest)   returns (Network.Stats.Percentage);
-//  rpc GetSystemLoad(StatsRequest) returns (Network.Stats.Percentage);
-//  rpc GetRamUsage(StatsRequest)   returns (Network.Stats.Percentage);
-//
-//  rpc GetReceivedBits(StatsRequest)       returns (Network.Stats.Traffic);
-//  rpc GetSentBits(StatsRequest)           returns (Network.Stats.Traffic);
-//  rpc GetAsnReceivedPackets(StatsRequest) returns (Network.Stats.Traffic);
-//  rpc GetAsnBlockedPackets(StatsRequest)  returns (Network.Stats.Traffic);
-//  rpc GetAsnReceivedBits(StatsRequest)    returns (Network.Stats.Traffic);
-//  rpc GetAsnBlockedBits(StatsRequest)     returns (Network.Stats.Traffic);
-//  rpc GetThroughput(StatsRequest)         returns (Network.Stats);
-//
-//  rpc GetTotalReceivedBits(StatsRequest)        returns (Network.Stats.Traffic);
-//  rpc GetTotalSentBits(StatsRequest)            returns (Network.Stats.Traffic);
-//  rpc GetTotalAsnReceivedPackets(StatsRequest)  returns (Network.Stats.Traffic);
-//  rpc GetTotalAsnBlockedPackets(StatsRequest)   returns (Network.Stats.Traffic);
-//  rpc GetTotalAsnReceivedBits(StatsRequest)     returns (Network.Stats.Traffic);
-//  rpc GetTotalAsnBlockedBits(StatsRequest)      returns (Network.Stats.Traffic);
-//  rpc GetTotalTraffic(StatsRequest)             returns (Network.Stats);
-//
-//  rpc GetAsnReceivedPacketsByTime(StatsRequest) returns (TimeSerialTraffics);
-//  rpc GetAsnBlockedPacketsByTime(StatsRequest)  returns (TimeSerialTraffics);
-//  rpc GetAsnReceivedBitsByTime(StatsRequest)    returns (TimeSerialTraffics);
-//  rpc GetAsnBlockedBitsByTime(StatsRequest)     returns (TimeSerialTraffics);
-//  rpc GetTimeSerialTraffic(StatsRequest)        returns (Network.StatsList);
-//
-//  rpc GetNetReceivedBitsByTime(StatsRequest)  returns (TimeSerialTraffics);
-//  rpc GetNetSentBitsByTime(StatsRequest)      returns (TimeSerialTraffics);
+  rpc GetMetricsOfService (IdAndService)  returns (Service.Metrics);  // Metrics in key-value pairs.
 }
 
 message Empty {}
@@ -137,9 +100,16 @@ message Empty {}
 /*
   Request message
  */
-message PageRequest {
-  int64 page = 2;
-  int64 page_size = 3;
+message ListUsersReq {
+  int64 page = 1;
+  int64 page_size = 2;
+  bool asn_only = 3;
+}
+
+message GetNodeGroupsReq {
+  int64 page = 1;
+  int64 page_size = 2;
+  repeated string services = 3;
 }
 
 message ControllerInfo {
@@ -194,6 +164,10 @@ message Username {
   string username = 1;
 }
 
+message Usernames {
+  repeated string usernames = 1;
+}
+
 message GroupUsersRequest {
   string service_name = 1;
   string group_name = 2;
@@ -204,6 +178,7 @@ message GetNetworkReq {
   string network_id = 1;
   repeated string location_tiers = 2;
   repeated string network_tiers = 3;
+  bool include_links = 4;
 }
 
 message RootNetworks {
@@ -245,24 +220,35 @@ message UserGroups {
   repeated UserGroup groups = 1;
 }
 
+
+
 message UserGroup {
   string name = 1;
   string service_name = 2;
-  int64 type = 3;
+  Type type = 3;
   string remark = 4;
-  repeated string users = 5;
-  repeated string services = 6;
-  repeated string networks = 7;
-  repeated string operations = 8;
-}
 
-message UserGroupRequest {
-  string name = 1;
-  int64 type = 2;
-  string remark = 3;
-  repeated string services = 4;
-  repeated string networks = 5;
-  repeated string operations = 6;
+  int64 user_total = 5;
+  repeated string usernames = 6;
+
+  repeated string services = 7;
+  repeated string networks = 8;
+  repeated string operations = 9;
+
+  enum Type {
+    TYPE_UNKNOWN = 0;
+    TYPE_SERVICE = 1;
+    TYPE_NETWORK = 2;
+  }
+
+  message Request {
+    string name = 1;
+    Type type = 2;
+    string remark = 3;
+    repeated string services = 4;
+    repeated string networks = 5;
+    repeated string operations = 6;
+  }
 }
 
 message GroupName {
@@ -270,59 +256,55 @@ message GroupName {
   string service_name = 2;
 }
 
-message StatsRequest {
-  string network = 1;
-  string group = 2;
-  repeated string netifs = 3;
-  string start_time = 4;
-  string end_time = 5;
-}
-
-message GetServicesConfigResponse {
-  message ServicesConfig {
-    string service_name = 1;
-    bytes config = 2;
-  }
-
-  repeated ServicesConfig services_configs = 1;
-}
-
-message ConfigRequest {
-  string network = 1;
-  string group = 2;
-  repeated string service_nodes = 3;
-  string service_name = 4;
-  bytes config = 5;
-}
-
-message ConfigResponse {
-  message Response {
+message Config {
+  message Request {
     string id = 1;
-    bool success = 2;
-    string err_msg = 3;
+    string service_name = 2;
+    bytes config = 3;
   }
 
-  repeated Response responses = 1;
-}
-
-message OpsRequest {
-  string network = 1;
-  string group = 2;
-  repeated string service_nodes = 3;
-  string service_name = 4;
-  string command = 5;
-  string params = 6;
-}
-
-message OpsResponse {
   message Response {
-    string id = 1;
-    bool success = 2;
-    string response = 3;
-    string error = 4;
+    message Inner {
+      string id = 1;
+      bool success = 2;
+      string err_msg = 3;
+    }
+
+    repeated Inner responses = 1;
+  }
+}
+
+message Ops {
+  message Request {
+    string network = 1;
+    bool include_subnetworks = 2;
+    string group = 3;
+    repeated string service_nodes = 4;
+    string service_name = 5;
+    string command = 6;
+    string params = 7;
   }
 
-  repeated Response responses = 1;
+  message Response {
+    message Inner {
+      string id = 1;
+      bool success = 2;
+      string response = 3;
+      string error = 4;
+    }
+
+    repeated Inner responses = 1;
+  }
+}
+
+message IdAndService {
+  string id = 1;
+  string service = 2;
+}
+
+message IdAndServices {
+  string id = 1;
+  repeated string services = 2;
 }
 
 /*
@@ -354,8 +336,6 @@ message Network {
   Location location = 6;
   repeated Network networks = 7;
 
-  Stats stats = 8;
-
   message Create {
     string parent_id = 1;
     string name = 2;
@@ -381,24 +361,11 @@ message Network {
     LinkStats stats = 4;
   }
 
-  message StatsList {
-    repeated Stats stats_list = 1;
-  }
-
   message Stats {
-    uint64  received_bits = 1;
-    uint64  sent_bits = 2;
-    uint64  asn_received_bits = 3;
-    uint64  asn_blocked_bits = 4;
-    uint64  asn_received_pkts = 5;
-    uint64  asn_blocked_pkts = 6;
-    string  timestamp = 7;
-    message Percentage {
-      float value = 1;
-    }
-    message Traffic {
-      uint64 value = 1;
-    }
+    int64 number_of_networks = 1;
+    int64 number_of_nodes = 2;
+    int64 number_of_links = 3;
+    int64 number_of_node_groups = 4;
   }
 }
 
@@ -410,7 +377,7 @@ message Nodes {
 
 message Node {
   string id = 1;
-  string type = 2;
+  Type type = 2;
   string name = 3;
   string description = 4;
   string network_id = 5;
@@ -422,11 +389,22 @@ message Node {
   repeated Interface interfaces = 11;
 
   ServiceNode service_node = 12;
-  Stats stats = 13;
+
+  enum Type {
+    TYPE_UNKNOWN = 0;
+    TYPE_ROUTER = 1;        // router
+    TYPE_SWITCH = 2;        // switch
+    TYPE_APPLIANCE = 3;     // appliance
+    TYPE_FIREWALL = 4;      // firewall
+    TYPE_LOAD_BALANCER = 5; // lb
+    TYPE_ACCESS_POINT = 6;  // ap
+    TYPE_DEVICE = 7;        // device
+    TYPE_SERVER = 8;        // server
+  }
 
   message Create {
     string parent_id = 1;
-    string type = 2;
+    Type type = 2;
     string name = 3;
     string description = 4;
     Location location = 5;
@@ -440,7 +418,7 @@ message Node {
   message Update {
     string id = 1;
     string parent_id = 2;
-    string type = 3;
+    Type type = 3;
     string name = 4;
     string description = 5;
     Location location = 6;
@@ -468,21 +446,8 @@ message Node {
     string serial_number = 3;
   }
 
-  message Stats {
-    uint64 rx = 1;
-    uint64 tx = 2;
-    uint64 asn_received_packets = 3;
-    uint64 asn_blocked_packets = 4;
-    uint64 asn_received_bits = 5;
-    uint64 asn_blocked_bits = 6;
-    float  cpu_usage = 7;
-  }
-
-  message NetStats {
-    string node_id = 1;
-    string node_name = 2;
-    uint64 send_bits = 3;
-    uint64 received_bits = 4;
+  message Links {
+    repeated Link links = 1;
   }
 
   message Link {
@@ -515,6 +480,22 @@ message Node {
 
     LinkStats stats = 8;
   }
+
+  message Stats {
+    message Stat {
+      State state = 1;
+      int64 count = 2;
+    }
+
+    repeated Stat states = 1;
+  }
+
+  enum State {
+    STATE_UNREGISTERED = 0;
+    STATE_OFFLINE = 1;
+    STATE_ONLINE = 2;
+    STATE_MAINTENANCE = 3;
+  }
 }
 
 message ServiceNode {
@@ -525,9 +506,18 @@ message ServiceNode {
     int64 disk = 4;
   }
 
-  int64 state = 1;
+  State state = 1;
   SystemInfo system_info = 2;
   repeated Interface interfaces = 11;
+
+  enum State {
+    STATE_UNAVAILABLE = 0;
+    STATE_UNINITIALIZED = 1;
+    STATE_INITIALIZED = 2;
+    STATE_CONFIGURING = 3;
+    STATE_RUNNING = 4;
+    STATE_MALFUNCTIONING = 5;
+  }
 }
 
 message Interface {
@@ -547,14 +537,21 @@ message NodeGroup {
   string remark = 3;
   repeated string nodes = 4;
   map<string, string> services = 5;
-}
 
-message NodeGroupRequest {
-  string id = 1;
-  string name = 2;
-  string remark = 3;
-  repeated string nodes = 4;
-  map<string, string> services = 5;
+  message Create {
+    string name = 1;
+    string remark = 2;
+    repeated string nodes = 3;
+    map<string, string> services = 4;
+  }
+
+  message Update {
+    string id = 1;
+    string name = 2;
+    string remark = 3;
+    repeated string nodes = 4;
+    map<string, string> services = 5;
+  }
 }
 
 message LinkStats {
@@ -562,11 +559,17 @@ message LinkStats {
   uint64 outbound = 2;
 }
 
-message TimeSerialTraffics {
-  repeated TimeSerialTraffic time_serial_traffics = 1;
-}
+message Service {
+  message Stats {
+    message Stat {
+      ServiceNode.State state = 1;
+      int64 count = 2;
+    }
 
-message TimeSerialTraffic {
-  uint64 value = 1;
-  string timestamp = 2;
+    repeated Stat states = 1;
+  }
+
+  message Metrics {
+    map<string, string> metrics = 1;
+  }
 }
