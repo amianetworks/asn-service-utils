@@ -20,14 +20,14 @@ service Manager {
   rpc GetUserByToken  (Empty)               returns (User);
 
   // User API
-  rpc GetUsersByNames (Usernames)         returns (Users);
-  rpc ListUsers       (ListUsersReq)      returns (Users);
+  rpc GetUsersByNames (Usernames)         returns (Users); // User Info by name
+  rpc ListUsers       (ListUsersReq)      returns (Users); // ??? Shouldn't be 
   rpc CreateUser      (CreateUserRequest) returns (Empty);
   rpc DeleteUser      (Username)          returns (Empty);
 
   // User Group API
-  rpc ListUserGroups          (GroupName)         returns (UserGroups);
-  rpc GetUserGroup            (GroupName)         returns (UserGroup);
+  rpc GetUserGroup            (GroupName)         returns (UserGroup); // User Group info by name
+  rpc ListUserGroups          (GroupName)         returns (UserGroups); // ???
   rpc CreateUserGroup         (UserGroup.Request) returns (Empty);
   rpc UpdateUserGroup         (UserGroup.Request) returns (Empty);
   rpc DeleteUserGroup         (GroupName)         returns (Empty);
@@ -35,23 +35,24 @@ service Manager {
   rpc RemoveUsersFromGroup    (GroupUsersRequest) returns (Empty);
 
   // Network API
-  rpc GetRootNetworks (Empty)           returns (RootNetworks); // Basic info of Root Networks.
-  rpc GetSubNetworks  (GetNetworkReq)   returns (NetworkInfo);  // Get all subnetworks, including itself. With or without Network Links. No Nodes.
+  rpc GetRootNetworks (Empty)           returns (RootNetworks); // Basic info of Network roots.
+  rpc GetSubNetworks  (GetNetworkReq)   returns (NetworkInfo);  // Get all subnetworks, including itself, without nodes.
+								// Network link is optional.
   rpc CreateNetwork   (Network.Create)  returns (Empty);
   rpc UpdateNetwork   (Network.Update)  returns (Empty);
   rpc DeleteNetwork   (Id)              returns (Empty);
 
   // Nodes API
-  rpc GetNodesOfNetwork   (Id)          returns (Nodes);
-  rpc GetNodesOfNodeGroup (Id)          returns (Nodes);
-  rpc GetNodeById         (Id)          returns (Nodes); // Node details
+  rpc GetNodeById         (Id)          returns (Nodes); // Node details. ??? not by name?
+  rpc GetNodesOfNetwork   (Id)          returns (Nodes); // All nodes in the network and its subnetworks.
+  rpc GetNodesOfNodeGroup (Id)          returns (Nodes); // Nodes in given Node Group.
   rpc CreateNode          (Node.Create) returns (Empty);
   rpc UpdateNode          (Node.Update) returns (Empty);
   rpc DeleteNode          (Id)          returns (Empty);
 
   // Node Group API
-  rpc GetNodeGroups     (GetNodeGroupsReq)  returns (NodeGroups); // NG of Services specified in the request.
-  rpc GetNodeGroupById  (Id)                returns (NodeGroup);
+  rpc GetNodeGroupById  (Id)                returns (NodeGroup); // Node Group info
+  rpc GetNodeGroups     (GetNodeGroupsReq)  returns (NodeGroups); // Node Group of Services specified in the request. // ??? paging needed? IDs? Info?
   rpc CreateNodeGroup   (NodeGroup.Create)  returns (Empty);
   rpc UpdateNodeGroup   (NodeGroup.Update)  returns (Empty);
   rpc DeleteNodeGroup   (Id)                returns (Empty);
@@ -62,8 +63,8 @@ service Manager {
   rpc UpdateLink        (Node.Link.Update)  returns (Empty);
   rpc DeleteLink        (Id)                returns (Empty);
 
-  // Service API: Info
-  rpc GetAllServices          (Empty) returns (Services);
+  // Service API: Info or Name? ???
+  rpc GetAllServices          (Empty) returns (Services); // All available service names.
   rpc GetServicesOfNetwork    (Id)    returns (Services); // Services available in the network.
   rpc GetServicesOfNode       (Id)    returns (Services); // Services available on the node.
   rpc GetServicesOfNodeGroup  (Id)    returns (Services); // Services available in the node group.
@@ -95,42 +96,18 @@ service Manager {
   rpc GetMetricsOfService (IdAndService)  returns (Service.Metrics);  // Metrics in key-value pairs.
 }
 
-message Empty {}
-
 /*
-  Request message
+ * Common
  */
-message ListUsersReq {
-  int64 page = 1;
-  int64 page_size = 2;
-  bool asn_only = 3;
-}
-
-message GetNodeGroupsReq {
-  int64 page = 1;
-  int64 page_size = 2;
-  repeated string services = 3;
-}
-
-message ControllerInfo {
-  string asnc_version = 1;
-  map<string, string> service_versions = 2;
-  uint32 port = 3;
-  uint32 port_pending = 4;
-}
-
-message UpdatePortReq {
-  uint32 port = 1;
-}
+message Empty {}
 
 message Id {
   string id = 1;
 }
 
-message Services {
-  repeated string service_names = 2;
-}
-
+/*
+ * Login
+ */
 message LoginRequest {
   string username = 1;
   string password = 2;
@@ -174,25 +151,9 @@ message GroupUsersRequest {
   repeated string usernames = 3;
 }
 
-message GetNetworkReq {
-  string network_id = 1;
-  repeated string location_tiers = 2;
-  repeated string network_tiers = 3;
-  bool include_links = 4;
-}
-
-message RootNetworks {
-  message Network {
-    string id = 1;
-    string name = 2;
-    string description = 3;
-    repeated string location_tiers = 4;
-    repeated string network_tiers = 5;
-  }
-
-  repeated Network networks = 1;
-}
-
+/*
+ * User and User Group
+ */
 message Users {
   repeated User users = 1;
   int64 total = 2;
@@ -211,6 +172,12 @@ message User {
   map<string, Array> networks = 6;
 }
 
+message ListUsersReq {
+  int64 page = 1;
+  int64 page_size = 2;
+  bool asn_only = 3;
+}
+
 message Phone {
   string country_code = 1;
   string number = 2;
@@ -219,8 +186,6 @@ message Phone {
 message UserGroups {
   repeated UserGroup groups = 1;
 }
-
-
 
 message UserGroup {
   string name = 1;
@@ -256,72 +221,28 @@ message GroupName {
   string service_name = 2;
 }
 
-message Config {
-  message Request {
+/*
+ * Network Topology: Network, Node, Location, etc.
+ */
+message GetNetworkReq {
+  string network_id = 1;
+  repeated string location_tiers = 2;
+  repeated string network_tiers = 3;
+  bool include_links = 4;
+}
+
+message RootNetworks {
+  message Network {
     string id = 1;
-    string service_name = 2;
-    bytes config = 3;
+    string name = 2;
+    string description = 3;
+    repeated string location_tiers = 4;
+    repeated string network_tiers = 5;
   }
 
-  message Response {
-    message Inner {
-      string id = 1;
-      bool success = 2;
-      string err_msg = 3;
-    }
-
-    repeated Inner responses = 1;
-  }
+  repeated Network networks = 1;
 }
 
-message Ops {
-  message Request {
-    string network = 1;
-    bool include_subnetworks = 2;
-    string group = 3;
-    repeated string service_nodes = 4;
-    string service_name = 5;
-    string command = 6;
-    string params = 7;
-  }
-
-  message Response {
-    message Inner {
-      string id = 1;
-      bool success = 2;
-      string response = 3;
-      string error = 4;
-    }
-
-    repeated Inner responses = 1;
-  }
-}
-
-message IdAndService {
-  string id = 1;
-  string service = 2;
-}
-
-message IdAndServices {
-  string id = 1;
-  repeated string services = 2;
-}
-
-/*
-  Utils message
- */
-message Location {
-  float latitude = 1;
-  float longitude = 2;
-  float altitude = 3;
-  string address = 4;
-  string description = 5;
-  string location_tier = 6;
-}
-
-/*
-  Network message
- */
 message NetworkInfo {
   Network network = 1;
   repeated Network.Link links = 6;
@@ -498,6 +419,24 @@ message Node {
   }
 }
 
+message GetNodeGroupsReq {
+  int64 page = 1;
+  int64 page_size = 2;
+  repeated string services = 3;
+}
+
+message ControllerInfo {
+  string asnc_version = 1;
+  map<string, string> service_versions = 2;
+  uint32 port = 3;
+  uint32 port_pending = 4;
+}
+
+message UpdatePortReq {
+  uint32 port = 1;
+}
+
+
 message ServiceNode {
   message SystemInfo {
     string machine_id = 1;
@@ -559,6 +498,21 @@ message LinkStats {
   uint64 outbound = 2;
 }
 
+message Location {
+  float latitude = 1;
+  float longitude = 2;
+  float altitude = 3;
+  string address = 4;
+  string description = 5;
+  string location_tier = 6;
+}
+
+/*
+ * Service and Configure
+ */
+message Services {
+  repeated string service_names = 2;
+}
 message Service {
   message Stats {
     message Stat {
@@ -572,4 +526,55 @@ message Service {
   message Metrics {
     map<string, string> metrics = 1;
   }
+}
+
+message Config {
+  message Request {
+    string id = 1;
+    string service_name = 2;
+    bytes config = 3;
+  }
+
+  message Response {
+    message Inner {
+      string id = 1;
+      bool success = 2;
+      string err_msg = 3;
+    }
+
+    repeated Inner responses = 1;
+  }
+}
+
+message Ops {
+  message Request {
+    string network = 1;
+    bool include_subnetworks = 2;
+    string group = 3;
+    repeated string service_nodes = 4;
+    string service_name = 5;
+    string command = 6;
+    string params = 7;
+  }
+
+  message Response {
+    message Inner {
+      string id = 1;
+      bool success = 2;
+      string response = 3;
+      string error = 4;
+    }
+
+    repeated Inner responses = 1;
+  }
+}
+
+message IdAndService {
+  string id = 1;
+  string service = 2;
+}
+
+message IdAndServices {
+  string id = 1;
+  repeated string services = 2;
 }
