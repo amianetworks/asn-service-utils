@@ -21,7 +21,7 @@ service Manager {
 
   // User API
   rpc GetUsersByNames (Usernames)         returns (Users);
-  rpc ListUsers       (PageRequest)       returns (Users);
+  rpc ListUsers       (ListUsersReq)      returns (Users);
   rpc CreateUser      (CreateUserRequest) returns (Empty);
   rpc DeleteUser      (Username)          returns (Empty);
 
@@ -64,9 +64,9 @@ service Manager {
 
   // Service API: Info
   rpc GetAllServices          (Empty) returns (Services);
-  rpc GetServicesOfNetwork    (Id)    returns (Services); // Services available on the network, with states and status.
-  rpc GetServicesOfNode       (Id)    returns (Services); // Services available on the node, with states and status.
-  rpc GetServicesOfNodeGroup  (Id)    returns (Services); // Services available on the node group, with states and status.
+  rpc GetServicesOfNetwork    (Id)    returns (Services); // Services available on the network.
+  rpc GetServicesOfNode       (Id)    returns (Services); // Services available on the node.
+  rpc GetServicesOfNodeGroup  (Id)    returns (Services); // Services available on the node group.
 
   // Service API: Start
   rpc StartServiceOnNetwork   (ConfigRequest) returns (ConfigResponse);
@@ -83,6 +83,9 @@ service Manager {
   rpc ResetServiceOnNodeGroup (ConfigRequest) returns (ConfigResponse);
   rpc ResetServiceOnNode      (ConfigRequest) returns (ConfigResponse);
 
+  // Service API: Apply Ops (Internal Use)
+  rpc ApplyServiceOps (OpsRequest)  returns (OpsResponse);
+
   // Stats
   rpc GetStatsOfNetwork   (Id)            returns (Network.Stats);  // Numbers of networks, nodes, links, node groups, etc., of a Network.
   rpc GetStatsOfNodes     (Id)            returns (Node.Stats);     // Numbers of nodes in different states in a network.
@@ -97,9 +100,10 @@ message Empty {}
 /*
   Request message
  */
-message PageRequest {
+message ListUsersReq {
   int64 page = 1;
   int64 page_size = 2;
+  bool asn_only = 3;
 }
 
 message GetNodeGroupsReq {
@@ -272,6 +276,26 @@ message ConfigResponse {
     string id = 1;
     bool success = 2;
     string err_msg = 3;
+  }
+
+  repeated Response responses = 1;
+}
+
+message OpsRequest {
+  string network = 1;
+  string group = 2;
+  repeated string service_nodes = 3;
+  string service_name = 4;
+  string command = 5;
+  string params = 6;
+}
+
+message OpsResponse {
+  message Response {
+    string id = 1;
+    bool success = 2;
+    string response = 3;
+    string error = 4;
   }
 
   repeated Response responses = 1;
