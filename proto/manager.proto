@@ -376,11 +376,10 @@ message Node {
     string name = 3;
     string description = 4;
     Location location = 5;
-    bool managed = 6;
-    Ipmi ipmi = 7;
-    Management management = 8;
-    Info info = 9;
-    repeated Interface interfaces = 10;
+    Ipmi ipmi = 6;
+    Management management = 7;
+    Info info = 8;
+    repeated Interface interfaces = 9;
   }
 
   message Update {
@@ -390,11 +389,10 @@ message Node {
     string name = 4;
     string description = 5;
     Location location = 6;
-    bool managed = 7;
-    Ipmi ipmi = 8;
-    Management management = 9;
-    Info info = 10;
-    repeated Interface interfaces = 11;
+    Ipmi ipmi = 7;
+    Management management = 8;
+    Info info = 9;
+    repeated Interface interfaces = 10;
   }
 
   message Ipmi {
