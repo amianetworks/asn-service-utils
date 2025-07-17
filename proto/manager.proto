@@ -52,8 +52,8 @@ service Manager {
   // Node Group API
   rpc GetNodeGroups     (GetNodeGroupsReq)  returns (NodeGroups); // NG of Services specified in the request.
   rpc GetNodeGroupById  (Id)                returns (NodeGroup);
-  rpc CreateNodeGroup   (NodeGroupRequest)  returns (Empty);
-  rpc UpdateNodeGroup   (NodeGroupRequest)  returns (Empty);
+  rpc CreateNodeGroup   (NodeGroup.Create)  returns (Empty);
+  rpc UpdateNodeGroup   (NodeGroup.Update)  returns (Empty);
   rpc DeleteNodeGroup   (Id)                returns (Empty);
 
   // Link API
@@ -69,22 +69,22 @@ service Manager {
   rpc GetServicesOfNodeGroup  (Id)    returns (Services); // Services available on the node group.
 
   // Service API: Start
-  rpc StartServiceOnNetwork   (ConfigRequest) returns (ConfigResponse);
-  rpc StartServiceOnNodeGroup (ConfigRequest) returns (ConfigResponse);
-  rpc StartServiceOnNode      (ConfigRequest) returns (ConfigResponse);
+  rpc StartServiceOnNetwork   (Config.Request)  returns (Config.Response);
+  rpc StartServiceOnNodeGroup (Config.Request)  returns (Config.Response);
+  rpc StartServiceOnNode      (Config.Request)  returns (Config.Response);
 
   // Service API: Stop
-  rpc StopServiceOnNetwork    (ConfigRequest) returns (ConfigResponse);
-  rpc StopServiceOnNodeGroup  (ConfigRequest) returns (ConfigResponse);
-  rpc StopServiceOnNode       (ConfigRequest) returns (ConfigResponse);
+  rpc StopServiceOnNetwork    (Config.Request)  returns (Config.Response);
+  rpc StopServiceOnNodeGroup  (Config.Request)  returns (Config.Response);
+  rpc StopServiceOnNode       (Config.Request)  returns (Config.Response);
 
   // Service API: Reset
-  rpc ResetServiceOnNetwork   (ConfigRequest) returns (ConfigResponse);
-  rpc ResetServiceOnNodeGroup (ConfigRequest) returns (ConfigResponse);
-  rpc ResetServiceOnNode      (ConfigRequest) returns (ConfigResponse);
+  rpc ResetServiceOnNetwork   (Config.Request)  returns (Config.Response);
+  rpc ResetServiceOnNodeGroup (Config.Request)  returns (Config.Response);
+  rpc ResetServiceOnNode      (Config.Request)  returns (Config.Response);
 
   // Service API: Apply Ops (Internal Use)
-  rpc ApplyServiceOps (OpsRequest)  returns (OpsResponse);
+  rpc ApplyServiceOps (Ops.Request) returns (Ops.Response);
 
   // Stats
   rpc GetStatsOfNetwork   (Id)            returns (Network.Stats);  // Numbers of networks, nodes, links, node groups, etc., of a Network.
@@ -256,50 +256,45 @@ message GroupName {
   string service_name = 2;
 }
 
-message GetServicesConfigResponse {
-  message ServicesConfig {
-    string service_name = 1;
-    bytes config = 2;
-  }
-
-  repeated ServicesConfig services_configs = 1;
-}
-
-message ConfigRequest {
-  string id = 1;
-  string service_name = 2;
-  bytes config = 3;
-}
-
-message ConfigResponse {
-  message Response {
+message Config {
+  message Request {
     string id = 1;
-    bool success = 2;
-    string err_msg = 3;
+    string service_name = 2;
+    bytes config = 3;
   }
 
-  repeated Response responses = 1;
-}
-
-message OpsRequest {
-  string network = 1;
-  bool include_subnetworks = 2;
-  string group = 3;
-  repeated string service_nodes = 4;
-  string service_name = 5;
-  string command = 6;
-  string params = 7;
-}
-
-message OpsResponse {
   message Response {
-    string id = 1;
-    bool success = 2;
-    string response = 3;
-    string error = 4;
+    message Inner {
+      string id = 1;
+      bool success = 2;
+      string err_msg = 3;
+    }
+
+    repeated Inner responses = 1;
+  }
+}
+
+message Ops {
+  message Request {
+    string network = 1;
+    bool include_subnetworks = 2;
+    string group = 3;
+    repeated string service_nodes = 4;
+    string service_name = 5;
+    string command = 6;
+    string params = 7;
   }
 
-  repeated Response responses = 1;
+  message Response {
+    message Inner {
+      string id = 1;
+      bool success = 2;
+      string response = 3;
+      string error = 4;
+    }
+
+    repeated Inner responses = 1;
+  }
 }
 
 message IdAndService {
@@ -542,14 +537,21 @@ message NodeGroup {
   string remark = 3;
   repeated string nodes = 4;
   map<string, string> services = 5;
-}
 
-message NodeGroupRequest {
-  string id = 1;
-  string name = 2;
-  string remark = 3;
-  repeated string nodes = 4;
-  map<string, string> services = 5;
+  message Create {
+    string name = 1;
+    string remark = 2;
+    repeated string nodes = 3;
+    map<string, string> services = 4;
+  }
+
+  message Update {
+    string id = 1;
+    string name = 2;
+    string remark = 3;
+    repeated string nodes = 4;
+    map<string, string> services = 5;
+  }
 }
 
 message LinkStats {
