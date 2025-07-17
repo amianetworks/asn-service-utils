@@ -69,19 +69,19 @@ service Manager {
   rpc GetServicesOfNode       (Node.Id)       returns (Node.Service.Names); // Services available on the node.
 
   // Service API: Start
-  rpc StartServiceOnNetwork   (Config.Request)  returns (Config.Response);
-  rpc StartServiceOnNodeGroup (Config.Request)  returns (Config.Response);
-  rpc StartServiceOnNode      (Config.Request)  returns (Config.Response);
+  rpc StartServiceOnNetwork   (Config.Request)  returns (Empty);
+  rpc StartServiceOnNodeGroup (Config.Request)  returns (Empty);
+  rpc StartServiceOnNode      (Config.Request)  returns (Empty);
 
   // Service API: Stop
-  rpc StopServiceOnNetwork    (Config.Request)  returns (Config.Response);
-  rpc StopServiceOnNodeGroup  (Config.Request)  returns (Config.Response);
-  rpc StopServiceOnNode       (Config.Request)  returns (Config.Response);
+  rpc StopServiceOnNetwork    (Config.Request)  returns (Empty);
+  rpc StopServiceOnNodeGroup  (Config.Request)  returns (Empty);
+  rpc StopServiceOnNode       (Config.Request)  returns (Empty);
 
   // Service API: Reset
-  rpc ResetServiceOnNetwork   (Config.Request)  returns (Config.Response);
-  rpc ResetServiceOnNodeGroup (Config.Request)  returns (Config.Response);
-  rpc ResetServiceOnNode      (Config.Request)  returns (Config.Response);
+  rpc ResetServiceOnNetwork   (Config.Request)  returns (Empty);
+  rpc ResetServiceOnNodeGroup (Config.Request)  returns (Empty);
+  rpc ResetServiceOnNode      (Config.Request)  returns (Empty);
 
   // Service API: Apply Ops (Internal Use)
   rpc ApplyServiceOpsOnNetwork    (Ops.Request) returns (Ops.Response);
@@ -575,16 +575,6 @@ message Config {
     string id = 1;
     string service_name = 2;
     bytes config = 3;
-  }
-
-  message Response {
-    repeated Inner responses = 1;
-
-    message Inner {
-      string id = 1;
-      bool success = 2;
-      string err_msg = 3;
-    }
   }
 }
 
