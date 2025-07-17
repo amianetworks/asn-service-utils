@@ -84,7 +84,9 @@ service Manager {
   rpc ResetServiceOnNode      (Config.Request)  returns (Config.Response);
 
   // Service API: Apply Ops (Internal Use)
-  rpc ApplyServiceOps (Ops.Request) returns (Ops.Response);
+  rpc ApplyServiceOpsOnNetwork    (Ops.Request) returns (Ops.Response);
+  rpc ApplyServiceOpsOnNodeGroup  (Ops.Request) returns (Ops.Response);
+  rpc ApplyServiceOpsOnNode       (Ops.Request) returns (Ops.Response);
 
   // Stats
   rpc GetStatsOfNetwork   (Id)            returns (Network.Stats);  // Numbers of networks, nodes, links, node groups, etc., of a Network.
@@ -276,13 +278,10 @@ message Config {
 
 message Ops {
   message Request {
-    string network = 1;
-    bool include_subnetworks = 2;
-    string group = 3;
-    repeated string service_nodes = 4;
-    string service_name = 5;
-    string command = 6;
-    string params = 7;
+    string id = 1;
+    string service_name = 2;
+    string command = 3;
+    string params = 4;
   }
 
   message Response {
