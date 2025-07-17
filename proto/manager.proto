@@ -28,8 +28,8 @@ service Manager {
   // User Group API
   rpc ListUserGroups          (GroupName)         returns (UserGroups);
   rpc GetUserGroup            (GroupName)         returns (UserGroup);
-  rpc CreateUserGroup         (UserGroupRequest)  returns (Empty);
-  rpc UpdateUserGroup         (UserGroupRequest)  returns (Empty);
+  rpc CreateUserGroup         (UserGroup.Request) returns (Empty);
+  rpc UpdateUserGroup         (UserGroup.Request) returns (Empty);
   rpc DeleteUserGroup         (GroupName)         returns (Empty);
   rpc AddUsersToGroup         (GroupUsersRequest) returns (Empty);
   rpc RemoveUsersFromGroup    (GroupUsersRequest) returns (Empty);
@@ -216,10 +216,12 @@ message UserGroups {
   repeated UserGroup groups = 1;
 }
 
+
+
 message UserGroup {
   string name = 1;
   string service_name = 2;
-  int64 type = 3;
+  Type type = 3;
   string remark = 4;
 
   int64 user_total = 5;
@@ -228,15 +230,21 @@ message UserGroup {
   repeated string services = 7;
   repeated string networks = 8;
   repeated string operations = 9;
-}
 
-message UserGroupRequest {
-  string name = 1;
-  int64 type = 2;
-  string remark = 3;
-  repeated string services = 4;
-  repeated string networks = 5;
-  repeated string operations = 6;
+  enum Type {
+    TYPE_UNKNOWN = 0;
+    TYPE_SERVICE = 1;
+    TYPE_NETWORK = 2;
+  }
+
+  message Request {
+    string name = 1;
+    Type type = 2;
+    string remark = 3;
+    repeated string services = 4;
+    repeated string networks = 5;
+    repeated string operations = 6;
+  }
 }
 
 message GroupName {
@@ -349,7 +357,7 @@ message Nodes {
 
 message Node {
   string id = 1;
-  string type = 2;
+  Type type = 2;
   string name = 3;
   string description = 4;
   string network_id = 5;
@@ -362,9 +370,21 @@ message Node {
 
   ServiceNode service_node = 12;
 
+  enum Type {
+    TYPE_UNKNOWN = 0;
+    TYPE_ROUTER = 1;        // router
+    TYPE_SWITCH = 2;        // switch
+    TYPE_APPLIANCE = 3;     // appliance
+    TYPE_FIREWALL = 4;      // firewall
+    TYPE_LOAD_BALANCER = 5; // lb
+    TYPE_ACCESS_POINT = 6;  // ap
+    TYPE_DEVICE = 7;        // device
+    TYPE_SERVER = 8;        // server
+  }
+
   message Create {
     string parent_id = 1;
-    string type = 2;
+    Type type = 2;
     string name = 3;
     string description = 4;
     Location location = 5;
@@ -378,7 +398,7 @@ message Node {
   message Update {
     string id = 1;
     string parent_id = 2;
-    string type = 3;
+    Type type = 3;
     string name = 4;
     string description = 5;
     Location location = 6;
@@ -442,7 +462,19 @@ message Node {
   }
 
   message Stats {
-    map<int64, int64> states = 1; // state: numberOfNodes
+    message Stat {
+      State state = 1;
+      int64 count = 2;
+    }
+
+    repeated Stat states = 1;
+  }
+
+  enum State {
+    STATE_UNREGISTERED = 0;
+    STATE_OFFLINE = 1;
+    STATE_ONLINE = 2;
+    STATE_MAINTENANCE = 3;
   }
 }
 
@@ -454,9 +486,18 @@ message ServiceNode {
     int64 disk = 4;
   }
 
-  int64 state = 1;
+  State state = 1;
   SystemInfo system_info = 2;
   repeated Interface interfaces = 11;
+
+  enum State {
+    STATE_UNAVAILABLE = 0;
+    STATE_UNINITIALIZED = 1;
+    STATE_INITIALIZED = 2;
+    STATE_CONFIGURING = 3;
+    STATE_RUNNING = 4;
+    STATE_MALFUNCTIONING = 5;
+  }
 }
 
 message Interface {
@@ -493,7 +534,12 @@ message LinkStats {
 
 message Service {
   message Stats {
-    map<int64, int64> states = 1; // state: numberOfNodes
+    message Stat {
+      ServiceNode.State state = 1;
+      int64 count = 2;
+    }
+
+    repeated Stat states = 1;
   }
 
   message Metrics {
