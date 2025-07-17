@@ -1,0 +1,43 @@
+// Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+
+syntax = "proto3";
+
+option go_package = "./;proto";
+
+package asn_local;
+
+service Controller {
+  rpc ListServices(Empty)     returns (stream Service) {}
+  rpc StartService(Service)   returns (GeneralResponse) {}
+  rpc StopService(Service)    returns (GeneralResponse) {}
+  rpc RestartService(Service) returns (GeneralResponse) {}
+  rpc ApplyServiceOps(Ops)    returns (ApplyServiceOpsResponse){}
+}
+
+message Empty{}
+
+message Service {
+  string name = 1;
+  string version = 2;
+  bytes config = 3;
+  bytes ops = 4;
+}
+
+message Ops {
+  string name = 1;
+  string command = 2;
+  string params = 3;
+}
+
+message GeneralResponse {
+  enum Status {
+    SUCCESS = 0;
+    FAILED = 1;
+  }
+  Status status = 1;
+}
+
+message ApplyServiceOpsResponse {
+  string response = 1;
+  string error = 2;
+}
