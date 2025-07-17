@@ -208,8 +208,7 @@ message UserGroup {
   repeated string operations = 9;
 
   message Name {
-    string service_name = 1;
-    string user_group_name = 2;
+    string user_group_name = 1;
   }
 
   message Names {
@@ -256,7 +255,7 @@ message UserGroup {
  * Network Topology: Network, Node, Location, etc.
  */
 message Network {
-  string id = 1;
+  string network_id = 1;
   string name = 2;
   string description = 3;
   string parent_id = 4;
@@ -265,7 +264,7 @@ message Network {
   repeated Network networks = 7;
 
   message Root {
-    string id = 1;
+    string network_id = 1;
     string name = 2;
     string description = 3;
     repeated string location_tiers = 4;
@@ -289,7 +288,7 @@ message Network {
   }
 
   message Id {
-    string id = 1;
+    string network_id = 1;
   }
 
   message Create {
@@ -301,8 +300,8 @@ message Network {
   }
 
   message Update {
-    string id = 1;
-    string parent_id = 2;
+    string network_id = 1;
+    string parent_network_id = 2;
     string name = 3;
     string description = 4;
     repeated string network_tiers = 5;
@@ -325,7 +324,7 @@ message Network {
 }
 
 message Node {
-  string id = 1;
+  string node_id = 1;
   Type type = 2;
   string name = 3;
   string description = 4;
@@ -384,7 +383,7 @@ message Node {
   }
 
   message Update {
-    string id = 1;
+    string node_id = 1;
     string parent_id = 2;
     Type type = 3;
     string name = 4;
@@ -421,7 +420,7 @@ message Node {
   }
 
   message Link {
-    string id = 1;
+    string link_id = 1;
     string description = 2;
     string from_node = 3;
     string from_interface = 4;
@@ -448,7 +447,7 @@ message Node {
     }
 
     message Update {
-      string id = 1;
+      string link_id = 1;
       string from_node = 2;
       string from_interface = 3;
       string to_node = 4;
@@ -535,7 +534,7 @@ message Node {
 }
 
 message NodeGroup {
-  string id = 1;
+  string node_group_id = 1;
   string name = 2;
   string remark = 3;
   repeated string nodes = 4;
@@ -561,7 +560,7 @@ message NodeGroup {
   }
 
   message Update {
-    string id = 1;
+    string node_group_id = 1;
     string name = 2;
     string remark = 3;
     repeated string nodes = 4;
