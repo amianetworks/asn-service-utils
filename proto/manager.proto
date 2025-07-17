@@ -64,9 +64,9 @@ service Manager {
 
   // Service API: Info
   rpc GetAllServices          (Empty) returns (Services);
-  rpc GetServicesOfNetwork    (Id)    returns (Services); // Services available on the network.
+  rpc GetServicesOfNetwork    (Id)    returns (Services); // Services available in the network.
   rpc GetServicesOfNode       (Id)    returns (Services); // Services available on the node.
-  rpc GetServicesOfNodeGroup  (Id)    returns (Services); // Services available on the node group.
+  rpc GetServicesOfNodeGroup  (Id)    returns (Services); // Services available in the node group.
 
   // Service API: Start
   rpc StartServiceOnNetwork   (Config.Request)  returns (Config.Response);
