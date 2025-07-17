@@ -283,11 +283,12 @@ message ConfigResponse {
 
 message OpsRequest {
   string network = 1;
-  string group = 2;
-  repeated string service_nodes = 3;
-  string service_name = 4;
-  string command = 5;
-  string params = 6;
+  bool include_subnetworks = 2;
+  string group = 3;
+  repeated string service_nodes = 4;
+  string service_name = 5;
+  string command = 6;
+  string params = 7;
 }
 
 message OpsResponse {
