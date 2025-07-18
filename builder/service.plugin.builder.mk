@@ -188,4 +188,4 @@ show-prepare: .update_service_utils
 
 #------------------------------------------------------------------------------#
 .update_service_utils:
-	@cd $(SERVICE_UTILS_DIR) && git pull
+	@cd $(SERVICE_UTILS_DIR) && git fetch && git checkout v$(VERSION_BUILD) && git pull
