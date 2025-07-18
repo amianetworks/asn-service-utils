@@ -534,7 +534,7 @@ func main() {
 					Volumes: []string{
 						"./config/:/asn/config",
 						"./log/:/var/log/asnsn/",
-						"../service:/etc/asnsn/services/",
+						"../service:/usr/local/asn/servicenode/services/",
 					},
 				}},
 		}
