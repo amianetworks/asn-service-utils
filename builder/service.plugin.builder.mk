@@ -8,9 +8,10 @@
 #BUILD_ENV_IMAGE
 #BUILD_ENV_DOCKERFILE
 #SSH_PRIVATE_KEY
+#SERVICE_UTILS_DIR
 
 #------------------------------------------------------------------------------#
-service-build-:
+service-build-: .update_service_utils
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building $(BUILD_ENV_IMAGE):latest"
 
@@ -18,7 +19,7 @@ service-build-:
 
 #------------------------------------------------------------------------------#
 # Prepare for base docker image to build ASN Service Plugins.
-prepare-service-builder-base:
+prepare-service-builder-base: .update_service_utils
 	@echo "Current working directory: ${PWD}"
 	@echo "Building $(BUILD_ENV_BASE_IMAGE):latest"
 
@@ -44,12 +45,12 @@ prepare-service-builder-base:
 	@echo ""
 
 # Check Prepare for base docker image to build ASN Service Plugins.
-check-service-builder-base:
+check-service-builder-base: .update_service_utils
 	@docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^$(BUILD_ENV_BASE_IMAGE)(:|$$)' || echo "No Builder Base Image Found."
 
 
 # Rebuild everything from scratch.
-service-build-from-scratch:
+service-build-from-scratch: .update_service_utils
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building $(BUILD_ENV_BASE_IMAGE):latest"
 
@@ -91,7 +92,7 @@ service-build-from-scratch:
 # - Target 'build.so' is executed to build .so files.
 # - Target 'build.deb' is executed to build .deb files.
 # - No Docker images built here. Separate targets, build.docker*, are available.
-service-build-once:
+service-build-once: .update_service_utils
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building $(BUILD_ENV_IMAGE):latest"
 
@@ -129,7 +130,7 @@ service-build-once:
 
 ###
 # Generic deb packaging rule: deb-<service>
-deb-%: 
+deb-%:  .update_service_utils
 	$(eval SERVICE_NAME := $*)
 	$(eval SERVICE_CONFIG := debian/deb.$(SERVICE_NAME).config)
 	$(eval SERVICE_CONTROL := debian/deb.$(SERVICE_NAME).control)
@@ -173,15 +174,18 @@ deb-%:
 	@echo "Packed: $(DEB_FILE_NAME)."
 
 
-clean-deb-%:
+clean-deb-%: .update_service_utils
 	@echo "Cleaning $*..."
 	@rm -rf $DEB_SVC_DIR
 
 # Debug purpose
-show-prepare:
+show-prepare: .update_service_utils
 	@echo "Current working directory: ${PWD}"
 	@echo "Starting $(BUILD_ENV_BASE_IMAGE):latest"
 	docker run --rm --platform linux/amd64 --name $(BUILD_ENV_BASE_IMAGE) $(BUILD_ENV_BASE_IMAGE):latest ls -l /
 
 	@echo " Ran the container once to show the artifacts."
 
+#------------------------------------------------------------------------------#
+.update_service_utils:
+	@cd $(SERVICE_UTILS_DIR) && git pull

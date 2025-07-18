@@ -3,6 +3,10 @@
 ## IMPORTANT
 This is a subproject and contains utils only.
 
+## Development Rules
+Before developing, check out this submodule to the branch with the same name as the `asn-service-api` version
+you are using, i.e., `v25.7.8`. Then, keep this submodule to the latest commit on that branch.
+
 ## Description
 ASN (AI-Driving Secure Networking) is a distributed framework of secure network functions.\
 This API package is shared by all ASN services built as plugins.
