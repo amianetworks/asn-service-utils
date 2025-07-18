@@ -51,7 +51,7 @@ The latest version is `v25.7.8`.
    If you use the dependency list there, make sure the version is EXACTLY THE SAME one.
    If you are building multiple plugins in one system, make sure the dependency they use have no different version.
 3. Git submodule `asn-service-api` in `YOUR_SERVICE` and export SERVICE_API_PATH = `YOUR SUBMODULE PATH`
-4. Include `./scripts/builder/Makefile` in `YOUR_SERVICE` Makefile
+4. Include `./builder/service.plugin.builder.mk` in `YOUR_SERVICE` Makefile
 5. Provide "make build" command in `YOUR_SERVICE` Makefile
 6. Run `make compile-plugin` and can get the build directory like
     ```
@@ -67,7 +67,7 @@ The latest version is `v25.7.8`.
    and `servicenode/[YOUR_SERVICE].so` file to your ASN servicenode plugins directory.
 
 ## Deploy
-1. To deploy `YOUR_SERVICE` as one controller and one service node structure, just refer to `./scripts/docker`.
+1. To deploy `YOUR_SERVICE` as one controller and one service node structure, refer to `./docker/*.yml`.
    Make your project as the structure below
    ```
        project name
@@ -84,9 +84,9 @@ The latest version is `v25.7.8`.
    ```
    Then, use docker compose to start both controller and service node server.
 2. To deploy `YOUR_SERVICE` as one controller and multiple service nodes structure.
-   Run the scripts in the `./scripts/docker-cluster`.
-   This will generate the file similar to the structure as `./scripts/docker`.
+   Run the scripts in the `./docker/cluster.go`.
+   This will generate the file similar to the structure as `./docker/*.yml`.
    Move the `.so` files under plugins directory and then use docker compose to start the service.
 3. To deploy `YOUR_SERVICE` in your own topology. Please carefully read the Introduction in `ASN.25`.
-   Move your `*-topology.json` file under `project name/controller/config`.
+   Move your `*-topology.yml` file under `project name/controller/config`.
    Move the `.so` files under plugins directory. Then can use docker compose to start the service.
