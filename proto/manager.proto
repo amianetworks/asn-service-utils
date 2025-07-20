@@ -462,7 +462,13 @@ message Node {
       int64 count = 2;
     }
 
+    message Type {
+      string type = 1;
+      int64 count = 2;
+    }
+
     repeated Stat states = 1;
+    repeated Type types = 2;
   }
 
   enum State {
