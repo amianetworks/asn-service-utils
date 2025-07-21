@@ -256,7 +256,7 @@ func main() {
 		Iam: Iam{
 			Provider: "sapphire",
 			Host:     "localhost",
-			Port:     "17930",
+			Port:     "50426",
 			TLS:      false,
 			CaCert:   "/etc/asnc/cert/ca-cert",
 			CertPem:  "/etc/asnc/cert/cert-pem",
@@ -406,7 +406,7 @@ func main() {
 		Restart:       "always",
 		Privileged:    true,
 		DependsOn:     []string{"asn-mdb"},
-		Ports:         []string{"17930:17930", "17931:17931"},
+		Ports:         []string{"50426:50426", "17931:17931"},
 		Volumes: []string{
 			"./iam-cert/:/usr/local/sapphire/conf/",
 			"./iam-config/:/usr/local/sapphire/",
@@ -649,7 +649,7 @@ echo "All tasks completed."`
 ## API Configurations
 #api:
 #  grpc:
-#    port: 17930 # gRPC API port. Default:17930
+#    port: 50426 # gRPC API port. Default:50426
 #    tls:
 #      root_ca: "/etc/sapphire/cert/ca.crt" # Default: "/etc/sapphire/cert/ca.crt"
 #      pem_file: "/etc/sapphire/cert/server.pem" # Default: "/etc/sapphire/cert/server.pem"

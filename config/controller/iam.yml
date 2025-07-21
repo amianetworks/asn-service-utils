@@ -48,7 +48,7 @@
 ## API Configurations
 #api:
 #  grpc:
-#    port: 17930 # gRPC API port. Default:17930
+#    port: 50426 # gRPC API port. Default:50426
 #    tls:
 #      enabled: false # Default: false
 #      root_ca: "/etc/sapphire/cert/ca.crt"
