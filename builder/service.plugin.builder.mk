@@ -131,7 +131,7 @@ service-build-once: update_service_utils
 
 ###
 # Generic deb packaging rule: deb-<service>
-deb-%:  update_service_utils
+deb-%:
 	$(eval SERVICE_NAME := $*)
 	$(eval SERVICE_CONFIG := debian/deb.$(SERVICE_NAME).config)
 	$(eval SERVICE_CONTROL := debian/deb.$(SERVICE_NAME).control)
@@ -170,7 +170,7 @@ deb-%:  update_service_utils
 	@echo "Packed: $(DEB_FILE_NAME)."
 
 
-clean-deb-%: update_service_utils
+clean-deb-%:
 	@echo "Cleaning $*..."
 	@rm -rf $DEB_SVC_DIR
 
