@@ -154,11 +154,6 @@ deb-%:  update_service_utils
 	     -e "s/@SERVICE@/$(SERVICE_NAME)/" \
 	     $(SERVICE_CONTROL) > $(DEB_SVC_DIR)/DEBIAN/control
 
-	@# Create postinst script
-	@printf "#!/bin/bash\nset -e\nsystemctl restart asnc\n" > $(DEB_SVC_DIR)/DEBIAN/postinst
-	@chmod +x $(DEB_SVC_DIR)/DEBIAN/postinst
-	@cp $(DEB_SVC_DIR)/DEBIAN/postinst $(DEB_SVC_DIR)/DEBIAN/postrm
-
 	@# Copy files from DEBIAN_FILES
 	@for pair in $(DEBIAN_FILES); do \
 		SRC=$$(echo $$pair | cut -d: -f1); \
