@@ -35,11 +35,12 @@ service Manager {
   rpc RemoveUsersFromGroup      (UserGroup.UserReq)   returns (Empty);
 
   // Network API
-  rpc GetRootNetworks (Empty)           returns (Network.Roots); // Basic info of Network roots.
-  rpc GetSubNetworks  (Network.GetReq)  returns (Network.Info);  // Get all subnetworks, including itself, without nodes. Network link is optional.
-  rpc CreateNetwork   (Network.Create)  returns (Empty);
-  rpc UpdateNetwork   (Network.Update)  returns (Empty);
-  rpc DeleteNetwork   (Network.Id)      returns (Empty);
+  rpc LoadTopoNetworks  (NetworkTopo)     returns (Empty);         // Load topo networks through files
+  rpc GetRootNetworks   (Empty)           returns (Network.Roots); // Basic info of Network roots.
+  rpc GetSubNetworks    (Network.GetReq)  returns (Network.Info);  // Get all subnetworks, including itself, without nodes. Network link is optional.
+  rpc CreateNetwork     (Network.Create)  returns (Empty);
+  rpc UpdateNetwork     (Network.Update)  returns (Empty);
+  rpc DeleteNetwork     (Network.Id)      returns (Empty);
 
   // Nodes API
   rpc GetNodesByIds       (Node.GetReq)   returns (Node.List);  // Node details.
@@ -255,6 +256,10 @@ message UserGroup {
 /*
  * Network Topology: Network, Node, Location, etc.
  */
+message NetworkTopo {
+  bytes raw_data = 1;
+}
+
 message Network {
   string network_id = 1;
   string name = 2;
