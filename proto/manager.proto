@@ -8,91 +8,91 @@ package asn_controller;
 
 service Manager {
   // ASNC related operations
-  rpc GetInfo     (Empty)         returns (ControllerInfo);
-  rpc UpdatePort  (UpdatePortReq) returns (Empty);
+  rpc GetInfo (Empty) returns (ControllerInfo);
+  rpc UpdatePort (UpdatePortReq) returns (Empty);
 
   // Authentication & Authorization API
-  rpc Login           (LoginRequest)        returns (LoginResponse);
-  rpc MfaLogin        (MfaLoginRequest)     returns (LoginResponse);
-  rpc TokenRefresh    (TokenRefreshRequest) returns (LoginResponse);
-  rpc ResetPassword   (LoginRequest)        returns (Empty);
-  rpc Logout          (Empty)               returns (Empty);
-  rpc GetUserByToken  (Empty)               returns (User);
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc MfaLogin (MfaLoginRequest) returns (LoginResponse);
+  rpc TokenRefresh (TokenRefreshRequest) returns (LoginResponse);
+  rpc ResetPassword (LoginRequest) returns (Empty);
+  rpc Logout (Empty) returns (Empty);
+  rpc GetUserByToken (Empty) returns (User);
 
   // User API
-  rpc GetUsersByNames (User.Names)    returns (User.List); // User Info by name
-  rpc ListUsers       (User.ListReq)  returns (User.Names);
-  rpc CreateUser      (User.Create)   returns (Empty);
-  rpc DeleteUser      (User.Name)     returns (Empty);
+  rpc GetUsersByNames (User.Names) returns (User.List); // User Info by name
+  rpc ListUsers (User.ListReq) returns (User.Names);
+  rpc CreateUser (User.Create) returns (Empty);
+  rpc DeleteUser (User.Name) returns (Empty);
 
   // User Group API
-  rpc GetUserGroupsOfService    (UserGroup.GetReq)    returns (UserGroup.List); // User Group info by name
-  rpc ListUserGroupsOfServices  (Node.Service.Names)  returns (UserGroup.UnderService);
-  rpc CreateUserGroup           (UserGroup.Create)    returns (Empty);
-  rpc UpdateUserGroup           (UserGroup.Update)    returns (Empty);
-  rpc DeleteUserGroup           (UserGroup.Name)      returns (Empty);
-  rpc AddUsersToGroup           (UserGroup.UserReq)   returns (Empty);
-  rpc RemoveUsersFromGroup      (UserGroup.UserReq)   returns (Empty);
+  rpc GetUserGroupsOfService (UserGroup.GetReq) returns (UserGroup.List); // User Group info by name
+  rpc ListUserGroupsOfServices (Node.Service.Names) returns (UserGroup.UnderService);
+  rpc CreateUserGroup (UserGroup.Create) returns (Empty);
+  rpc UpdateUserGroup (UserGroup.Update) returns (Empty);
+  rpc DeleteUserGroup (UserGroup.Name) returns (Empty);
+  rpc AddUsersToGroup (UserGroup.UserReq) returns (Empty);
+  rpc RemoveUsersFromGroup (UserGroup.UserReq) returns (Empty);
 
   // Network API
-  rpc ImportTopoFromFile  (NetworkTopo)     returns (Empty);         // Load topo networks through files
-  rpc GetRootNetworks     (Empty)           returns (Network.Roots); // Basic info of Network roots.
-  rpc GetSubNetworks      (Network.GetReq)  returns (Network.Info);  // Get all subnetworks, including itself, without nodes. Network link is optional.
-  rpc CreateNetwork       (Network.Create)  returns (Empty);
-  rpc UpdateNetwork       (Network.Update)  returns (Empty);
-  rpc DeleteNetwork       (Network.Id)      returns (Empty);
+  rpc ImportTopoFromFile (NetworkTopo) returns (Empty);         // Load topo networks through files
+  rpc GetRootNetworks (Empty) returns (Network.Roots); // Basic info of Network roots.
+  rpc GetSubNetworks (Network.GetReq) returns (Network.Info);  // Get all subnetworks, including itself, without nodes. Network link is optional.
+  rpc CreateNetwork (Network.Create) returns (Empty);
+  rpc UpdateNetwork (Network.Update) returns (Empty);
+  rpc DeleteNetwork (Network.Id) returns (Empty);
 
   // Nodes API
-  rpc GetNodesByIds       (Node.GetReq)   returns (Node.List);  // Node details.
-  rpc GetNodesOfNetwork   (Network.Id)    returns (Node.Ids);   // All nodes in the network and its subnetworks.
-  rpc GetNodesOfNodeGroup (NodeGroup.Id)  returns (Node.Ids);   // Nodes in the given Node Group.
-  rpc CreateNode          (Node.Create)   returns (Empty);
-  rpc UpdateNode          (Node.Update)   returns (Empty);
-  rpc DeleteNode          (Node.Id)       returns (Empty);
+  rpc GetNodesByIds (Node.GetReq) returns (Node.List);  // Node details.
+  rpc GetNodesOfNetwork (Node.ListReq) returns (Node.Ids);   // All nodes in the network and its subnetworks.
+  rpc GetNodesOfNodeGroup (NodeGroup.Id) returns (Node.Ids);   // Nodes in the given Node Group.
+  rpc CreateNode (Node.Create) returns (Empty);
+  rpc UpdateNode (Node.Update) returns (Empty);
+  rpc DeleteNode (Node.Id) returns (Empty);
 
   // Node Group API
-  rpc GetNodeGroupsByIds      (NodeGroup.Ids)       returns (NodeGroup.List); // Node Group info
-  rpc GetNodeGroupsOfServices (Node.Service.Names)  returns (NodeGroup.Ids);  // Node Group of Services specified in the request.
-  rpc CreateNodeGroup         (NodeGroup.Create)    returns (Empty);
-  rpc UpdateNodeGroup         (NodeGroup.Update)    returns (Empty);
-  rpc DeleteNodeGroup         (NodeGroup.Id)        returns (Empty);
+  rpc GetNodeGroupsByIds (NodeGroup.Ids) returns (NodeGroup.List); // Node Group info
+  rpc GetNodeGroupsOfServices (Node.Service.Names) returns (NodeGroup.Ids);  // Node Group of Services specified in the request.
+  rpc CreateNodeGroup (NodeGroup.Create) returns (Empty);
+  rpc UpdateNodeGroup (NodeGroup.Update) returns (Empty);
+  rpc DeleteNodeGroup (NodeGroup.Id) returns (Empty);
 
   // Link API
-  rpc GetLinksOfNetwork (Network.Id)        returns (Node.Link.List); // All links of a network. Internal and External.
-  rpc CreateLink        (Node.Link.Create)  returns (Empty);
-  rpc UpdateLink        (Node.Link.Update)  returns (Empty);
-  rpc DeleteLink        (Node.Link.Id)      returns (Empty);
+  rpc GetLinksOfNetwork (Network.Id) returns (Node.Link.List); // All links of a network. Internal and External.
+  rpc CreateLink (Node.Link.Create) returns (Empty);
+  rpc UpdateLink (Node.Link.Update) returns (Empty);
+  rpc DeleteLink (Node.Link.Id) returns (Empty);
 
   // Service API: Info or Name? ???
-  rpc GetAllServices          (Empty)         returns (Node.Service.Names); // All available service names.
-  rpc GetServicesOfNetwork    (Network.Id)    returns (Node.Service.Names); // Services available in the network.
-  rpc GetServicesOfNodeGroup  (NodeGroup.Id)  returns (Node.Service.Names); // Services available in the node group.
-  rpc GetServicesOfNode       (Node.Id)       returns (Node.Service.Names); // Services available on the node.
+  rpc GetAllServices (Empty) returns (Node.Service.Names); // All available service names.
+  rpc GetServicesOfNetwork (Network.Id) returns (Node.Service.Names); // Services available in the network.
+  rpc GetServicesOfNodeGroup (NodeGroup.Id) returns (Node.Service.Names); // Services available in the node group.
+  rpc GetServicesOfNode (Node.Id) returns (Node.Service.Names); // Services available on the node.
 
   // Service API: Start
-  rpc StartServiceOnNetwork   (Config.Request)  returns (Empty);
-  rpc StartServiceOnNodeGroup (Config.Request)  returns (Empty);
-  rpc StartServiceOnNode      (Config.Request)  returns (Empty);
+  rpc StartServiceOnNetwork (Config.Request) returns (Empty);
+  rpc StartServiceOnNodeGroup (Config.Request) returns (Empty);
+  rpc StartServiceOnNode (Config.Request) returns (Empty);
 
   // Service API: Stop
-  rpc StopServiceOnNetwork    (Config.Request)  returns (Empty);
-  rpc StopServiceOnNodeGroup  (Config.Request)  returns (Empty);
-  rpc StopServiceOnNode       (Config.Request)  returns (Empty);
+  rpc StopServiceOnNetwork (Config.Request) returns (Empty);
+  rpc StopServiceOnNodeGroup (Config.Request) returns (Empty);
+  rpc StopServiceOnNode (Config.Request) returns (Empty);
 
   // Service API: Reset
-  rpc ResetServiceOnNetwork   (Config.Request)  returns (Empty);
-  rpc ResetServiceOnNodeGroup (Config.Request)  returns (Empty);
-  rpc ResetServiceOnNode      (Config.Request)  returns (Empty);
+  rpc ResetServiceOnNetwork (Config.Request) returns (Empty);
+  rpc ResetServiceOnNodeGroup (Config.Request) returns (Empty);
+  rpc ResetServiceOnNode (Config.Request) returns (Empty);
 
   // Service API: Apply Ops (Internal Use)
-  rpc ApplyServiceOpsOnNetwork    (Ops.Request) returns (Ops.Response);
-  rpc ApplyServiceOpsOnNodeGroup  (Ops.Request) returns (Ops.Response);
-  rpc ApplyServiceOpsOnNode       (Ops.Request) returns (Ops.Response);
+  rpc ApplyServiceOpsOnNetwork (Ops.Request) returns (Ops.Response);
+  rpc ApplyServiceOpsOnNodeGroup (Ops.Request) returns (Ops.Response);
+  rpc ApplyServiceOpsOnNode (Ops.Request) returns (Ops.Response);
 
   // Stats
-  rpc GetStatsOfNetwork   (Network.Id)                returns (Network.Stats);      // Numbers of networks, nodes, links, node groups, etc., of a Network.
-  rpc GetStatsOfNodes     (Network.Id)                returns (Node.Stats);         // Numbers of nodes in different states in a network.
-  rpc GetStatsOfServices  (Node.Service.Stats.GetReq) returns (Node.Service.Stats); // Numbers of service nodes in different states of a network. For specified services.
+  rpc GetStatsOfNetwork (Network.Id) returns (Network.Stats);      // Numbers of networks, nodes, links, node groups, etc., of a Network.
+  rpc GetStatsOfNodes (Network.Id) returns (Node.Stats);         // Numbers of nodes in different states in a network.
+  rpc GetStatsOfServices (Node.Service.Stats.GetReq) returns (Node.Service.Stats); // Numbers of service nodes in different states of a network. For specified services.
 
   // Service Metrics
   rpc GetMetricsOfService (Node.Service.Metrics.GetReq) returns (Node.Service.Metrics); // Metrics in key-value pairs.
@@ -174,7 +174,7 @@ message User {
     string username = 1;
     string password = 2;
     string email = 3;
-    Phone phone= 4;
+    Phone phone = 4;
   }
 
   message ListReq {
@@ -232,7 +232,7 @@ message UserGroup {
 
   message Create {
     string name = 1;
-    string service_name =2;
+    string service_name = 2;
     Type type = 3;
     string remark = 4;
     repeated string services = 5;
@@ -242,7 +242,7 @@ message UserGroup {
 
   message Update {
     string name = 1;
-    string service_name =2;
+    string service_name = 2;
     string remark = 3;
     repeated string services = 4;
     repeated string networks = 5;
@@ -250,7 +250,7 @@ message UserGroup {
   }
 
   message UserReq {
-    string service_name =1;
+    string service_name = 1;
     string user_group_name = 2;
     repeated string usernames = 3;
   }
@@ -356,6 +356,11 @@ message Node {
   message GetReq {
     repeated string node_ids = 1;
     bool include_links = 2;
+  }
+
+  message ListReq {
+    string network_id = 1;
+    bool include_subnetwork = 2;
   }
 
   message List {
@@ -470,7 +475,7 @@ message Node {
 
   message Stats {
     message Stat {
-      State state = 1;
+      NodeState state = 1;
       int64 count = 2;
     }
 
@@ -483,11 +488,20 @@ message Node {
     repeated Type types = 2;
   }
 
-  enum State {
+  enum NodeState {
     STATE_UNREGISTERED = 0;
     STATE_OFFLINE = 1;
     STATE_ONLINE = 2;
     STATE_MAINTENANCE = 3;
+  }
+
+  enum ServiceState {
+    STATE_UNAVAILABLE = 0;
+    STATE_UNINITIALIZED = 1;
+    STATE_INITIALIZED = 2;
+    STATE_CONFIGURING = 3;
+    STATE_RUNNING = 4;
+    STATE_MALFUNCTIONING = 5;
   }
 
   message ServiceNode {
@@ -498,18 +512,16 @@ message Node {
       int64 disk = 4;
     }
 
-    State state = 1;
-    SystemInfo system_info = 2;
-    repeated Interface interfaces = 11;
-
-    enum State {
-      STATE_UNAVAILABLE = 0;
-      STATE_UNINITIALIZED = 1;
-      STATE_INITIALIZED = 2;
-      STATE_CONFIGURING = 3;
-      STATE_RUNNING = 4;
-      STATE_MALFUNCTIONING = 5;
+    message Service {
+      string name = 1;
+      ServiceState state = 2;
+      string config = 3;
     }
+
+    NodeState state = 1;
+    SystemInfo system_info = 2;
+    repeated Interface interfaces = 3;
+    repeated Service services = 4;
   }
 
   message Service {
@@ -534,7 +546,7 @@ message Node {
       }
 
       message Stat {
-        ServiceNode.State state = 1;
+        ServiceState state = 1;
         int64 count = 2;
       }
     }
