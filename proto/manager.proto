@@ -28,8 +28,8 @@ service Manager {
   // User Group API
   rpc GetUserGroupsOfService    (UserGroup.GetReq)    returns (UserGroup.List); // User Group info by name
   rpc ListUserGroupsOfServices  (Node.Service.Names)  returns (UserGroup.UnderService);
-  rpc CreateUserGroup           (UserGroup.Request)   returns (Empty);
-  rpc UpdateUserGroup           (UserGroup.Request)   returns (Empty);
+  rpc CreateUserGroup           (UserGroup.Create)    returns (Empty);
+  rpc UpdateUserGroup           (UserGroup.Update)    returns (Empty);
   rpc DeleteUserGroup           (UserGroup.Name)      returns (Empty);
   rpc AddUsersToGroup           (UserGroup.UserReq)   returns (Empty);
   rpc RemoveUsersFromGroup      (UserGroup.UserReq)   returns (Empty);
@@ -230,7 +230,7 @@ message UserGroup {
     repeated UserGroup user_groups = 1;
   }
 
-  message Request {
+  message Create {
     string name = 1;
     string service_name =2;
     Type type = 3;
@@ -238,6 +238,15 @@ message UserGroup {
     repeated string services = 5;
     repeated string networks = 6;
     repeated string operations = 7;
+  }
+
+  message Update {
+    string name = 1;
+    string service_name =2;
+    string remark = 3;
+    repeated string services = 4;
+    repeated string networks = 5;
+    repeated string operations = 6;
   }
 
   message UserReq {
@@ -452,12 +461,10 @@ message Node {
 
     message Update {
       string link_id = 1;
-      string from_node = 2;
-      string from_interface = 3;
-      string to_node = 4;
-      string to_interface = 5;
-      uint64 bandwidth = 6;
-      string description = 7;
+      string from_interface = 2;
+      string to_interface = 3;
+      uint64 bandwidth = 4;
+      string description = 5;
     }
   }
 
