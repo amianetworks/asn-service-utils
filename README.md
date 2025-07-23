@@ -5,13 +5,13 @@ This is a subproject and contains utils only.
 
 ## Development Rules
 Before developing, check out this submodule to the branch with the same name as the `asn-service-api` version
-you are using, i.e., `v25.7.9`. Then, keep this submodule to the latest commit on that branch.
+you are using, i.e., `v25.7.10`. Then, keep this submodule to the latest commit on that branch.
 
 ## Description
 ASN (AI-Driving Secure Networking) is a distributed framework of secure network functions.\
 This API package is shared by all ASN services built as plugins.
 To build an ASN Distributed Service, you can refer to `asn-service-template` to get started.\
-The latest version is `v25.7.9`.
+The latest version is `v25.7.10`.
 
 ## API Layout
     ├── builder       // Makefiles and Dockerfiles needed to build `YOUR_SERVICE`
