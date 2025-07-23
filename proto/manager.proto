@@ -53,6 +53,7 @@ service Manager {
   // Node Group API
   rpc GetNodeGroupsByIds (NodeGroup.Ids) returns (NodeGroup.List); // Node Group info
   rpc GetNodeGroupsOfServices (Node.Service.Names) returns (NodeGroup.Ids);  // Node Group of Services specified in the request.
+  rpc GetNodeGroupsOfNetwork (Network.Id) returns (NodeGroup.Ids);  // Node Group in the network.
   rpc CreateNodeGroup (NodeGroup.Create) returns (Empty);
   rpc UpdateNodeGroup (NodeGroup.Update) returns (Empty);
   rpc DeleteNodeGroup (NodeGroup.Id) returns (Empty);
@@ -350,8 +351,8 @@ message Node {
   Management management = 9;
   Info info = 10;
   repeated Interface interfaces = 11;
-
-  ServiceNode service_node = 12;
+  repeated string group_ids = 12;
+  ServiceNode service_node = 13;
 
   message GetReq {
     repeated string node_ids = 1;
@@ -565,9 +566,10 @@ message Node {
 message NodeGroup {
   string node_group_id = 1;
   string name = 2;
-  string remark = 3;
-  repeated string nodes = 4;
-  map<string, string> services = 5;
+  string root_id = 3;
+  string remark = 4;
+  repeated string nodes = 5;
+  map<string, string> services = 6;
 
   message Id {
     string node_group_id = 1;
@@ -583,9 +585,10 @@ message NodeGroup {
 
   message Create {
     string name = 1;
-    string remark = 2;
-    repeated string nodes = 3;
-    map<string, string> services = 4;
+    string root_id = 2;
+    string remark = 3;
+    repeated string nodes = 4;
+    map<string, string> services = 5;
   }
 
   message Update {
