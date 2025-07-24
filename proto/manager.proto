@@ -65,10 +65,10 @@ service Manager {
   rpc DeleteLink        (Node.Link.Id)      returns (Empty);
 
   // Service API: Info or Name? ???
-  rpc GetAllServices          (Empty)         returns (Node.Service.Names); // All available service names.
-  rpc GetServicesOfNetwork    (Network.Id)    returns (Node.Service.Names); // Services available in the network.
-  rpc GetServicesOfNodeGroup  (NodeGroup.Id)  returns (Node.Service.Names); // Services available in the node group.
-  rpc GetServicesOfNode       (Node.Id)       returns (Node.Service.Names); // Services available on the node.
+  rpc GetAllServices          (IncludeAsn)         returns (Node.Service.Names);  // All available service names.
+  rpc GetServicesOfNetwork    (Network.Id)    returns (Node.Service.Names);       // Services available in the network.
+  rpc GetServicesOfNodeGroup  (NodeGroup.Id)  returns (Node.Service.Names);       // Services available in the node group.
+  rpc GetServicesOfNode       (Node.Id)       returns (Node.Service.Names);       // Services available on the node.
 
   // Service API: Start
   rpc StartServiceOnNetwork   (Config.Request) returns (Empty);
@@ -111,6 +111,10 @@ message Location {
   string address = 4;
   string description = 5;
   string location_tier = 6;
+}
+
+message IncludeAsn {
+  bool include_asn = 1;
 }
 
 /*
