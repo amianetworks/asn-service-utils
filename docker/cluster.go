@@ -3,187 +3,28 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
 
-type ASNC struct {
-	Log         Log                `yaml:"log"`
-	DB          DBPair             `yaml:"db"`
-	Iam         Iam                `yaml:"iam"`
-	Grpc        GRPC               `yaml:"grpc"`
-	Restful     ASNCRestful        `yaml:"restful"`
-	Network     Network            `yaml:"network"`
-	ServiceNode ServiceNode        `yaml:"servicenode"`
-	Service     map[string]Service `yaml:"service"`
+type topo struct {
+	Networks []*network       `yaml:"networks"`
+	Nodes    map[string]*node `yaml:"nodes"`
 }
 
-type ASNCRestful struct {
-	Port uint16 `yaml:"port"`
+type network struct {
+	Name  string   `yaml:"name"`
+	Desc  string   `yaml:"desc,omitempty"`
+	Nodes []string `yaml:"nodes,omitempty"`
 }
 
-type Log struct {
-	Demo   bool      `yaml:"demo"`
-	Prefix string    `yaml:"prefix"`
-	ALog   LogConfig `yaml:"api_log"`
-	RLog   LogConfig `yaml:"runtime_log"`
-	ELog   LogConfig `yaml:"entity_log"`
-	PLog   LogConfig `yaml:"perf_log"`
-}
-
-type LogConfig struct {
-	FileName string `yaml:"filename"`
-	Level    string `yaml:"level"`
-}
-
-type DB struct {
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
-	Database string `yaml:"database_name"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-}
-
-type DBPair struct {
-	MongoDB  DB `yaml:"mongodb"`
-	InfluxDB DB `yaml:"influxdb"`
-}
-
-type Iam struct {
-	Provider string `yaml:"provider"`
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
-	TLS      bool   `yaml:"tls"`
-	CaCert   string `yaml:"ca_cert"`
-	CertPem  string `yaml:"cert_pem"`
-	KeyPem   string `yaml:"key_pem"`
-}
-
-type Network struct {
-	Id          string `yaml:"id"`
-	TopoFile    string `yaml:"topo_file"`
-	TokenSecret string `yaml:"token_secret"`
-}
-
-type GRPC struct {
-	Port uint64 `yaml:"port"`
-}
-
-type ServiceNode struct {
-	KeepAlive int `yaml:"keepalive"`
-}
-
-type Service struct {
-	AutoStart bool           `yaml:"auto_start"`
-	Version   ServiceVersion `yaml:"version"`
-	DB        DBPair         `yaml:"db"`
-}
-
-type ServiceVersion struct {
-	Min string `yaml:"min"`
-	Max string `yaml:"max"`
-}
-
-type MyNetwork struct {
-	NetworkID   string     `json:"network_id"`
-	NetworkName string     `json:"network_name"`
-	Topology    []Topology `json:"topology"`
-}
-
-type Topology struct {
-	NodeName       string   `json:"node_name"`
-	NodeType       string   `json:"nodeType"`
-	Location       Location `json:"location"`
-	Label          string   `json:"label"`
-	ExternalLinked []string `json:"external_linked"`
-	SubNodes       []Node   `json:"sub_nodes"`
-}
-
-type Location struct {
-	Coordinates Coordinate `json:"coordinates"`
-	Address     string     `json:"address"`
-}
-
-type Coordinate struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-}
-
-type Node struct {
-	NodeName       string   `json:"node_name"`
-	NodeType       string   `json:"nodeType"`
-	Location       Location `json:"location"`
-	Label          string   `json:"label"`
-	ExternalLinked []string `json:"external_linked"`
-	InternalLinked []string `json:"internal_linked"`
-}
-
-type asncDocker struct {
-	Services map[string]DockerService `yaml:"services"`
-	Volumes  map[string]Volume        `yaml:"volumes,omitempty"`
-}
-
-type DockerService struct {
-	ContainerName string            `yaml:"container_name,omitempty"`
-	Image         string            `yaml:"image,omitempty"`
-	Privileged    bool              `yaml:"privileged,omitempty"`
-	Restart       string            `yaml:"restart,omitempty"`
-	Ulimits       map[string]int    `yaml:"ulimits,omitempty"`
-	Environment   map[string]string `yaml:"environment,omitempty"`
-	NetworkMode   string            `yaml:"network_mode,omitempty"`
-	Ports         []string          `yaml:"ports,omitempty"`
-	Volumes       []string          `yaml:"volumes,omitempty"`
-	Command       string            `yaml:"command,omitempty"`
-	DependsOn     []string          `yaml:"depends_on,omitempty"`
-}
-
-type Volume struct {
-	Driver string `yaml:"driver,omitempty"`
-}
-
-type ASNSN struct {
-	Log        Log               `yaml:"log"`
-	General    General           `yaml:"general"`
-	Controller Controller        `yaml:"controller"`
-	Tsdb       TSDB              `yaml:"tsdb"`
-	Service    SNService         `yaml:"service"`
-	NetIf      map[string]string `yaml:"netif"`
-}
-
-type General struct {
-	Mode            string `yaml:"mode"`
-	ID              string `yaml:"id"`
-	NetworkPath     string `yaml:"network_path"`
-	NodeName        string `yaml:"node_name"`
-	Type            string `yaml:"type"`
-	NetworkCapacity int    `yaml:"network_capacity"`
-	CliPort         int    `yaml:"cli_port"`
-}
-
-type Controller struct {
-	IP            string `yaml:"ip"`
-	Port          int    `yaml:"port"`
-	RetryInterval int    `yaml:"retry_interval"`
-	TokenSecret   string `yaml:"token_secret"`
-}
-
-type TSDB struct {
-	Type     string `yaml:"type"`
-	Name     string `yaml:"name"`
-	IP       string `yaml:"ip"`
-	Port     int    `yaml:"port"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-}
-
-type SNService struct {
-	ConfigTimeout int `yaml:"config_timeout"`
+type node struct {
+	Type    string `yaml:"type"`
+	Managed bool   `yaml:"managed"`
 }
 
 func main() {
@@ -216,390 +57,57 @@ func main() {
 		panic(err)
 	}
 
-	asnConf := ASNC{
-		Log: Log{
-			Demo:   true,
-			Prefix: "asn",
-			ALog: LogConfig{
-				FileName: "api.log",
-				Level:    "info",
-			},
-			RLog: LogConfig{
-				FileName: "runtime.log",
-				Level:    "info",
-			},
-			ELog: LogConfig{
-				FileName: "entity.log",
-				Level:    "info",
-			},
-			PLog: LogConfig{
-				FileName: "perf.log",
-				Level:    "info",
-			},
-		},
-		DB: DBPair{
-			MongoDB: DB{
-				Host:     "localhost",
-				Port:     "27017",
-				Database: "asn",
-				Username: "amia",
-				Password: "2022",
-			},
-			InfluxDB: DB{
-				Host:     "localhost",
-				Port:     "8086",
-				Database: "asn",
-				Username: "amia",
-				Password: "2022",
-			},
-		},
-		Iam: Iam{
-			Provider: "sapphire",
-			Host:     "localhost",
-			Port:     "50426",
-			TLS:      false,
-			CaCert:   "/etc/asnc/cert/ca-cert",
-			CertPem:  "/etc/asnc/cert/cert-pem",
-			KeyPem:   "/etc/asnc/cert/key-pem",
-		},
-		Grpc: GRPC{50051},
-		Restful: ASNCRestful{
-			Port: 58080,
-		},
-		Network: Network{
-			Id:          "network1",
-			TopoFile:    "/etc/asnc/config/100nodes-topology.json",
-			TokenSecret: "asn-example-token-secret/FIXME_when_deploy",
-		},
-		ServiceNode: ServiceNode{3},
-		Service: map[string]Service{
-			"myservice": {
-				AutoStart: false,
-				Version: ServiceVersion{
-					Min: "v2.2.0",
-					Max: "v2.2.0",
-				},
-				DB: DBPair{
-					MongoDB: DB{
-						Host:     "localhost",
-						Port:     "27017",
-						Database: "asn",
-						Username: "amia",
-						Password: "2022",
-					},
-					InfluxDB: DB{
-						Host:     "localhost",
-						Port:     "8086",
-						Database: "asn",
-						Username: "amia",
-						Password: "2022",
-					},
-				},
-			},
-		},
-	}
-
-	asnYaml, err := yaml.Marshal(asnConf)
-	if err != nil {
-		panic(err)
-	}
-	err = os.WriteFile("controller/config/asn.conf", asnYaml, 0644)
+	err = os.MkdirAll("controller/services", 0755)
 	if err != nil {
 		panic(err)
 	}
 
-	cliConf := map[string]string{
-		"server": "localhost",
-		"port":   "50051",
-		"token":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NDcwMTk0NDUsInVzZXJuYW1lIjoiYXNuLXN1cGVydmlzb3IifQ.8UlBi9qlL3NxXYllKp3NN2WUBwSs4Q1sqKvfMk3MRwI",
-	}
-	cliYaml, err := yaml.Marshal(cliConf)
-	if err != nil {
-		panic(err)
-	}
-	err = os.WriteFile("controller/config/cli.conf", cliYaml, 0644)
-	if err != nil {
-		panic(err)
-	}
+	// ASNC conf
+	err = os.WriteFile(
+		"controller/config/asn.conf",
+		[]byte(`# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
 
-	// You can decide the topology network
-	network := MyNetwork{
-		NetworkID:   "network1",
-		NetworkName: "Network with 100 nodes",
-		Topology:    []Topology{},
-	}
+##
+# Mode
+#
+# Just a flag.
+# Configurations should be set accordingly with caution.
+mode: "dev" # Mandatory: "dev": development; "pro": production.
 
-	for i := 1; i <= n; i++ {
-		location := Location{
-			Coordinates: Coordinate{
-				Latitude:  -90.0 + rand.Float64()*180,
-				Longitude: -180.0 + rand.Float64()*360,
-			},
-			Address: fmt.Sprintf("%d street", i),
-		}
-		network.Topology = append(network.Topology, Topology{
-			NodeName:       fmt.Sprintf("node%d", i),
-			NodeType:       "networkNode",
-			Location:       location,
-			Label:          "CORE",
-			ExternalLinked: []string{},
-			SubNodes: []Node{{
-				NodeName:       fmt.Sprintf("switch%d", i),
-				NodeType:       "switch",
-				Location:       location,
-				Label:          "CORE",
-				ExternalLinked: []string{},
-				InternalLinked: []string{},
-			}},
-		})
-	}
+# Network Topology
+#
+# TOPO file is loaded when it's specified. And the networks defined in it will be imported
+# if not existing.
+#
+# Topology-based verification is optional. So the TOPO File, topo_file, is loaded at start., if specified.
+# Configurable Topo Verifications:
+#  - network: verify the presence of root network
+#  - parent: verify the presence of parent (network)
+#  - node: verify the presence of the service node. Default setting for all node types. Can be overwritten.
+#  - router|switch|appliance|server|*: overwriting "node" verification for THE SPECIFIED TYPE of nodes.
+network:
+  topo_file: ./config/cluster.yml  # network topology description file path
 
-	bytes, err := json.MarshalIndent(network, "", "  ")
+# Services
+#
+# Listed service will be loaded at starting.
+# The default service file is servicename.so, if not specified.
+# TBD: Dynamic loading if needed.
+#
+# Listed service uses controller's default DBs if not specified.
+service:
+  - name: myservice
+`),
+		0644,
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	fileName := "controller/config/100nodes-topology.json"
-	err = os.WriteFile(fileName, bytes, 0644)
-	if err != nil {
-		panic(err)
-	}
-
-	asncD := asncDocker{
-		Services: map[string]DockerService{},
-		Volumes: map[string]Volume{
-			"influxdb_data": {Driver: "local"},
-			"ldap_slap":     {Driver: "local"},
-			"ldap_data":     {Driver: "local"},
-		},
-	}
-	asncD.Services["asn-mdb"] = DockerService{
-		ContainerName: "asn-mdb",
-		Image:         "mongo:7.0",
-		Restart:       "always",
-		Ulimits: map[string]int{
-			"nofile": 100000,
-		},
-		Environment: map[string]string{
-			"MONGO_INITDB_ROOT_USERNAME": "amia",
-			"MONGO_INITDB_ROOT_PASSWORD": "2022",
-		},
-		Ports:   []string{"27017:27017"},
-		Volumes: []string{"./data/:/data/db"},
-		Command: "--bind_ip_all --auth",
-	}
-	asncD.Services["asn-idb"] = DockerService{
-		ContainerName: "asn-idb",
-		Image:         "influxdb:2.7",
-		Ports:         []string{"8086:8086"},
-		Environment: map[string]string{
-			"INFLUXDB_DB":             "asn",
-			"INFLUXDB_ADMIN_USER":     "amia",
-			"INFLUXDB_ADMIN_PASSWORD": "2022",
-			"INFLUXDB_USER":           "amia",
-			"INFLUXDB_USER_PASSWORD":  "2022",
-		},
-	}
-	asncD.Services["sapphire-iam"] = DockerService{
-		ContainerName: "sapphire-iam",
-		Image:         "registry.amiasys.com/sapphire.iam:25.6.4",
-		Restart:       "always",
-		Privileged:    true,
-		DependsOn:     []string{"asn-mdb"},
-		Ports:         []string{"50426:50426", "17931:17931"},
-		Volumes: []string{
-			"./iam-cert/:/usr/local/sapphire/conf/",
-			"./iam-config/:/usr/local/sapphire/",
-			"./iam-log/iam/:/var/log/iam/",
-		},
-	}
-	asncD.Services["asnc"] = DockerService{
-		Image:       "registry.amiasys.com/asnc:25.7.12",
-		Restart:     "always",
-		DependsOn:   []string{"asn-mdb", "asn-idb", "sapphire-iam"},
-		NetworkMode: "host",
-		Volumes: []string{
-			"./asn-cert/:/asn/cert",
-			"./asn-config/:/asn/config",
-			"./asn-log/asn/:/var/log/asn/controller",
-			"./asn-services:/usr/local/asn/controller/services",
-			"./asn-web:/var/www/asnc/",
-		},
-	}
-
-	asncYaml, err := yaml.Marshal(asncD)
-	if err != nil {
-		panic(err)
-	}
-	err = os.WriteFile("controller/asnc.yml", asncYaml, 0644)
-	if err != nil {
-		panic(err)
-	}
-
-	// make service node file
-	err = os.MkdirAll("servicenode", 0755)
-	if err != nil {
-		panic(err)
-	}
-
-	err = os.MkdirAll("servicenode/service", 0755)
-	if err != nil {
-		panic(err)
-	}
-
-	for i := 1; i <= n; i++ {
-		fileName = fmt.Sprintf("sn%d", i)
-		err = os.MkdirAll("servicenode/"+fileName, 0755)
-		if err != nil {
-			panic(err)
-		}
-
-		err = os.MkdirAll(fmt.Sprintf("servicenode/%s/config", fileName), 0755)
-		if err != nil {
-			panic(err)
-		}
-
-		err = os.MkdirAll(fmt.Sprintf("servicenode/%s/log", fileName), 0755)
-		if err != nil {
-			panic(err)
-		}
-
-		asnC := ASNSN{
-			Log: Log{
-				Prefix: "asn",
-				ALog: LogConfig{
-					FileName: "api.log",
-					Level:    "info",
-				},
-				RLog: LogConfig{
-					FileName: "runtime.log",
-					Level:    "info",
-				},
-				ELog: LogConfig{
-					FileName: "entity.log",
-					Level:    "info",
-				},
-				PLog: LogConfig{
-					FileName: "perf.log",
-					Level:    "info",
-				},
-			},
-			General: General{
-				Mode:            "cluster",
-				ID:              "",
-				NetworkPath:     fmt.Sprintf("network1.node%d.switch%d", i, i),
-				NodeName:        fmt.Sprintf("switch%d", i),
-				Type:            "server",
-				NetworkCapacity: 1024,
-				CliPort:         50052,
-			},
-			Controller: Controller{
-				IP:            "172.17.0.1",
-				Port:          50051,
-				RetryInterval: 5,
-				TokenSecret:   "asn-example-token-secret/FIXME_when_deploy",
-			},
-			Tsdb: TSDB{
-				Type:     "influxdbv1",
-				Name:     "asn-dev",
-				IP:       "172.17.0.1",
-				Port:     8086,
-				Username: "amia",
-				Password: "2022",
-			},
-			Service: SNService{
-				ConfigTimeout: 20,
-			},
-			NetIf: map[string]string{
-				"data":       "eth0",
-				"control":    "eth0",
-				"management": "eth0",
-			},
-		}
-		asnCFYaml, err := yaml.Marshal(asnC)
-		if err != nil {
-			panic(err)
-		}
-		err = os.WriteFile(fmt.Sprintf("servicenode/%s/config/asn.conf", fileName), asnCFYaml, 0644)
-		if err != nil {
-			panic(err)
-		}
-
-		asnD := asncDocker{
-			Services: map[string]DockerService{
-				"asnsn": {
-					Image:         "registry.amiasys.com/asnsn:25.7.12",
-					ContainerName: fmt.Sprintf("network-node%d-switch%d", i, i),
-					Restart:       "always",
-					Volumes: []string{
-						"./config/:/asn/config",
-						"./log/:/var/log/asnsn/",
-						"../service:/usr/local/asn/servicenode/services/",
-					},
-				}},
-		}
-		asnDY, err := yaml.Marshal(asnD)
-		if err != nil {
-			panic(err)
-		}
-		err = os.WriteFile(fmt.Sprintf("servicenode/%s/asnsn.yml", fileName), asnDY, 0644)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	shellUp := `#!/bin/bash
-# 进入 controller 文件夹并启动 Docker Compose
-cd controller || { echo "Failed to enter controller folder"; exit 1; }
-echo "Starting Docker Compose in controller folder..."
-docker compose -f asnc.yml up -d || { echo "Failed to execute docker compose in controller folder"; exit 1; }
-echo "Docker Compose started in controller folder."
-cd - || { echo "Failed to return to the previous directory"; exit 1; }
-# 进入 servicenode 文件夹并逐个启动 sn1 到 sn100
-cd servicenode || { echo "Failed to enter servicenode folder"; exit 1; }
-for i in $(seq 1 100); do
-folder="sn$i"
-if [ -d "$folder" ]; then
-cd "$folder" || { echo "Failed to enter $folder folder"; exit 1; }
-echo "Starting Docker Compose in $folder..."
-docker compose -f asnsn.yml up -d || { echo "Failed to execute docker compose in $folder"; exit 1; }
-echo "Docker Compose started in $folder."
-cd - >/dev/null || { echo "Failed to return to servicenode folder"; exit 1; }
-else
-echo "Folder $folder does not exist, skipping."
-fi
-done
-echo "All tasks completed."`
-
-	if err := os.WriteFile("up.sh", []byte(shellUp), 0755); err != nil {
-		panic(err)
-	}
-
-	shellDown := `#!/bin/bash
-cd controller || { echo "Failed to enter controller folder"; exit 1; }
-echo "Starting Docker Compose in controller folder..."
-docker compose -f asnc.yml down || { echo "Failed to execute docker compose in controller folder"; exit 1; }
-echo "Docker Compose started in controller folder."
-cd - || { echo "Failed to return to the previous directory"; exit 1; }
-cd servicenode || { echo "Failed to enter servicenode folder"; exit 1; }
-for i in $(seq 1 100); do
-folder="sn$i"
-if [ -d "$folder" ]; then
-cd "$folder" || { echo "Failed to enter $folder folder"; exit 1; }
-echo "Starting Docker Compose in $folder..."
-docker compose -f asnsn.yml down || { echo "Failed to execute docker compose in $folder"; exit 1; }
-echo "Docker Compose started in $folder."
-cd - >/dev/null || { echo "Failed to return to servicenode folder"; exit 1; }
-else
-echo "Folder $folder does not exist, skipping."
-fi
-done
-echo "All tasks completed."`
-	if err := os.WriteFile("down.sh", []byte(shellDown), 0755); err != nil {
-		panic(err)
-	}
-
-	ymlIam := `# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+	// IAM config
+	if err := os.WriteFile(
+		"controller/config/iam.yml",
+		[]byte(`# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
 
 ## Log Configurations
 #log:
@@ -613,6 +121,13 @@ echo "All tasks completed."`
 #  username: "amia" # Default: "amia"
 #  password: "2022" # Default: "2022"
 
+## Services
+services: # supported service names
+  asn:
+    add_existing_accounts: true
+  myservice:
+    add_existing_accounts: true
+
 ## LDAP Configurations
 #ldap:
 #  enabled: false # Default: false
@@ -621,39 +136,24 @@ echo "All tasks completed."`
 #  base_dn: "dc=amianetworks,dc=com" # Default: "dc=amianetworks,dc=com"
 #  password_cn: "cn=admin" # Default: "cn=admin"
 #  password: "2022" # Default: "2022"
-#  mapping:
-#    account: # other fields will be added to descriptions, name will be filled to cn and sn by default
-#      ou: "account" # Default: "account"
-#      name: "uid" # Default: "uid"
-#      password: "userPassword" # Default: "userPassword"
-#      email: "mail" # Default: "mail"
-#      phone: "telephoneNumber" # Default: "telephoneNumber"
-#      description:
-#        id: "id" # Default: "id"
-#        created_at: "createdAt" # Default: "createdAt"
-#        updated_at: "updatedAt" # Default: "updatedAt"
-#        type: "type" # Default: "type"
-#        totp: "totp" # Default: "totp"
-#        mfa_config: "mfaConfig" # Default: "mfaConfig"
-#        metadata: "metadata" # Default: "metadata"
-#    group: # other fields will be added to descriptions
-#      ou: "group" # Default: "group"
-#      name: "cn" # Default: "cn"
-#      accounts: "member" # Default: "member"
-#      description:
-#        id: "id" # Default: "id"
-#        created_at: "createdAt" # Default: "createdAt"
-#        updated_at: "updatedAt" # Default: "updatedAt"
-#        metadata: "metadata" # Default: "metadata"
+#  ous:
+#    account: "People"
+#    group: "Group"
+#  defaults:
+#    account_shadow_warning: "7" # Default: "7"
+#    account_shadow_max: "99999" # Default: "99999"
+#    account_home_directory_prefix: "/home/" # Default: "/home/"
+#    account_login_shell: "/bin/bash" # Default: "/bin/bash"
 
 ## API Configurations
 #api:
 #  grpc:
 #    port: 50426 # gRPC API port. Default:50426
 #    tls:
-#      root_ca: "/etc/sapphire/cert/ca.crt" # Default: "/etc/sapphire/cert/ca.crt"
-#      pem_file: "/etc/sapphire/cert/server.pem" # Default: "/etc/sapphire/cert/server.pem"
-#      key_file: "/etc/sapphire/cert/server.key" # Default: "/etc/sapphire/cert/server.key"
+#      enabled: false # Default: false
+#      root_ca: "/etc/sapphire/cert/ca.crt"
+#      pem_file: "/etc/sapphire/cert/server.pem"
+#      key_file: "/etc/sapphire/cert/server.key"
 
 # Lock
 #
@@ -687,7 +187,8 @@ echo "All tasks completed."`
 
 ## Account Configurations
 #account:
-#  special_key: "SpecialAccount@AmiaNetworks2025"
+#  special_key: "SpecialAccount@AmiaNetworks2025" # Used to create special accounts which skips MFA.
+#  password_algo: argon2id # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: argon2id
 #
 #  # Regular expressions are used here to specify the format of username, password, and user group.
 #  # ^, $: start-of-line and end-of-line respectively.
@@ -713,6 +214,7 @@ echo "All tasks completed."`
 ## Authentication Configurations
 #authentication:
 #  service:
+#    mtls: false # Default: false
 #    client_ca: "/etc/sapphire/cert/ca.crt"
 #    name: "^[0-9a-zA-Z_-]{2,36}$"
 #
@@ -736,7 +238,7 @@ echo "All tasks completed."`
 #  mfa:
 #    totp:
 #      # The issuer indicates the provider or service this account is associated with, URL-encoded according to RFC 3986.
-#      issuer: "Amianetworks"
+#      issuer: "Amia Networks Inc."
 
 ## Authorization Configurations
 #authorization:
@@ -775,8 +277,312 @@ echo "All tasks completed."`
 ## Policy Configurations
 #policy:
 #  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
-`
-	if err := os.WriteFile("controller/config/iam.yml", []byte(ymlIam), 0644); err != nil {
+`),
+		0644,
+	); err != nil {
+		panic(err)
+	}
+
+	// You can decide the topology network
+	newNetwork := &network{
+		Name: "network1",
+		Desc: fmt.Sprintf("Network with %d nodes", n),
+	}
+	newTopo := topo{
+		Networks: []*network{newNetwork},
+		Nodes:    map[string]*node{},
+	}
+
+	for i := 1; i <= n; i++ {
+		nodeName := fmt.Sprintf("node%d", i)
+		newNetwork.Nodes = append(newNetwork.Nodes, nodeName)
+		newTopo.Nodes[nodeName] = &node{
+			Type:    "server",
+			Managed: true,
+		}
+	}
+
+	bytes, err := yaml.Marshal(newNetwork)
+	if err != nil {
+		panic(err)
+	}
+
+	fileName := "controller/config/cluster.yml"
+	err = os.WriteFile(fileName, bytes, 0644)
+	if err != nil {
+		panic(err)
+	}
+
+	// ASNC docker compose file
+	err = os.WriteFile(
+		"controller/asnc.yml",
+		[]byte(`# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+
+services:
+  asn-mdb:
+    container_name: asn-mdb
+    image: mongo:8  # the mongodb version
+    restart: always   # auto restart the container if it fails
+    ulimits:
+      nofile: 100000
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: amia  # db root username,
+      MONGO_INITDB_ROOT_PASSWORD: 2022  # db root user password
+    ports:
+      - "27017:27017"  # port forwarding (localPort:containerPort)
+    volumes:
+      - mongodb_data:/data/db  # data volumes, (localDirectory:containerDirectory)
+    command: --bind_ip_all --auth
+  asn-idb:
+    image: influxdb:2.7
+    container_name: asn-idb
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: amia
+      DOCKER_INFLUXDB_INIT_PASSWORD: Amiasys2025
+      DOCKER_INFLUXDB_INIT_ORG: amia
+      DOCKER_INFLUXDB_INIT_BUCKET: asn
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: Amiasys2025
+      DOCKER_INFLUXDB_INIT_RETENTION: 0
+  sapphire-iam:
+    image: registry.amiasys.com/sapphire.iam:25.6.5
+    container_name: sapphire-iam
+    privileged: true
+    restart: always
+    depends_on:
+      - "asn-mdb"
+    network_mode: host
+    volumes:
+      - ./iam-cert/:/etc/sapphire/cert/
+      - ./iam-config/:/etc/sapphire/config/
+      - ./iam-log/:/var/log/sapphire/
+  asnc:
+    restart: always
+    image: registry.amiasys.com/asnc:25.7.12
+    network_mode: host
+    depends_on:
+      - "asn-mdb"
+      - "asn-idb"
+      - "sapphire-iam"
+    volumes:
+      - ./asn-config/:/asn/config
+      - ./asn-log/:/var/log/asn/controller
+      - ./asn-services:/usr/local/asn/controller/services
+      - ./asn-web:/var/www/asn/controller
+
+volumes:
+  mongodb_data:
+    driver: local
+  influxdb_data:
+    driver: local
+`),
+		0644,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	// make service node files
+	err = os.MkdirAll("servicenode", 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	err = os.MkdirAll("servicenode/services", 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	for i := 1; i <= n; i++ {
+		fileName = fmt.Sprintf("sn%d", i)
+		err = os.MkdirAll("servicenode/"+fileName, 0755)
+		if err != nil {
+			panic(err)
+		}
+
+		err = os.MkdirAll(fmt.Sprintf("servicenode/%s/config", fileName), 0755)
+		if err != nil {
+			panic(err)
+		}
+
+		err = os.MkdirAll(fmt.Sprintf("servicenode/%s/log", fileName), 0755)
+		if err != nil {
+			panic(err)
+		}
+
+		err = os.WriteFile(
+			fmt.Sprintf("servicenode/%s/config/asn.conf", fileName),
+			[]byte(fmt.Sprintf(`# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+
+# Service Node Info
+#
+# Template (from Topology Schema)
+#  <node-name>:
+#    type: router | switch | appliance | firewall | lb | ap | server | endpoint
+#    desc: <text>                          # Optional
+#    location:                             # Optional
+#      desc: <text>                        # Optional
+#      tier: <tier-name>                   # Optional (must match location-tiers if set)
+#      address: <text>                     # Optional, usually omitted
+#      coordinates: {latitude: <float>, longitude: <float>, altitude: <float>} # Optional
+#    managed: true | false                 # Default: false
+#    hostname: <name.domain>               # Optional
+#    hostip: <ip>                          # Optional
+#    ipmi:                                 # Optional
+#      ip: <ip>
+#      username: <text>
+#      key: <text>
+#    info:                                 # Optional
+#      vendor: <text>
+#      model: <text>
+#      sn: <text>
+#    interfaces:                           # Optional
+#      <if-name>:
+#        ip: <CIDR>
+#        tags: [control | data | management]
+general:
+  mode: "cluster" # cluster | standalone, Default: cluster
+  network: "network1" # Root Network to register
+  parent: "network1" # Parent Network to register
+  node_name: "node%d" # Default: hostname or hostIP
+  type: server # router | switch | appliance | firewall | lb | ap | server | device
+  managed: true # Default: false
+#  hostname: <name.domain> # Required for
+#  node_ip: <ip>
+#  ipmi:                                 # Optional
+#    ip: <ip>
+#    username: <text>
+#    key: <text>
+#  interfaces:                           # Optional but highly recommended
+#    <if-name>:
+#      ip: <CIDR>
+#      tags: data # [control | data | management]
+
+# Certificates
+#
+cert:
+  server_ca: ""
+  node_pem: ""
+  node_key: ""
+
+# Servnice Node CLI
+cli:
+  grpc: ":52767" # Default: localhost:52767
+
+# Controller
+#
+# TBD: retry_interval should be the default interval.
+controller:
+  #  address: 127.0.0.1:12762 # Default: 127.0.0.1:12762
+  retry_interval: 5 # Default: 5 seconds
+
+# Log
+#
+# Default Log Level is "info", but can be changed for each log.
+#log:
+#  path: "./log" # Default: "/var/log/asn/"
+#  prefix: "asn" # Default: "asn"
+#  api_log:
+#    filename: "api.log" # Default: "api.log"
+#    level: "info"
+#  entity_log:
+#    filename: "entity.log" # Default: "entity.log"
+#    level: "info"
+#  perf_log:
+#    filename: "perf.log" # Default: "perf.log"
+#    level: "info"
+#  runtime_log:
+#    filename: "runtime.log" # Default: "runtime.log"
+#    level: "info"
+
+# Services
+#
+# Service plugins
+service:
+  timeout: 10 # Default: 10 seconds
+`, i)),
+			0644,
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		// ASNSN docker compose file
+		err = os.WriteFile(
+			fmt.Sprintf("servicenode/%s/asnsn.yml", fileName),
+			[]byte(`# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+
+services:
+  asnsn:
+    restart: always
+    image: registry.amiasys.com/asnsn:25.7.12
+    volumes:
+      - ./config/:/asn/config
+      - ./log/:/var/log/asn/servicenode
+      - ../services:/usr/local/asn/servicenode/services
+`),
+			0644,
+		)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	if err := os.WriteFile(
+		"up.sh",
+		[]byte(fmt.Sprintf(`#!/bin/bash
+cd controller || { echo "Failed to enter controller folder"; exit 1; }
+echo "Starting Docker Compose in controller folder..."
+docker compose -f asnc.yml up -d || { echo "Failed to execute docker compose in controller folder"; exit 1; }
+echo "Docker Compose started in controller folder."
+cd - || { echo "Failed to return to the previous directory"; exit 1; }
+cd servicenode || { echo "Failed to enter servicenode folder"; exit 1; }
+for i in $(seq 1 %d); do
+folder="sn$i"
+if [ -d "$folder" ]; then
+cd "$folder" || { echo "Failed to enter $folder folder"; exit 1; }
+echo "Starting Docker Compose in $folder..."
+docker compose -f asnsn.yml up -d || { echo "Failed to execute docker compose in $folder"; exit 1; }
+echo "Docker Compose started in $folder."
+cd - >/dev/null || { echo "Failed to return to servicenode folder"; exit 1; }
+else
+echo "Folder $folder does not exist, skipping."
+fi
+done
+echo "All tasks completed."`, n)),
+		0755,
+		); err != nil {
+		panic(err)
+	}
+
+	if err := os.WriteFile(
+		"down.sh",
+		[]byte(fmt.Sprintf(`#!/bin/bash
+cd controller || { echo "Failed to enter controller folder"; exit 1; }
+echo "Starting Docker Compose in controller folder..."
+docker compose -f asnc.yml down || { echo "Failed to execute docker compose in controller folder"; exit 1; }
+echo "Docker Compose started in controller folder."
+cd - || { echo "Failed to return to the previous directory"; exit 1; }
+cd servicenode || { echo "Failed to enter servicenode folder"; exit 1; }
+for i in $(seq 1 %d); do
+folder="sn$i"
+if [ -d "$folder" ]; then
+cd "$folder" || { echo "Failed to enter $folder folder"; exit 1; }
+echo "Starting Docker Compose in $folder..."
+docker compose -f asnsn.yml down || { echo "Failed to execute docker compose in $folder"; exit 1; }
+echo "Docker Compose started in $folder."
+cd - >/dev/null || { echo "Failed to return to servicenode folder"; exit 1; }
+else
+echo "Folder $folder does not exist, skipping."
+fi
+done
+echo "All tasks completed."`, n)),
+		0755,
+	); err != nil {
 		panic(err)
 	}
 }
