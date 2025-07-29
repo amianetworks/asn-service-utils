@@ -33,17 +33,6 @@ nodes:
     type: router
     desc: "main router for the whole data center"
     managed: true
-    ipmi:
-      ip: 192.168.100.1
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: core-r.amia.local
-      ip: 192.168.100.1
-    info:
-      vendor: Cisco
-      model: ISR4431
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.0.1/24
@@ -54,21 +43,24 @@ nodes:
       eth2:
         ip: 172.16.0.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.1
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: core-r.amia.local
+      ip: 192.168.100.1
+    info:
+      verify: true
+      vendor: Cisco
+      model: ISR4431
+      sn: <SN>
   core-s:
     type: switch
     desc: "main switch for the whole data center"
     managed: true
-    ipmi:
-      ip: 192.168.100.2
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: core-s.amia.local
-      ip: 192.168.100.2
-    info:
-      vendor: Cisco
-      model: C9407R
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.2.1/24
@@ -82,21 +74,24 @@ nodes:
       eth4:
         ip: 172.16.1.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.2
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: core-s.amia.local
+      ip: 192.168.100.2
+    info:
+      verify: true
+      vendor: Cisco
+      model: C9407R
+      sn: <SN>
   spine1:
     type: switch
     desc: "spine switch 1 in Clos fabric"
     managed: true
-    ipmi:
-      ip: 192.168.100.3
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: spine1.amia.local
-      ip: 192.168.100.3
-    info:
-      vendor: Cisco
-      model: N9K-C9364C-GX
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.5.1/24
@@ -113,21 +108,24 @@ nodes:
       eth4:
         ip: 172.16.2.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.3
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: spine1.amia.local
+      ip: 192.168.100.3
+    info:
+      verify: true
+      vendor: Cisco
+      model: N9K-C9364C-GX
+      sn: <SN>
   spine2:
     type: switch
     desc: "spine switch 2 in Clos fabric"
     managed: true
-    ipmi:
-      ip: 192.168.100.4
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: spine2.amia.local
-      ip: 192.168.100.4
-    info:
-      vendor: Cisco
-      model: N9K-C9364C-GX
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.9.1/24
@@ -144,21 +142,24 @@ nodes:
       eth4:
         ip: 172.16.3.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.4
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: spine2.amia.local
+      ip: 192.168.100.4
+    info:
+      verify: true
+      vendor: Cisco
+      model: N9K-C9364C-GX
+      sn: <SN>
   leaf1:
     type: switch
     desc: "leaf switch 1 in Clos fabric"
     managed: true
-    ipmi:
-      ip: 192.168.100.5
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: leaf1.amia.local
-      ip: 192.168.100.5
-    info:
-      vendor: Cisco
-      model: N9K-C93180YC-FX3
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.13.1/24
@@ -175,21 +176,24 @@ nodes:
       eth4:
         ip: 172.16.4.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.5
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: leaf1.amia.local
+      ip: 192.168.100.5
+    info:
+      verify: true
+      vendor: Cisco
+      model: N9K-C93180YC-FX3
+      sn: <SN>
   leaf2:
     type: switch
     desc: "leaf switch 2 in Clos fabric"
     managed: true
-    ipmi:
-      ip: 192.168.100.6
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: leaf2.amia.local
-      ip: 192.168.100.6
-    info:
-      vendor: Cisco
-      model: N9K-C93180YC-FX3
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.17.1/24
@@ -206,21 +210,24 @@ nodes:
       eth4:
         ip: 172.16.5.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.6
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: leaf2.amia.local
+      ip: 192.168.100.6
+    info:
+      verify: true
+      vendor: Cisco
+      model: N9K-C93180YC-FX3
+      sn: <SN>
   leaf3:
     type: switch
     desc: "leaf switch 3 in Clos fabric"
     managed: true
-    ipmi:
-      ip: 192.168.100.7
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: leaf3.amia.local
-      ip: 192.168.100.7
-    info:
-      vendor: Cisco
-      model: N9K-C93180YC-FX3
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.21.1/24
@@ -237,21 +244,24 @@ nodes:
       eth4:
         ip: 172.16.6.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.7
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: leaf3.amia.local
+      ip: 192.168.100.7
+    info:
+      verify: true
+      vendor: Cisco
+      model: N9K-C93180YC-FX3
+      sn: <SN>
   dc-ep1:
     type: server
     desc: "endpoint server 1"
     managed: true
-    ipmi:
-      ip: 192.168.100.8
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: ep1.amia.local
-      ip: 192.168.100.8
-    info:
-      vendor: Supermicro
-      model: SYS-6029P
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.25.1/24
@@ -262,21 +272,24 @@ nodes:
       eth2:
         ip: 172.16.7.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.8
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: ep1.amia.local
+      ip: 192.168.100.8
+    info:
+      verify: true
+      vendor: Supermicro
+      model: SYS-6029P
+      sn: <SN>
   dc-ep2:
     type: server
     desc: "endpoint server 2"
     managed: true
-    ipmi:
-      ip: 192.168.100.9
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: ep2.amia.local
-      ip: 192.168.100.9
-    info:
-      vendor: Supermicro
-      model: SYS-6029P
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.27.1/24
@@ -287,21 +300,24 @@ nodes:
       eth2:
         ip: 172.16.8.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.9
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: ep2.amia.local
+      ip: 192.168.100.9
+    info:
+      verify: true
+      vendor: Supermicro
+      model: SYS-6029P
+      sn: <SN>
   dc-ep3:
     type: server
     desc: "endpoint server 3"
     managed: true
-    ipmi:
-      ip: 192.168.100.10
-      username: admin
-      key: amia_key_123
-    management:
-      hostname: ep3.amia.local
-      ip: 192.168.100.10
-    info:
-      vendor: Supermicro
-      model: SYS-6029P
-      sn: <SN>
     interfaces:
       eth0:
         ip: 10.0.29.1/24
@@ -312,6 +328,20 @@ nodes:
       eth2:
         ip: 172.16.9.1/24
         tags: [ control ]
+    ipmi:
+      verify: true
+      ip: 192.168.100.10
+      username: admin
+      key: amia_key_123
+    management:
+      verify: true
+      hostname: ep3.amia.local
+      ip: 192.168.100.10
+    info:
+      verify: true
+      vendor: Supermicro
+      model: SYS-6029P
+      sn: <SN>
 
 links:
   - from: { node: core-r, interface: eth1 }

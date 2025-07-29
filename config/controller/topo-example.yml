@@ -43,21 +43,24 @@
 #       address: <text>                     # Optional, usually omitted
 #       coordinates: {latitude: <float>, longitude: <float>, altitude: <float>} # Optional
 #     managed: true | false                 # Default: false
-#     ipmi:                                 # Optional
-#       ip: <ip>
-#       username: <text>
-#       key: <text>
-#     management:                           # Optional, usually omitted
-#       hostname: <name.domain>
-#       ip: <ip>
-#     info:                                 # Optional
-#       vendor: <text>
-#       model: <text>
-#       sn: <text>
 #     interfaces:                           # Optional
 #       <if-name>:
 #         ip: <CIDR>
 #         tags: [control | data | management]
+#     ipmi:                                 # Optional
+#       verify: <bool>                      # Whether these infos will be verified when SN reports them.
+#       ip: <ip>
+#       username: <text>
+#       key: <text>
+#     management:                           # Optional, usually omitted
+#       verify: <bool>                      # Whether these infos will be verified when SN reports them.
+#       hostname: <name.domain>
+#       ip: <ip>
+#     info:                                 # Optional
+#       verify: <bool>                      # Whether these infos will be verified when SN reports them.
+#       vendor: <text>
+#       model: <text>
+#       sn: <text>
 #
 # links:
 #   - from: { node: <node>, interface: <if-name> }  # Interface optional
@@ -142,17 +145,6 @@ nodes:
     type: router
     desc: "California core router"
     managed: true
-    ipmi:
-      ip: 192.168.1.10
-      username: <USERNAME>
-      key: <KEY>
-    management:
-      hostname: r1.asn.net
-      ip: 192.168.100.100
-    info:
-      vendor: xxx
-      model: xxx
-      sn: xxx
     interfaces:
       eth0:
         ip: 10.0.1.1/24
@@ -163,18 +155,35 @@ nodes:
       eth2:
         ip: 10.0.3.1/24
         tags: [ data ]
+    ipmi:
+      verify: true
+      ip: 192.168.1.10
+      username: <USERNAME>
+      key: <KEY>
+    management:
+      verify: true
+      hostname: r1.asn.net
+      ip: 192.168.100.100
+    info:
+      verify: true
+      vendor: xxx
+      model: xxx
+      sn: xxx
   asn-s1:
     type: switch
     desc: "California core switch"
     managed: true
     ipmi:
+      verify: true
       ip: 192.168.1.20
       username: <USERNAME>
       key: <KEY>
     management:
+      verify: true
       hostname: s1.asn.net
       ip: 192.168.100.100
     info:
+      verify: true
       vendor: xxx
       model: xxx
       sn: xxx
