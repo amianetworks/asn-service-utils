@@ -351,12 +351,9 @@ message Node {
   string network_id = 5;
   Location location = 6;
   bool managed = 7;
-  Ipmi ipmi = 8;
-  Management management = 9;
-  Info info = 10;
-  repeated Interface interfaces = 11;
-  repeated string group_ids = 12;
-  ServiceNode service_node = 13;
+  NodeInfo topo_info = 8;
+  repeated string group_ids = 9;
+  ServiceNode service_node = 10;
 
   message GetReq {
     repeated string node_ids = 1;
@@ -399,11 +396,9 @@ message Node {
     Type type = 2;
     string name = 3;
     string description = 4;
-    Location location = 5;
-    Ipmi ipmi = 6;
-    Management management = 7;
-    Info info = 8;
-    repeated Interface interfaces = 9;
+    bool managed = 5;
+    Location location = 6;
+    NodeInfo info = 7;
   }
 
   message Update {
@@ -412,34 +407,49 @@ message Node {
     Type type = 3;
     string name = 4;
     string description = 5;
-    Location location = 6;
-    Ipmi ipmi = 7;
-    Management management = 8;
-    Info info = 9;
-    repeated Interface interfaces = 10;
+    bool managed = 6;
+    Location location = 7;
+    NodeInfo info = 8;
   }
 
-  message Ipmi {
-    string ip = 1;
-    string username = 2;
-    string key = 3;
-  }
+  message NodeInfo {
+    repeated Interface interfaces = 1;
+    Ipmi ipmi = 2;
+    Management management = 3;
+    Info info = 4;
+    Param param = 5;
 
-  message Management {
-    string hostname = 1;
-    string ip = 2;
-  }
+    message Ipmi {
+      bool verify = 1;
+      string ip = 2;
+      string username = 3;
+      string key = 4;
+    }
 
-  message Info {
-    string vendor = 1;
-    string model = 2;
-    string serial_number = 3;
-  }
+    message Management {
+      bool verify = 1;
+      string hostname = 2;
+      string ip = 3;
+    }
 
-  message Interface {
-    string name = 1;
-    string ip = 2;
-    repeated string tags = 3;
+    message Info {
+      bool verify = 1;
+      string vendor = 2;
+      string model = 3;
+      string serial_number = 4;
+    }
+
+    message Param {
+      int64 cpu = 1;
+      int64 memory = 2;
+      int64 disk = 3;
+    }
+
+    message Interface {
+      string name = 1;
+      string ip = 2;
+      repeated string tags = 3;
+    }
   }
 
   message Link {
@@ -512,23 +522,16 @@ message Node {
   }
 
   message ServiceNode {
-    message SystemInfo {
-      string machine_id = 1;
-      int64 cpu_core = 2;
-      int64 memory = 3;
-      int64 disk = 4;
-    }
+    NodeState state = 1;
+    string message = 2;
+    NodeInfo register_info = 3;
+    repeated Service services = 4;
 
     message Service {
       string name = 1;
       ServiceState state = 2;
       string config = 3;
     }
-
-    NodeState state = 1;
-    SystemInfo system_info = 2;
-    repeated Interface interfaces = 3;
-    repeated Service services = 4;
   }
 
   message Service {
