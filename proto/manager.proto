@@ -54,7 +54,7 @@ service Manager {
 
   // Node Group API
   rpc GetNodeGroupsByIds      (NodeGroup.Ids)       returns (NodeGroup.List); // Node Group info
-  rpc GetNodeGroupsOfServices (Node.Service.Name)  returns (NodeGroup.Ids);  // Node Group of Services specified in the request.
+  rpc GetNodeGroupsOfServices (Node.Service.Name)   returns (NodeGroup.Ids);  // Node Group of Services specified in the request.
   rpc GetNodeGroupsOfNetwork  (Network.Id)          returns (NodeGroup.Ids);  // Node Group in the network.
   rpc CreateNodeGroup         (NodeGroup.Create)    returns (Empty);
   rpc UpdateNodeGroup         (NodeGroup.Update)    returns (Empty);
