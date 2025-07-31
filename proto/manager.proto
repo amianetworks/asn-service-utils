@@ -233,7 +233,10 @@ message UserGroup {
   }
 
   message List {
-    repeated UserGroup user_groups = 1;
+    message GroupNames {
+      repeated string names = 1;
+    }
+    map <int64, GroupNames>  user_groups = 1;
   }
 
   message Create {
