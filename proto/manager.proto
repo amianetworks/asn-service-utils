@@ -420,7 +420,7 @@ message Node {
   message SetConfig {
     string node_id = 1;
     string service_name = 2;
-    bytes config = 3;
+    string config = 3;
   }
 
   message NodeInfo {
@@ -503,7 +503,7 @@ message Node {
     message Service {
       string name = 1;
       ServiceState state = 2;
-      bytes config = 3;
+      string config = 3;
       string node_group_id = 4;
     }
   }
@@ -592,7 +592,7 @@ message NodeGroup {
   string service_name = 4;
   string remark = 5;
   repeated string nodes = 6;
-  bytes config = 7;
+  string config = 7;
 
   message Id {
     string node_group_id = 1;
