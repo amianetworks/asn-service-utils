@@ -221,7 +221,10 @@ message UserGroup {
   }
 
   message Names {
-    repeated string user_group_names = 1;
+    message GroupNames {
+      repeated string names = 1;
+    }
+    map <int64, GroupNames>  user_groups = 1;
   }
 
   message GetReq {
@@ -233,10 +236,7 @@ message UserGroup {
   }
 
   message List {
-    message GroupNames {
-      repeated string names = 1;
-    }
-    map <int64, GroupNames>  user_groups = 1;
+    repeated UserGroup groups = 1;
   }
 
   message Create {
