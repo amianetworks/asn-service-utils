@@ -27,7 +27,7 @@ service Manager {
 
   // User Group API
   rpc GetUserGroupsOfService    (UserGroup.GetReq)    returns (UserGroup.List);         // User Group info by name
-  rpc ListUserGroupsOfServices  (Node.Service.Names)  returns (UserGroup.UnderService);
+  rpc ListUserGroupsOfServices  (UserGroup.GetReq)    returns (UserGroup.UnderService);
   rpc CreateUserGroup           (UserGroup.Create)    returns (Empty);
   rpc UpdateUserGroup           (UserGroup.Update)    returns (Empty);
   rpc DeleteUserGroup           (UserGroup.Name)      returns (Empty);
@@ -35,20 +35,22 @@ service Manager {
   rpc RemoveUsersFromGroup      (UserGroup.UserReq)   returns (Empty);
 
   // Network API
-  rpc ImportTopoFromFile  (NetworkTopo)     returns (Empty);          // Load topo networks through files
-  rpc GetRootNetworks     (Empty)           returns (Network.Roots);  // Basic info of Network roots.
-  rpc GetSubNetworks      (Network.GetReq)  returns (Network.Info);   // Get all subnetworks, including itself, without nodes. Network link is optional.
-  rpc CreateNetwork       (Network.Create)  returns (Empty);
-  rpc UpdateNetwork       (Network.Update)  returns (Empty);
-  rpc DeleteNetwork       (Network.Id)      returns (Empty);
+  rpc ImportTopoFromFile      (NetworkTopo)     returns (Empty);              // Load topo networks through files
+  rpc ListAvailableNetworks   (Empty)           returns (Network.List);       // List the network that the user can view/manage. Just the basic topo info, without node
+  rpc DisplayNetworks         (Network.GetReq)  returns (Network.Display);    // Get subnetworks, nodes and link need display.
+  rpc GetNetworkTopo          (Network.Id)      returns (Network);            // Get network topo info
+  rpc CreateNetwork           (Network.Create)  returns (Empty);
+  rpc UpdateNetwork           (Network.Update)  returns (Empty);
+  rpc DeleteNetwork           (Network.Id)      returns (Empty);
 
   // Nodes API
-  rpc GetNodesByIds       (Node.GetReq)   returns (Node.List);  // Node details.
-  rpc GetNodesOfNetwork   (Node.ListReq)  returns (Node.Ids);   // All nodes in the network and its subnetworks.
-  rpc GetNodesOfNodeGroup (NodeGroup.Id)  returns (Node.Ids);   // Nodes in the given Node Group.
-  rpc CreateNode          (Node.Create)   returns (Empty);
-  rpc UpdateNode          (Node.Update)   returns (Empty);
-  rpc DeleteNode          (Node.Id)       returns (Empty);
+  rpc GetNodesByIds         (Node.GetReq)     returns (Node.List);    // Node details.
+  rpc GetNodesOfNetwork     (Node.ListReq)    returns (Node.Infos);   // All nodes in the network and its subnetworks.
+  rpc GetNodesOfNodeGroup   (NodeGroup.Id)    returns (Node.Infos);   // Nodes in the given Node Group.
+  rpc SetNodeServiceConfig  (Node.SetConfig)  returns (Empty);
+  rpc CreateNode            (Node.Create)     returns (Empty);
+  rpc UpdateNode            (Node.Update)     returns (Empty);
+  rpc DeleteNode            (Node.Id)         returns (Empty);
 
   // Node Group API
   rpc GetNodeGroupsByIds      (NodeGroup.Ids)       returns (NodeGroup.List); // Node Group info
@@ -59,10 +61,10 @@ service Manager {
   rpc DeleteNodeGroup         (NodeGroup.Id)        returns (Empty);
 
   // Link API
-  rpc GetLinksOfNetwork (Network.Id)        returns (Node.Link.List); // All links of a network. Internal and External.
-  rpc CreateLink        (Node.Link.Create)  returns (Empty);
-  rpc UpdateLink        (Node.Link.Update)  returns (Empty);
-  rpc DeleteLink        (Node.Link.Id)      returns (Empty);
+  rpc GetLinksOfNode    (Node.Id)      returns (Link.List); // All links of a network. Internal and External.
+  rpc CreateLink        (Link.Create)  returns (Empty);
+  rpc UpdateLink        (Link.Update)  returns (Empty);
+  rpc DeleteLink        (Link.Id)      returns (Empty);
 
   // Service API: Info or Name? ???
   rpc GetAllServices          (IncludeAsn)         returns (Node.Service.Names);  // All available service names.
@@ -202,7 +204,7 @@ message User {
 
 message UserGroup {
   string name = 1;
-  string service_name = 2;
+  bool default = 2;
   Type type = 3;
   string remark = 4;
 
@@ -223,12 +225,15 @@ message UserGroup {
   }
 
   message UnderService {
-    map<string, Names> user_groups = 1;
+    map<int64, Names> user_groups = 1;
   }
 
   message GetReq {
-    string service_name = 1;
-    repeated string user_group_names = 2;
+    repeated string user_group_names = 1;
+  }
+
+  message ListReq {
+    repeated int64 types = 1;
   }
 
   message List {
@@ -237,21 +242,19 @@ message UserGroup {
 
   message Create {
     string name = 1;
-    string service_name = 2;
-    Type type = 3;
-    string remark = 4;
-    repeated string services = 5;
-    repeated string networks = 6;
-    repeated string operations = 7;
-  }
-
-  message Update {
-    string name = 1;
-    string service_name = 2;
+    Type type = 2;
     string remark = 3;
     repeated string services = 4;
     repeated string networks = 5;
     repeated string operations = 6;
+  }
+
+  message Update {
+    string name = 1;
+    string remark = 2;
+    repeated string services = 3;
+    repeated string networks = 4;
+    repeated string operations = 5;
   }
 
   message UserReq {
@@ -281,30 +284,37 @@ message Network {
   string parent_network_id = 4;
   repeated string network_tiers = 5;
   Location location = 6;
-  repeated Network networks = 7;
+  repeated Network subnets = 7;
+  repeated Node.Info nodes = 8;
 
-  message Root {
-    string network_id = 1;
-    string name = 2;
-    string description = 3;
-    repeated string location_tiers = 4;
-    repeated string network_tiers = 5;
-  }
+  message List {
+    message Topo {
+      string network_id = 1;
+      string name = 2;
+      repeated Topo subnets = 3;
+    }
 
-  message Roots {
-    repeated Root root_networks = 1;
+    repeated Topo networks = 1;
   }
 
   message GetReq {
     string network_id = 1;
-    repeated string location_tiers = 2;
-    repeated string network_tiers = 3;
-    bool include_links = 4;
+    string location_tier = 2;
   }
 
-  message Info {
-    Network network = 1;
-    repeated Network.Link links = 6;
+  message Display {
+    message Info {
+      string network_id = 1;
+      string name = 2;
+      string description = 3;
+      string parent_network_id = 4;
+      repeated string network_tiers = 5;
+      Location location = 6;
+    }
+
+    repeated Info networks = 1;
+    repeated Node.Info nodes = 2;
+    repeated Link links = 3;
   }
 
   message Id {
@@ -321,25 +331,16 @@ message Network {
 
   message Update {
     string network_id = 1;
-    string parent_network_id = 2;
     string name = 3;
     string description = 4;
     repeated string network_tiers = 5;
     Location location = 6;
   }
 
-  message Link {
-    string from_network = 1;
-    string to_network = 2;
-    uint64 bandwidth = 3;
-  }
-
   message Stats {
-    int64 number_of_networks = 1;
-    int64 number_of_nodes = 2;
-    int64 number_of_internal_links = 3;
-    int64 number_of_external_links = 4;
-    int64 number_of_node_groups = 5;
+    int64 number_of_nodes = 1;
+    int64 number_of_links = 2;
+    int64 number_of_node_groups = 3;
   }
 }
 
@@ -352,7 +353,6 @@ message Node {
   Location location = 6;
   bool managed = 7;
   NodeInfo topo_info = 8;
-  repeated string group_ids = 9;
   ServiceNode service_node = 10;
 
   message GetReq {
@@ -367,16 +367,22 @@ message Node {
 
   message List {
     repeated Node nodes = 1;
-    repeated Node.Link internal_links = 2;
-    repeated Node.Link external_links = 3;
+    repeated Link links = 2;
   }
 
   message Id {
     string node_id = 1;
   }
 
-  message Ids {
-    repeated string node_ids = 1;
+  message Infos {
+    repeated Info nodes = 1;
+  }
+
+  message Info {
+    string node_id = 1;
+    Type type = 2;
+    string name = 3;
+    NodeState state = 4;
   }
 
   enum Type {
@@ -403,13 +409,18 @@ message Node {
 
   message Update {
     string node_id = 1;
-    string parent_network_id = 2;
     Type type = 3;
     string name = 4;
     string description = 5;
     bool managed = 6;
     Location location = 7;
     NodeInfo info = 8;
+  }
+
+  message SetConfig {
+    string node_id = 1;
+    string service_name = 2;
+    bytes config = 3;
   }
 
   message NodeInfo {
@@ -449,44 +460,6 @@ message Node {
       string name = 1;
       string ip = 2;
       repeated string tags = 3;
-    }
-  }
-
-  message Link {
-    string link_id = 1;
-    string description = 2;
-    string from_node = 3;
-    string from_interface = 4;
-    string to_node = 5;
-    string to_interface = 6;
-    uint64 bandwidth = 7;
-
-    message Id {
-      string link_id = 1;
-    }
-
-    message List {
-      repeated Link internal_links = 1;
-      repeated Link external_links = 2;
-    }
-
-    message Create {
-      string from_node = 1;
-      string from_interface = 2;
-      string to_node = 3;
-      string to_interface = 4;
-      uint64 bandwidth = 5;
-      string description = 6;
-    }
-
-    message Update {
-      string link_id = 1;
-      string from_node = 2;
-      string from_interface = 3;
-      string to_node = 4;
-      string to_interface = 5;
-      uint64 bandwidth = 6;
-      string description = 7;
     }
   }
 
@@ -530,7 +503,8 @@ message Node {
     message Service {
       string name = 1;
       ServiceState state = 2;
-      string config = 3;
+      bytes config = 3;
+      string node_group_id = 4;
     }
   }
 
@@ -572,13 +546,53 @@ message Node {
   }
 }
 
+message Link {
+  string link_id = 1;
+  string description = 2;
+  string from_id = 3;
+  bool   from_node = 4;
+  string from_interface = 5;
+  string to_id = 6;
+  bool   to_node = 7;
+  string to_interface = 8;
+  uint64 bandwidth = 9;
+
+  message Id {
+    string link_id = 1;
+  }
+
+  message List {
+    repeated Link links = 1;
+  }
+
+  message Create {
+    string from_node_id = 1;
+    string from_interface = 2;
+    string to_node_id = 3;
+    string to_interface = 4;
+    uint64 bandwidth = 5;
+    string description = 6;
+  }
+
+  message Update {
+    string link_id = 1;
+    string from_node_id = 2;
+    string from_interface = 3;
+    string to_node_id = 4;
+    string to_interface = 5;
+    uint64 bandwidth = 6;
+    string description = 7;
+  }
+}
+
 message NodeGroup {
   string node_group_id = 1;
   string name = 2;
-  string root_id = 3;
-  string remark = 4;
-  repeated string nodes = 5;
-  map<string, string> services = 6;
+  string network_id = 3;
+  string service_name = 4;
+  string remark = 5;
+  repeated string nodes = 6;
+  bytes config = 7;
 
   message Id {
     string node_group_id = 1;
