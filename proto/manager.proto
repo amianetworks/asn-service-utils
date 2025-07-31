@@ -576,10 +576,6 @@ message Link {
 
   message Update {
     string link_id = 1;
-    string from_node_id = 2;
-    string from_interface = 3;
-    string to_node_id = 4;
-    string to_interface = 5;
     uint64 bandwidth = 6;
     string description = 7;
   }
