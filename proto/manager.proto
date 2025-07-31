@@ -165,7 +165,7 @@ message User {
   string username = 1;
   string email = 2;
   Phone phone = 3;
-  map<string, Array> groups = 4;
+  repeated string groups = 4;
   map<string, Array> services = 5;
   map<string, Array> networks = 6;
 
