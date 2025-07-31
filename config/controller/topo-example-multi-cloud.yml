@@ -1,8 +1,8 @@
-location_tiers: [ city ]
-
 networks:
   - name: cloud-networks
     desc: "Cloud Network"
+    location:
+      tier: world
     networks:
       - name: ln-us-west
         desc: "US West region VPC"

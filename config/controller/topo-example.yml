@@ -7,19 +7,16 @@
 #
 # SCHEMA OVERVIEW:
 # ----------------------------------------------------------------------------
-# location-tiers: [tier1, tier2, ...]
-#   - Optional: defines logical or physical location hierarchy.
-#
 # network-tiers: [core, edge, ...]
 #   - Optional: defines roles of networks in backbone, DC, etc.
 #
 # networks:
 #   - name: <network-name>
 #     desc: <text>                          # Optional
-#     tiers: [...]                     # Optional (must match network-tiers if set)
+#     tiers: [...]                          # Optional (must match network-tiers if set)
 #     location:                             # Optional
 #       desc: <text>                        # Optional
-#       tier: <tier-name>                   # Optional (must match location-tiers if set)
+#       tier: (Optional) world | continent | country | state | city | district | campus | building | floor | room | row | rack | unit
 #       address: <text>                     # Optional, usually omitted
 #       coordinates: {latitude: <float>, longitude: <float>, altitude: <float>} # Optional
 #     nodes:                                # Optional
@@ -39,7 +36,7 @@
 #     desc: <text>                          # Optional
 #     location:                             # Optional
 #       desc: <text>                        # Optional
-#       tier: <tier-name>                   # Optional (must match location-tiers if set)
+#       tier: (Optional) world | continent | country | state | city | district | campus | building | floor | room | row | rack | unit
 #       address: <text>                     # Optional, usually omitted
 #       coordinates: {latitude: <float>, longitude: <float>, altitude: <float>} # Optional
 #     managed: true | false                 # Default: false
@@ -75,11 +72,9 @@
 #   - Networks without coordinates will attempt to aggregate locations from their children.
 #   - Networks without aggregated coordinates will inherit from their parent networks.
 #   - All links are bidirectional and should be unique.
+#   - Location tier has a structured relationship. Smaller scopes are not allowed to contain larger ones.
+#   - When root networks do not have location tier, this network will not be displayed on a map. No child tier allowed.
 # ============================================================================
-
-## Location Tiers (optional)
-# Defines the geographic hierarchy, such as state > city > institution.
-location-tiers: [ state, city, school ]
 
 ## Network Tiers (optional)
 # Defines tiering in backbone or data center scenarios.
@@ -94,6 +89,9 @@ network-tiers: [ core, clos, spine, leaf ]
 networks:
   - name: asn
     desc: "ASN root network"
+    location:
+      desc: "California"
+      tier: state
     nodes:
       - asn-r1
       - asn-s1
