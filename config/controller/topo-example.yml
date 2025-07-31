@@ -16,7 +16,7 @@
 #     tiers: [...]                          # Optional (must match network-tiers if set)
 #     location:                             # Optional
 #       desc: <text>                        # Optional
-#       tier: (Optional) world | continent | country | state | city | district | campus | building | floor | room | row | rack | unit
+#       tier: (Optional) world | country | state | city | district | campus | building | floor | room | row | rack | unit
 #       address: <text>                     # Optional, usually omitted
 #       coordinates: {latitude: <float>, longitude: <float>, altitude: <float>} # Optional
 #     nodes:                                # Optional
@@ -36,7 +36,7 @@
 #     desc: <text>                          # Optional
 #     location:                             # Optional
 #       desc: <text>                        # Optional
-#       tier: (Optional) world | continent | country | state | city | district | campus | building | floor | room | row | rack | unit
+#       tier: (Optional) world | country | state | city | district | campus | building | floor | room | row | rack | unit
 #       address: <text>                     # Optional, usually omitted
 #       coordinates: {latitude: <float>, longitude: <float>, altitude: <float>} # Optional
 #     managed: true | false                 # Default: false
@@ -73,7 +73,6 @@
 #   - Networks without aggregated coordinates will inherit from their parent networks.
 #   - All links are bidirectional and should be unique.
 #   - Location tier has a structured relationship. Smaller scopes are not allowed to contain larger ones.
-#   - When root networks do not have location tier, this network will not be displayed on a map. No child tier allowed.
 # ============================================================================
 
 ## Network Tiers (optional)
