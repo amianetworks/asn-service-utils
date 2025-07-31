@@ -26,8 +26,8 @@ service Manager {
   rpc DeleteUser      (User.Name)     returns (Empty);
 
   // User Group API
-  rpc GetUserGroupsOfService    (UserGroup.GetReq)    returns (UserGroup.List);         // User Group info by name
-  rpc ListUserGroupsOfServices  (UserGroup.GetReq)    returns (UserGroup.UnderService);
+  rpc GetUserGroups             (UserGroup.GetReq)    returns (UserGroup.List);         // User Group info by name
+  rpc ListUserGroups            (UserGroup.ListReq)   returns (UserGroup.Names);
   rpc CreateUserGroup           (UserGroup.Create)    returns (Empty);
   rpc UpdateUserGroup           (UserGroup.Update)    returns (Empty);
   rpc DeleteUserGroup           (UserGroup.Name)      returns (Empty);
@@ -222,10 +222,6 @@ message UserGroup {
 
   message Names {
     repeated string user_group_names = 1;
-  }
-
-  message UnderService {
-    map<int64, Names> user_groups = 1;
   }
 
   message GetReq {
