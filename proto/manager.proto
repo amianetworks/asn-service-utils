@@ -310,7 +310,7 @@ message Network {
     }
 
     repeated Info networks = 1;
-    repeated Node.Info nodes = 2;
+    repeated Node nodes = 2;
     repeated Link links = 3;
     repeated string location_tiers = 4;
   }
