@@ -6,7 +6,7 @@ replace asn.amiasys.com/asn-service-api/v25 => github.com/amianetworks/asn-servi
 
 require (
 	asn.amiasys.com/asn-service-api/v25 v25.7.17
-	github.com/amianetworks/am.modules/v25 v25.6.10
+	github.com/amianetworks/am.modules/v25 v25.6.11
 	github.com/gin-gonic/gin v1.10.1
 	github.com/goccy/go-json v0.10.5
 	github.com/golang-jwt/jwt/v5 v5.2.3
