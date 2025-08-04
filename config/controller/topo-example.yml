@@ -116,7 +116,7 @@ networks:
             desc: "Educational subnetwork in UCLA"
             location:
               desc: "UCLA"
-              tier: school
+              tier: campus
               address: "1 UCLA Ave, LA, CA"
               coordinates: { latitude: 34.069945, longitude: -118.443828 }
             nodes:
@@ -127,7 +127,7 @@ networks:
             desc: "Educational subnetwork in USC"
             location:
               desc: "USC"
-              tier: school
+              tier: campus
               address: "2 USC Street, LA, CA"
               coordinates: { latitude: 34.022549, longitude: -118.285217 }
             nodes:
