@@ -212,11 +212,11 @@ message User {
 
 message UserGroup {
   string name = 1;
-  string remark = 2;
-  int64 user_total = 3;
-  repeated string usernames = 4;
-  bool default = 5;
-  Type type = 6;
+  int64 user_total = 2;
+  repeated string usernames = 3;
+  bool default = 4;
+  Type type = 5;
+  string remark = 6;
   repeated Access accesses = 7;
 
   message Name {
