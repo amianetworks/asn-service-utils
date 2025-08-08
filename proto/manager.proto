@@ -165,7 +165,7 @@ message User {
   string username = 1;
   string email = 2;
   Phone phone = 3;
-  map<string, Names> groups = 4;
+  UserGroup.Names groups = 4;
   repeated UserGroup.Access accesses = 5;
 
   message Name {
