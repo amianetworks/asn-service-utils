@@ -27,7 +27,7 @@ service Manager {
 
   // User Group API
   rpc GetUserGroups             (UserGroup.GetReq)    returns (UserGroup.List);         // User Group info by name
-  rpc ListUserGroups            (UserGroup.ListReq)   returns (UserGroup.Names);
+  rpc ListUserGroups            (Empty)   returns (UserGroup.Names);
   rpc CreateUserGroup           (UserGroup.Create)    returns (Empty);
   rpc UpdateUserGroup           (UserGroup.Update)    returns (Empty);
   rpc DeleteUserGroup           (UserGroup.Name)      returns (Empty);
@@ -240,10 +240,6 @@ message UserGroup {
     repeated string user_group_names = 1;
   }
 
-  message ListReq {
-    repeated int64 types = 1;
-  }
-
   message List {
     repeated UserGroup groups = 1;
   }
@@ -251,7 +247,6 @@ message UserGroup {
   message Create {
     string name = 1;
     string remark = 2;
-    Type type = 3;
     repeated Access accesses = 4;
   }
 
