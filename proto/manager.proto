@@ -20,10 +20,10 @@ service Manager {
   rpc GetUserByToken  (Empty)               returns (User);
 
   // User API
-  rpc GetUsersByNames (User.Names)    returns (User.List);  // User Info by name
-  rpc ListUsers       (User.ListReq)  returns (User.Names);
-  rpc CreateUser      (User.Create)   returns (Empty);
-  rpc DeleteUser      (User.Name)     returns (Empty);
+  rpc GetUsersByNames (User.GetReq)         returns (User.List);  // User Info by name
+  rpc ListUsers       (Node.Service.Names)  returns (User.Names);
+  rpc CreateUser      (User.Create)         returns (Empty);
+  rpc DeleteUser      (User.Name)           returns (Empty);
 
   // User Group API
   rpc GetUserGroups             (UserGroup.GetReq)    returns (UserGroup.List);         // User Group info by name
@@ -36,6 +36,7 @@ service Manager {
 
   // Network API
   rpc ImportTopoFromFile      (NetworkTopo)     returns (Empty);              // Load topo networks through files
+  rpc ExportTopoFile          (Network.Id)      returns (NetworkTopo);        // Export topo to files
   rpc ListAvailableNetworks   (Empty)           returns (Network.List);       // List the network that the user can view/manage. Just the basic topo info, without node
   rpc DisplayNetworks         (Network.GetReq)  returns (Network.Display);    // Get subnetworks, nodes and link need display.
   rpc GetNetworkTopo          (Network.Id)      returns (Network);            // Get network topo info
@@ -164,16 +165,24 @@ message User {
   string username = 1;
   string email = 2;
   Phone phone = 3;
-  repeated string groups = 4;
-  map<string, Array> services = 5;
-  map<string, Array> networks = 6;
+  map<string, Names> groups = 4;
+  repeated UserGroup.Access accesses = 5;
 
   message Name {
     string username = 1;
   }
 
   message Names {
-    repeated string usernames = 1;
+    repeated string names = 1;
+  }
+
+  message GetReq {
+    string service = 1;
+    repeated string names = 2;
+  }
+
+  message Usernames {
+    map<string, Names> usernames = 1;
   }
 
   message Create {
@@ -203,16 +212,12 @@ message User {
 
 message UserGroup {
   string name = 1;
-  bool default = 2;
-  Type type = 3;
-  string remark = 4;
-
-  int64 user_total = 5;
-  repeated string usernames = 6;
-
-  repeated string services = 7;
-  repeated string networks = 8;
-  repeated string operations = 9;
+  int64 user_total = 2;
+  repeated string usernames = 3;
+  bool default = 4;
+  Type type = 5;
+  string remark = 6;
+  repeated Access accesses = 7;
 
   message Name {
     string user_group_name = 1;
@@ -222,7 +227,13 @@ message UserGroup {
     message GroupNames {
       repeated string names = 1;
     }
-    map <int64, GroupNames>  user_groups = 1;
+    map<string, GroupNames> groups = 1;
+  }
+
+  message Access {
+    string service = 1;
+    repeated string networks = 2;
+    repeated string operations = 3;
   }
 
   message GetReq {
@@ -239,19 +250,15 @@ message UserGroup {
 
   message Create {
     string name = 1;
-    Type type = 2;
-    string remark = 3;
-    repeated string services = 4;
-    repeated string networks = 5;
-    repeated string operations = 6;
+    string remark = 2;
+    Type type = 3;
+    repeated Access accesses = 4;
   }
 
   message Update {
     string name = 1;
     string remark = 2;
-    repeated string services = 3;
-    repeated string networks = 4;
-    repeated string operations = 5;
+    repeated Access accesses = 3;
   }
 
   message UserReq {
