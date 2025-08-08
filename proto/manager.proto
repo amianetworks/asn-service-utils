@@ -21,7 +21,7 @@ service Manager {
 
   // User API
   rpc GetUsersByNames (User.GetReq)         returns (User.List);  // User Info by name
-  rpc ListUsers       (Node.Service.Names)  returns (User.Names);
+  rpc ListUsers       (Node.Service.Names)  returns (User.Usernames);
   rpc CreateUser      (User.Create)         returns (Empty);
   rpc DeleteUser      (User.Name)           returns (Empty);
 
