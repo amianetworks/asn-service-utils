@@ -22,7 +22,8 @@ service Manager {
   // User API
   rpc GetUsersByNames (User.GetReq)         returns (User.List);  // User Info by name
   rpc ListUsers       (Node.Service.Names)  returns (User.Usernames);
-  rpc CreateUser      (User.Create)         returns (Empty);
+  rpc CreateUser      (User.Operate)         returns (Empty);
+  rpc UpdateUser      (User.Operate)         returns (Empty);
   rpc DeleteUser      (User.Name)           returns (Empty);
 
   // User Group API
@@ -185,7 +186,7 @@ message User {
     map<string, Names> usernames = 1;
   }
 
-  message Create {
+  message Operate {
     string username = 1;
     string password = 2;
     string email = 3;
