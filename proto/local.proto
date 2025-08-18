@@ -11,7 +11,7 @@ service Controller {
   rpc StartService(Service)   returns (GeneralResponse) {}
   rpc StopService(Service)    returns (GeneralResponse) {}
   rpc RestartService(Service) returns (GeneralResponse) {}
-  rpc ApplyServiceOps(Ops)    returns (ApplyServiceOpsResponse){}
+  rpc ApplyServiceOps(Ops)    returns (GeneralResponse){}
 }
 
 message Empty{}
@@ -35,9 +35,4 @@ message GeneralResponse {
     FAILED = 1;
   }
   Status status = 1;
-}
-
-message ApplyServiceOpsResponse {
-  string response = 1;
-  string error = 2;
 }
