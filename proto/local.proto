@@ -7,32 +7,28 @@ option go_package = "./;proto";
 package asn_local;
 
 service Controller {
-  rpc ListServices(Empty)     returns (stream Service) {}
-  rpc StartService(Service)   returns (GeneralResponse) {}
-  rpc StopService(Service)    returns (GeneralResponse) {}
-  rpc RestartService(Service) returns (GeneralResponse) {}
-  rpc ApplyServiceOps(Ops)    returns (GeneralResponse){}
+  rpc ListServices(Empty)     returns (stream ServiceRes) {}
+  rpc StartService(ServiceReq)   returns (Empty) {}
+  rpc StopService(ServiceReq)    returns (Empty) {}
+  rpc RestartService(ServiceReq) returns (Empty) {}
+  rpc ApplyServiceOps(Ops)    returns (Empty){}
 }
 
 message Empty{}
 
-message Service {
+message ServiceReq {
   string name = 1;
   string version = 2;
   bytes config = 3;
-  bytes ops = 4;
+}
+
+message ServiceRes {
+  string name = 1;
+  string version = 2;
 }
 
 message Ops {
   string name = 1;
   string command = 2;
   string params = 3;
-}
-
-message GeneralResponse {
-  enum Status {
-    SUCCESS = 0;
-    FAILED = 1;
-  }
-  Status status = 1;
 }
