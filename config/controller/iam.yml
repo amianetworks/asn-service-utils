@@ -12,6 +12,13 @@
 #  username: "amia" # Default: "amia"
 #  password: "2022" # Default: "2022"
 
+## Services
+services: # supported service names
+  asn:
+    add_existing_accounts:
+      enabled: true # allow for adding existing accounts to this service
+      auto: true    # add new accounts automatically to this service
+
 ## LDAP Configurations
 #ldap:
 #  enabled: false # Default: false
@@ -20,30 +27,9 @@
 #  base_dn: "dc=amianetworks,dc=com" # Default: "dc=amianetworks,dc=com"
 #  password_cn: "cn=admin" # Default: "cn=admin"
 #  password: "2022" # Default: "2022"
-#  mapping:
-#    account: # other fields will be added to descriptions, name will be filled to cn and sn by default
-#      ou: "account" # Default: "account"
-#      name: "uid" # Default: "uid"
-#      password: "userPassword" # Default: "userPassword"
-#      email: "mail" # Default: "mail"
-#      phone: "telephoneNumber" # Default: "telephoneNumber"
-#      description:
-#        id: "id" # Default: "id"
-#        created_at: "createdAt" # Default: "createdAt"
-#        updated_at: "updatedAt" # Default: "updatedAt"
-#        type: "type" # Default: "type"
-#        totp: "totp" # Default: "totp"
-#        mfa_config: "mfaConfig" # Default: "mfaConfig"
-#        metadata: "metadata" # Default: "metadata"
-#    group: # other fields will be added to descriptions
-#      ou: "group" # Default: "group"
-#      name: "cn" # Default: "cn"
-#      accounts: "member" # Default: "member"
-#      description:
-#        id: "id" # Default: "id"
-#        created_at: "createdAt" # Default: "createdAt"
-#        updated_at: "updatedAt" # Default: "updatedAt"
-#        metadata: "metadata" # Default: "metadata"
+#  ous:
+#    account: "People"
+#    group: "Group"
 
 ## API Configurations
 #api:
@@ -87,7 +73,25 @@
 
 ## Account Configurations
 #account:
-#  special_key: "SpecialAccount@AmiaNetworks2025"
+#  special_key: "SpecialAccount@AmiaNetworks2025" # Used to create special accounts which skips MFA.
+#  password_algo: argon2id # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: argon2id
+#
+#  # Some fields can be set to unique. These fields can also be used as login identifier (similar to a username).
+#  # Note that if a field is set to NOT UNIQUE, and later on changed to UNIQUE, IAM will not check for existing records.
+#  # However, these accounts cannot log in with duplicate identifiers.
+#  unique_fields:
+#    email: true # Default: true
+#    phone: true # Default: true
+#
+#  # Some services require the mandatory filling of mobile phone and email.
+#  # Mode is strict, when user apply IAM, input phone/email depends on whether phone/email is true, need to be verified by code
+#  # Mode is compatible, when manager create user account(or user apply)
+#  # input phone/email depends on whether phone/email is true, no need to be verified by code
+#  # user can set phone/email when user first login.
+#  required_fields:
+#    mode: compatible  # compatible
+#    email: false # Default: false
+#    phone: false # Default: false
 #
 #  # Regular expressions are used here to specify the format of username, password, and user group.
 #  # ^, $: start-of-line and end-of-line respectively.
@@ -137,7 +141,7 @@
 #  mfa:
 #    totp:
 #      # The issuer indicates the provider or service this account is associated with, URL-encoded according to RFC 3986.
-#      issuer: "Amianetworks"
+#      issuer: "Amia Networks Inc."
 
 ## Authorization Configurations
 #authorization:
@@ -147,8 +151,8 @@
 #    issuer: "amianetworks.com"
 #    # RS256 Key Set for JWT signature.
 #    # [NOT RECOMMENDED!!!] If either is set to empty, a random set will be used.
-#    public_key_file: ""
-#    private_key_file: ""
+#    public_key_file: "" # Default: /etc/sapphire/cert/jwt.pem (can be auto-generated)
+#    private_key_file: "" # Default: /etc/sapphire/cert/jwt.key (can be auto-generated)
 #    access_token:
 #      expire: 60   # Access token expiration time in minutes. Default: 60 minutes.
 #    refresh_token:
