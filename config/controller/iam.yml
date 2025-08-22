@@ -1,9 +1,34 @@
 # Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
 
-## Log Configurations
-#log:
-#  level: "info" # Supported log level: panic | fatal | error | warning | info | debug | trace. Default: info
-#  file: "/var/log/sapphire/iam.log" # Default: "/var/log/sapphire/iam.log"
+###
+# Services
+#
+# API
+# DB
+# Email Server
+# LDAP
+# Lock
+# Log
+#
+# Account
+# Authentication
+# Authorization
+# Group
+# Role
+# Policy
+
+## Services
+services_provisioned: [ asn, swan, scarlette ]
+
+## API Configurations
+#api:
+#  grpc:
+#    port: 50426 # gRPC API port. Default:50426
+#    tls:
+#      enabled: false # Default: false
+#      root_ca: "/etc/sapphire/cert/ca.crt"
+#      pem_file: "/etc/sapphire/cert/server.pem"
+#      key_file: "/etc/sapphire/cert/server.key"
 
 ## Database Configurations
 #db:
@@ -12,12 +37,15 @@
 #  username: "amia" # Default: "amia"
 #  password: "2022" # Default: "2022"
 
-## Services
-services: # supported service names
-  asn:
-    add_existing_accounts:
-      enabled: true # allow for adding existing accounts to this service
-      auto: true    # add new accounts automatically to this service
+## Email Service
+#smtp: # SMTP email server config
+#  enabled: false # Default: false
+#  tls: true
+#  host: "smtp.office365.com"
+#  email: "email@amiasys.com"
+#  username: "email@amiasys.com"
+#  password: ""
+#  port: 587
 
 ## LDAP Configurations
 #ldap:
@@ -30,16 +58,6 @@ services: # supported service names
 #  ous:
 #    account: "People"
 #    group: "Group"
-
-## API Configurations
-#api:
-#  grpc:
-#    port: 50426 # gRPC API port. Default:50426
-#    tls:
-#      enabled: false # Default: false
-#      root_ca: "/etc/sapphire/cert/ca.crt"
-#      pem_file: "/etc/sapphire/cert/server.pem"
-#      key_file: "/etc/sapphire/cert/server.key"
 
 # Lock
 #
@@ -61,24 +79,20 @@ services: # supported service names
 #      dbs:
 #        - 0 # index: 0 ~ 15 (Default: 0)
 
-## Email Service
-#smtp: # SMTP email server config
-#  enabled: false # Default: false
-#  tls: true
-#  host: "smtp.office365.com"
-#  email: "email@amiasys.com"
-#  username: "email@amiasys.com"
-#  password: ""
-#  port: 587
+## Log Configurations
+#log:
+#  level: "info" # Supported log level: panic | fatal | error | warning | info | debug | trace. Default: info
+#  file: "/var/log/sapphire/iam.log" # Default: "/var/log/sapphire/iam.log"
 
 ## Account Configurations
 #account:
 #  special_key: "SpecialAccount@AmiaNetworks2025" # Used to create special accounts which skips MFA.
 #  password_algo: argon2id # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: argon2id
 #
-#  # Some fields can be set to unique. These fields can also be used as login identifier (similar to a username).
-#  # Note that if a field is set to NOT UNIQUE, and later on changed to UNIQUE, IAM will not check for existing records.
-#  # However, these accounts cannot log in with duplicate identifiers.
+#  # Username must be unique system wide, and it is the default identifier for login.
+#  # Other fields, like email and phone number, can also be used as login identifier, as soon as explicitly set below.
+#  # However, Sapphire only enforce the uniqueness at creatation of an account. Declaring a field as unique here doesn't
+#  # guarantee the uniqueness of existing values of this field. Sapphire won't allow login with non-unique values.
 #  unique_fields:
 #    email: true # Default: true
 #    phone: true # Default: true
@@ -113,6 +127,29 @@ services: # supported service names
 #    email: # Sending a code to your recovery email # Code format:  "^[0-9a-zA-Z-:.]{6,128}$"
 #      expire: 5 # Expiration time in minutes. Default 5 minutes.
 #      resend_interval: 1 # Resending interval in minutes. Default 1 minute
+#
+#  # Provisioning Rules at Account Creation
+#  # Though all accounts are unique in the system, the service may not share users by default.
+#  # At creation of an account FROM a service, Sapphire checks the provisioning rules below.
+#  # Rules related to a service which is not provisioned will be ignored.
+#  provisioning:
+#    mode: service_local # (service_local | global) Default: service_local
+#    rules: # When mode=service_local, the following rules will be applied to provision accounts across services.
+#      # add all asn/viewer_group users to swan/swan_ug_default
+#      - from:
+#          service: asn
+#          user_groups: [ viewer_group ]
+#        to:
+#          - service: swan
+#            user_groups: [ swan_ug_default ]
+#
+#      # add all swan/{admin,network_admin} to scarlette/network_viewer
+#      - from:
+#          service: swan
+#          user_groups: [ admin, network_admin ]
+#        to:
+#          - service: scarlette
+#            user_groups: [ network_viewer ]
 
 ## Authentication Configurations
 #authentication:
