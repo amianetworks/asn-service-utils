@@ -41,6 +41,7 @@ service Manager {
   rpc ListAvailableNetworks   (Empty)           returns (Network.List);       // List the network that the user can view/manage. Just the basic topo info, without node
   rpc DisplayNetworks         (Network.GetReq)  returns (Network.Display);    // Get subnetworks, nodes and link need display.
   rpc GetNetworkTopo          (Network.Id)      returns (Network);            // Get network topo info
+  rpc GetNetworkAvailableTiers (Network.Id)      returns (Network.Tiers);
   rpc CreateNetwork           (Network.Create)  returns (Empty);
   rpc UpdateNetwork           (Network.Update)  returns (Empty);
   rpc DeleteNetwork           (Network.Id)      returns (Empty);
@@ -341,6 +342,11 @@ message Network {
     int64 number_of_nodes = 1;
     int64 number_of_links = 2;
     int64 number_of_node_groups = 3;
+  }
+
+  message Tiers {
+    repeated string network_tiers = 1;
+    repeated string location_tiers = 2;
   }
 }
 
