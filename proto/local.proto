@@ -19,7 +19,7 @@ message Empty{}
 message ServiceReq {
   string name = 1;
   string version = 2;
-  bytes config = 3;
+  string config = 3;
 }
 
 message ServiceRes {
