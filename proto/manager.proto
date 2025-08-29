@@ -90,9 +90,9 @@ service Manager {
   rpc ResetServiceOnNode      (Ops.GeneralReq) returns (Empty);
 
   // Service API: Apply Ops (Internal Use)
-  rpc ApplyServiceOpsOnNetwork    (Ops.Request) returns (Empty);
-  rpc ApplyServiceOpsOnNodeGroup  (Ops.Request) returns (Empty);
-  rpc ApplyServiceOpsOnNode       (Ops.Request) returns (Empty);
+  rpc ApplyServiceOpsOnNetwork    (Ops.Request) returns (Ops.Responses);
+  rpc ApplyServiceOpsOnNodeGroup  (Ops.Request) returns (Ops.Responses);
+  rpc ApplyServiceOpsOnNode       (Ops.Request) returns (Ops.Responses);
 
   // Stats
   rpc GetStatsOfNetwork   (Network.Id)                returns (Network.Stats);      // Numbers of networks, nodes, links, node groups, etc., of a Network.
@@ -646,5 +646,17 @@ message Ops {
     string service_name = 2;
     string command = 3;
     string params = 4;
+  }
+
+  message Responses {
+    repeated Response responses = 1;
+  }
+
+  message Response {
+    string timestamp = 1;
+    string node_id = 2;
+    string framework_err = 3;
+    string service_response = 4;
+    string service_err = 5;
   }
 }
