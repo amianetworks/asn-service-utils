@@ -36,15 +36,15 @@ service Manager {
   rpc RemoveUsersFromGroup      (UserGroup.UserReq)   returns (Empty);
 
   // Network API
-  rpc ImportTopoFromFile      (NetworkTopo)     returns (Empty);              // Load topo networks through files
-  rpc ExportTopoFile          (Network.Id)      returns (NetworkTopo);        // Export topo to files
-  rpc ListAvailableNetworks   (Empty)           returns (Network.List);       // List the network that the user can view/manage. Just the basic topo info, without node
-  rpc DisplayNetworks         (Network.GetReq)  returns (Network.Display);    // Get subnetworks, nodes and link need display.
-  rpc GetNetworkTopo          (Network.Id)      returns (Network);            // Get network topo info
-  rpc GetNetworkAvailableTiers (Network.Id)      returns (Network.Tiers);
-  rpc CreateNetwork           (Network.Create)  returns (Empty);
-  rpc UpdateNetwork           (Network.Update)  returns (Empty);
-  rpc DeleteNetwork           (Network.Id)      returns (Empty);
+  rpc ImportTopoFromFile        (NetworkTopo)     returns (Empty);              // Load topo networks through files
+  rpc ExportTopoFile            (Network.Id)      returns (NetworkTopo);        // Export topo to files
+  rpc ListAvailableNetworks     (Empty)           returns (Network.List);       // List the network that the user can view/manage. Just the basic topo info, without node
+  rpc DisplayNetworks           (Network.GetReq)  returns (Network.Display);    // Get subnetworks, nodes and link need display.
+  rpc GetNetworkTopo            (Network.Id)      returns (Network.TopoLists);            // Get network topo info
+  rpc GetNetworkAvailableTiers  (Network.Id)      returns (Network.Tiers);
+  rpc CreateNetwork             (Network.Create)  returns (Empty);
+  rpc UpdateNetwork             (Network.Update)  returns (Empty);
+  rpc DeleteNetwork             (Network.Id)      returns (Empty);
 
   // Nodes API
   rpc GetNodesByIds         (Node.GetReq)     returns (Node.List);    // Node details.
@@ -295,6 +295,10 @@ message Network {
     }
 
     repeated Topo networks = 1;
+  }
+
+  message TopoLists {
+    repeated Network networks = 1;
   }
 
   message GetReq {
