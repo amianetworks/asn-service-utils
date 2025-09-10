@@ -40,7 +40,7 @@ service Manager {
   rpc ExportTopoFile            (Network.Id)      returns (NetworkTopo);        // Export topo to files
   rpc ListAvailableNetworks     (Empty)           returns (Network.List);       // List the network that the user can view/manage. Just the basic topo info, without node
   rpc DisplayNetworks           (Network.GetReq)  returns (Network.Display);    // Get subnetworks, nodes and link need display.
-  rpc GetNetworkTopo            (Network.Id)      returns (Network.TopoLists);            // Get network topo info
+  rpc GetNetworkTopo            (Empty)           returns (Network.TopoLists);  // Get network topo that the user can view/manage
   rpc GetNetworkAvailableTiers  (Network.Id)      returns (Network.Tiers);
   rpc CreateNetwork             (Network.Create)  returns (Empty);
   rpc UpdateNetwork             (Network.Update)  returns (Empty);
