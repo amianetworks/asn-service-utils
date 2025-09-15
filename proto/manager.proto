@@ -47,13 +47,14 @@ service Manager {
   rpc DeleteNetwork             (Network.Id)      returns (Empty);
 
   // Nodes API
-  rpc GetNodesByIds         (Node.GetReq)     returns (Node.List);    // Node details.
-  rpc GetNodesOfNetwork     (Node.ListReq)    returns (Node.Infos);   // All nodes in the network and its subnetworks.
-  rpc GetNodesOfNodeGroup   (NodeGroup.Id)    returns (Node.Infos);   // Nodes in the given Node Group.
-  rpc SetNodeServiceConfig  (Node.SetConfig)  returns (Empty);
-  rpc CreateNode            (Node.Create)     returns (Empty);
-  rpc UpdateNode            (Node.Update)     returns (Empty);
-  rpc DeleteNode            (Node.Id)         returns (Empty);
+  rpc GetNodesByIds         (Node.GetReq)                       returns (Node.List);    // Node details.
+  rpc GetNodesOfNetwork     (Node.ListReq)                      returns (Node.Infos);   // All nodes in the network and its subnetworks.
+  rpc GetNodesOfNodeGroup   (NodeGroup.Id)                      returns (Node.Infos);   // Nodes in the given Node Group.
+  rpc SetNodeServiceConfig  (Node.SetConfig)                    returns (Empty);
+  rpc CreateNode            (Node.Create)                       returns (Empty);
+  rpc UpdateNode            (Node.Update)                       returns (Empty);
+  rpc UpdateNodeInterface   (Node.NodeInfo.UpdateInterface)     returns (Empty);
+  rpc DeleteNode            (Node.Id)                           returns (Empty);
 
   // Node Group API
   rpc GetNodeGroupsByIds      (NodeGroup.Ids)       returns (NodeGroup.List); // Node Group info
@@ -471,6 +472,12 @@ message Node {
       string ip = 2;
       repeated string tags = 3;
     }
+
+    message UpdateInterface {
+      string node_id = 1;
+      Interface before = 2;
+      Interface after = 3;
+    }
   }
 
   message Stats {
@@ -513,8 +520,9 @@ message Node {
     message Service {
       string name = 1;
       ServiceState state = 2;
-      string config = 3;
-      string node_group_id = 4;
+      string message = 3;
+      string config = 4;
+      string node_group_id = 5;
     }
   }
 
