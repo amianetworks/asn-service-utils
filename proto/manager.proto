@@ -53,8 +53,10 @@ service Manager {
   rpc SetNodeServiceConfig  (Node.SetConfig)                    returns (Empty);
   rpc CreateNode            (Node.Create)                       returns (Empty);
   rpc UpdateNode            (Node.Update)                       returns (Empty);
-  rpc UpdateNodeInterface   (Node.NodeInfo.UpdateInterface)     returns (Empty);
   rpc DeleteNode            (Node.Id)                           returns (Empty);
+  rpc AddNodeInterface      (Node.NodeInfo.OperateInterface)     returns (Empty);
+  rpc UpdateNodeInterface   (Node.NodeInfo.OperateInterface)     returns (Empty);
+  rpc RemoveNodeInterface   (Node.NodeInfo.OperateInterface)     returns (Empty);
 
   // Node Group API
   rpc GetNodeGroupsByIds      (NodeGroup.Ids)       returns (NodeGroup.List); // Node Group info
@@ -473,10 +475,10 @@ message Node {
       repeated string tags = 3;
     }
 
-    message UpdateInterface {
+    message OperateInterface {
       string node_id = 1;
-      Interface before = 2;
-      Interface after = 3;
+      string name = 2;
+      Interface interface = 3;
     }
   }
 
