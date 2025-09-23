@@ -381,6 +381,12 @@ message Node {
   message List {
     repeated Node nodes = 1;
     repeated Link links = 2;
+    repeated GroupConfig group_configs = 3;
+
+    message GroupConfig {
+      string node_group_id = 1;
+      string config = 2;
+    }
   }
 
   message Id {
@@ -523,8 +529,9 @@ message Node {
       string name = 1;
       ServiceState state = 2;
       string message = 3;
-      string config = 4;
-      string node_group_id = 5;
+      bool customize_config = 4;
+      string config = 5;
+      string node_group_id = 6;
     }
   }
 
