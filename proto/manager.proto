@@ -47,16 +47,17 @@ service Manager {
   rpc DeleteNetwork             (Network.Id)      returns (Empty);
 
   // Nodes API
-  rpc GetNodesByIds         (Node.GetReq)                       returns (Node.List);    // Node details.
-  rpc GetNodesOfNetwork     (Node.ListReq)                      returns (Node.Infos);   // All nodes in the network and its subnetworks.
-  rpc GetNodesOfNodeGroup   (NodeGroup.Id)                      returns (Node.Infos);   // Nodes in the given Node Group.
-  rpc SetNodeServiceConfig  (Node.SetConfig)                    returns (Empty);
-  rpc CreateNode            (Node.Create)                       returns (Empty);
-  rpc UpdateNode            (Node.Update)                       returns (Empty);
-  rpc DeleteNode            (Node.Id)                           returns (Empty);
-  rpc AddNodeInterface      (Node.NodeInfo.OperateInterface)     returns (Empty);
-  rpc UpdateNodeInterface   (Node.NodeInfo.OperateInterface)     returns (Empty);
-  rpc RemoveNodeInterface   (Node.NodeInfo.OperateInterface)     returns (Empty);
+  rpc GetNodesByIds                (Node.GetReq)                        returns (Node.List);    // Node details.
+  rpc GetNodesOfNetwork            (Node.ListReq)                       returns (Node.Infos);   // All nodes in the network and its subnetworks.
+  rpc GetNodesOfNodeGroup          (NodeGroup.Id)                       returns (Node.Infos);   // Nodes in the given Node Group.
+  rpc GetNodesWithoutNodeGroup     (Node.ListReq)                       returns (Node.Infos);   // All nodes in the network without node group.
+  rpc SetNodeServiceConfig         (Node.SetConfig)                     returns (Empty);
+  rpc CreateNode                   (Node.Create)                        returns (Empty);
+  rpc UpdateNode                   (Node.Update)                        returns (Empty);
+  rpc DeleteNode                   (Node.Id)                            returns (Empty);
+  rpc AddNodeInterface             (Node.NodeInfo.OperateInterface)     returns (Empty);
+  rpc UpdateNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty);
+  rpc RemoveNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty);
 
   // Node Group API
   rpc GetNodeGroupsByIds      (NodeGroup.Ids)       returns (NodeGroup.List); // Node Group info
@@ -377,6 +378,7 @@ message Node {
   message ListReq {
     string network_id = 1;
     bool include_subnetwork = 2;
+    string service = 3;
   }
 
   message List {
@@ -403,6 +405,7 @@ message Node {
     Type type = 2;
     string name = 3;
     NodeState state = 4;
+    string message = 5;
   }
 
   message Display {
