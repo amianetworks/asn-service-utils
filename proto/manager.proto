@@ -317,10 +317,11 @@ message Network {
       string parent_network_id = 4;
       repeated string network_tiers = 5;
       Location location = 6;
+      repeated Node.Display nodes = 7;
     }
 
     repeated Info networks = 1;
-    repeated Node nodes = 2;
+    repeated Node.Display nodes = 2;
     repeated Link links = 3;
     repeated string location_tiers = 4;
   }
@@ -402,6 +403,14 @@ message Node {
     Type type = 2;
     string name = 3;
     NodeState state = 4;
+  }
+
+  message Display {
+    string node_id = 1;
+    Type type = 2;
+    string name = 3;
+    Location location = 4;
+    ServiceNode service_node = 5;
   }
 
   enum Type {
