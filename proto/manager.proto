@@ -148,9 +148,17 @@ message LoginRequest {
   string device_id = 3;
 }
 
+enum MfaMethod {
+  MFA_METHOD_UNSPECIFIED = 0;
+  MFA_METHOD_TOTP = 1;
+  MFA_METHOD_EMAIL = 2;
+  MFA_METHOD_SMS = 3;
+}
+
 message MfaLoginRequest {
   string access_token = 1;
-  string code = 2;
+  MfaMethod mfa_method = 2;
+  string code = 3;
 }
 
 message TokenRefreshRequest {
