@@ -400,6 +400,14 @@ func main() {
 			"INFLUXDB_USER_PASSWORD":  "2022",
 		},
 	}
+	asncD.Services["asn-rdb"] = DockerService{
+		ContainerName: "asn-rdb",
+		Image:         "redis:7.4.1",
+		Restart:       "always",
+		NetworkMode:   "host",
+		Ports:         nil,
+		Command:       "redis-server --save --appendonly yes --requirepass 2022 --port 6379 --bind 0.0.0.0",
+	}
 	asncD.Services["sapphire-iam"] = DockerService{
 		ContainerName: "sapphire-iam",
 		Image:         "registry.amiasys.com/sapphire.iam:25.11.0",
@@ -416,7 +424,7 @@ func main() {
 	asncD.Services["asnc"] = DockerService{
 		Image:       "registry.amiasys.com/asnc:25.11.1",
 		Restart:     "always",
-		DependsOn:   []string{"asn-mdb", "asn-idb", "sapphire-iam"},
+		DependsOn:   []string{"asn-mdb", "asn-idb", "asn-rdb", "sapphire-iam"},
 		NetworkMode: "host",
 		Volumes: []string{
 			"./asn-cert/:/asn/cert",

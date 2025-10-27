@@ -30,6 +30,14 @@ services:
       DOCKER_INFLUXDB_INIT_BUCKET: asn
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: Amiasys2025
       DOCKER_INFLUXDB_INIT_RETENTION: 0
+  asn-rdb:
+    container_name: asn-rdb
+    image: redis:7.4.1
+    restart: always   # auto restart the container if it fails
+    network_mode: "host"
+    command: [ "redis-server", "--save", "", "--appendonly", "yes", "--requirepass", "2022", "--port", "6379", "--bind", "0.0.0.0" ]
+    volumes:
+      - redis_data:/data
   sapphire-iam:
     image: registry.amiasys.com/sapphire.iam:25.11.0
     container_name: sapphire-iam
@@ -49,6 +57,7 @@ services:
     depends_on:
       - "asn-mdb"
       - "asn-idb"
+      - "asn-rdb"
       - "sapphire-iam"
     volumes:
       - ./asn-config/:/asn/config
@@ -60,4 +69,6 @@ volumes:
   mongodb_data:
     driver: local
   influxdb_data:
+    driver: local
+  redis_data:
     driver: local
