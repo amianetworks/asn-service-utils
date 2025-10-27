@@ -402,7 +402,7 @@ func main() {
 	}
 	asncD.Services["asn-rdb"] = DockerService{
 		ContainerName: "asn-rdb",
-		Image:         "redis:7.4.1",
+		Image:         "redis:8",
 		Restart:       "always",
 		NetworkMode:   "host",
 		Ports:         nil,

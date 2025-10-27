@@ -32,7 +32,7 @@ services:
       DOCKER_INFLUXDB_INIT_RETENTION: 0
   asn-rdb:
     container_name: asn-rdb
-    image: redis:7.4.1
+    image: redis:8
     restart: always   # auto restart the container if it fails
     network_mode: "host"
     command: [ "redis-server", "--save", "", "--appendonly", "yes", "--requirepass", "2022", "--port", "6379", "--bind", "0.0.0.0" ]
