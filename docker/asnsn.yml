@@ -3,7 +3,7 @@
 services:
   asnsn:
     restart: always
-    image: registry.amiasys.com/asnsn:25.9.4
+    image: registry.amiasys.com/asnsn:25.11.0
     ports:
       - "50052:50052"
     volumes:
