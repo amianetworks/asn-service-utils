@@ -64,6 +64,7 @@ services:
       - ./asn-log/:/var/log/asn/controller
       - ./asn-services:/usr/local/asn/controller/services
       - ./asn-web:/var/www/asn/controller
+      - ./asncli:/asn/bin/asncli
 
 volumes:
   mongodb_data:

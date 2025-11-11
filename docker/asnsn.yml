@@ -10,3 +10,4 @@ services:
       - ./config/:/asn/config
       - ./log/:/var/log/asn/servicenode
       - ./services:/usr/local/asn/servicenode/services
+      - ./asnsncli:/asn/bin/asnsncli
