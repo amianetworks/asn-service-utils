@@ -8,5 +8,6 @@ services:
       - "50052:50052"
     volumes:
       - ./config/:/asn/config
+      - ./service-config/:/etc/asn/servicenode/config
       - ./log/:/var/log/asn/servicenode
       - ./services:/usr/local/asn/servicenode/services
