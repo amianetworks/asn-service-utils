@@ -13,6 +13,10 @@
 #SERVICE_UTILS_DIR
 
 #------------------------------------------------------------------------------#
+
+include $(BUILD_ENV_ASN_VERSION_FILE)
+
+#------------------------------------------------------------------------------#
 service-build-: update_service_utils
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building $(BUILD_ENV_IMAGE):latest"
