@@ -3,11 +3,12 @@
 #$(info service.plugin.builder.mk loaded)
 
 # The following variables must be definded. (predefined in make/config.mk)
-#DEP_VERSION_ASN
+#DEP_VERSION_API
 #BUILD_ENV_BASE_IMAGE
 #BUILD_ENV_BASE_DOCKERFILE
 #BUILD_ENV_IMAGE
 #BUILD_ENV_DOCKERFILE
+#BUILD_ENV_ASN_VERSION_FILE
 #SSH_PRIVATE_KEY
 #SERVICE_UTILS_DIR
 
