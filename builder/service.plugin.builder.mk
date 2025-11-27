@@ -189,4 +189,4 @@ show-prepare: update_service_utils
 
 #------------------------------------------------------------------------------#
 update_service_utils:
-	@cd $(SERVICE_UTILS_DIR) && git fetch && git checkout v$(DEP_VERSION_ASN) && git pull
+	@cd $(SERVICE_UTILS_DIR) && git fetch && git checkout v$(DEP_VERSION_API) && git pull
