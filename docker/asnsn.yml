@@ -3,10 +3,11 @@
 services:
   asnsn:
     restart: always
-    image: registry.amiasys.com/asnsn:25.11.16
+    image: registry.amiasys.com/asnsn:25.11.17
     ports:
       - "50052:50052"
     volumes:
+      - ./cert/:/asn/cert
       - ./config/:/asn/config
       - ./service-config/:/etc/asn/servicenode/config
       - ./log/:/var/log/asn/servicenode
