@@ -45,16 +45,13 @@
 #         ip: <CIDR>
 #         tags: [control | data | management]
 #     ipmi:                                 # Optional
-#       verify: <bool>                      # Whether these infos will be verified when SN reports them.
 #       ip: <ip>
 #       username: <text>
 #       key: <text>
 #     management:                           # Optional, usually omitted
-#       verify: <bool>                      # Whether these infos will be verified when SN reports them.
 #       hostname: <name.domain>
 #       ip: <ip>
 #     info:                                 # Optional
-#       verify: <bool>                      # Whether these infos will be verified when SN reports them.
 #       vendor: <text>
 #       model: <text>
 #       sn: <text>
@@ -153,16 +150,13 @@ nodes:
         ip: 10.0.3.1/24
         tags: [ data ]
     ipmi:
-      verify: true
       ip: 192.168.1.10
       username: <USERNAME>
       key: <KEY>
     management:
-      verify: true
       hostname: r1.asn.net
       ip: 192.168.100.100
     info:
-      verify: true
       vendor: xxx
       model: xxx
       sn: xxx
@@ -171,16 +165,13 @@ nodes:
     desc: "California core switch"
     managed: true
     ipmi:
-      verify: true
       ip: 192.168.1.20
       username: <USERNAME>
       key: <KEY>
     management:
-      verify: true
       hostname: s1.asn.net
       ip: 192.168.100.100
     info:
-      verify: true
       vendor: xxx
       model: xxx
       sn: xxx
