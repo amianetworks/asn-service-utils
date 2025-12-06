@@ -155,7 +155,7 @@ deb-%:
 
 	@# Generate control file from service-specific control template
 	@sed -e "s/@VERSION@/$(VERSION_BUILD)/" \
-	     -e "s/@DEPENDS@/$(DEP_VERSION_ASN)/" \
+	     -e "s/@DEPENDS@/$(DEP_ASN_VERSION)/" \
 	     -e "s/@SERVICE@/$(SERVICE_NAME)/" \
 	     $(SERVICE_CONTROL) > $(DEB_SVC_DIR)/DEBIAN/control
 
@@ -189,4 +189,4 @@ show-prepare: update_service_utils
 
 #------------------------------------------------------------------------------#
 update_service_utils:
-	@cd $(SERVICE_UTILS_DIR) && git fetch && git checkout v$(DEP_VERSION_API) && git pull
+	@cd $(SERVICE_UTILS_DIR) && git fetch && git checkout v$(ASN_SERVICE_API_VERSION) && git pull
