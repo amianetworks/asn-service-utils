@@ -51,9 +51,8 @@ prepare-service-builder-base: update_service_utils
 	@echo ""
 
 # Check Prepare for base docker image to build ASN Service Plugins.
-check-service-builder-base: update_service_utils
+check-service-builder-base:
 	@docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^$(BUILD_ENV_BASE_IMAGE)(:|$$)' || echo "No Builder Base Image Found."
-
 
 # Rebuild everything from scratch.
 service-build-from-scratch: update_service_utils
@@ -98,7 +97,7 @@ service-build-from-scratch: update_service_utils
 # - Target 'build.so' is executed to build .so files.
 # - Target 'build.deb' is executed to build .deb files.
 # - No Docker images built here. Separate targets, build.docker*, are available.
-service-build-once: update_service_utils
+service-build-once:
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building $(BUILD_ENV_IMAGE):latest"
 
@@ -180,7 +179,7 @@ clean-deb-%:
 	@rm -rf $DEB_SVC_DIR
 
 # Debug purpose
-show-prepare: update_service_utils
+show-prepare:
 	@echo "Current working directory: ${PWD}"
 	@echo "Starting $(BUILD_ENV_BASE_IMAGE):latest"
 	docker run --rm --platform linux/amd64 --name $(BUILD_ENV_BASE_IMAGE) $(BUILD_ENV_BASE_IMAGE):latest ls -l /
