@@ -132,24 +132,22 @@ services_provisioned: [ asn, swan, scarlette ]
 #  # Though all accounts are unique in the system, the service may not share users by default.
 #  # At creation of an account FROM a service, Sapphire checks the provisioning rules below.
 #  # Rules related to a service which is not provisioned will be ignored.
-#  provisioning:
-#    mode: service_local # (service_local | global) Default: service_local
-#    rules: # When mode=service_local, the following rules will be applied to provision accounts across services.
-#      # add all asn/viewer_group users to swan/swan_ug_default
-#      - from:
-#          service: asn
-#          user_groups: [ viewer_group ]
-#        to:
-#          - service: swan
-#            user_groups: [ swan_ug_default ]
+#  provisioning_rules: # The following rules will be applied to provision accounts across services:
+#    # add all asn/viewer_group users to swan/swan_ug_default
+#    - from:
+#        service: asn
+#        user_groups: [ viewer_group ]
+#      to:
+#        - service: swan
+#          user_groups: [ swan_ug_default ]
 #
-#      # add all swan/{admin,network_admin} to scarlette/network_viewer
-#      - from:
-#          service: swan
-#          user_groups: [ admin, network_admin ]
-#        to:
-#          - service: scarlette
-#            user_groups: [ network_viewer ]
+#    # add all swan/{admin,network_admin} to scarlette/network_viewer
+#    - from:
+#        service: swan
+#        user_groups: [ admin, network_admin ]
+#      to:
+#        - service: scarlette
+#          user_groups: [ network_viewer ]
 
 ## Authentication Configurations
 #authentication:
