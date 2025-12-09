@@ -3,7 +3,7 @@
 #$(info service.plugin.builder.mk loaded)
 
 # The following variables must be definded. (predefined in make/config.mk)
-#DEP_VERSION_API
+#ASN_SERVICE_API_VERSION
 #BUILD_ENV_BASE_IMAGE
 #BUILD_ENV_BASE_DOCKERFILE
 #BUILD_ENV_IMAGE
