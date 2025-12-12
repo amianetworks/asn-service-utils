@@ -12,23 +12,23 @@ service Manager {
   rpc UpdatePort  (UpdatePortReq) returns (Empty);
 
   // Authentication & Authorization API
-  rpc Login           (LoginRequest)        returns (LoginResponse);
-  rpc MfaLogin        (MfaLoginRequest)     returns (LoginResponse);
-  rpc TokenRefresh    (TokenRefreshRequest) returns (LoginResponse);
-  rpc ResetPassword   (LoginRequest)        returns (Empty);
-  rpc Logout          (Empty)               returns (Empty);
-  rpc GetUserByToken  (Empty)               returns (User);
+  rpc Login           (LoginRequest)          returns (LoginResponse);
+  rpc MfaLogin        (MfaLoginRequest)       returns (LoginResponse);
+  rpc TokenRefresh    (TokenRefreshRequest)   returns (LoginResponse);
+  rpc ResetPassword   (ResetPasswordRequest)  returns (Empty);
+  rpc Logout          (Empty)                 returns (Empty);
+  rpc GetUserByToken  (Empty)                 returns (User);
 
   // User API
-  rpc GetUsersByNames (User.GetReq)         returns (User.List);  // User Info by name
-  rpc ListUsers       (Node.Service.Names)  returns (User.Usernames);
-  rpc CreateUser      (User.Operate)         returns (Empty);
-  rpc UpdateUser      (User.Operate)         returns (Empty);
-  rpc DeleteUser      (User.Name)           returns (Empty);
+  rpc GetUsersByIDs   (User.GetReq)         returns (User.List);  // User Info by name
+  rpc ListUsers       (Node.Service.Names)  returns (User.ServiceUserIDs);
+  rpc CreateUser      (User.Create)         returns (Empty);
+  rpc UpdateUser      (User.Update)         returns (Empty);
+  rpc DeleteUser      (User.ID)             returns (Empty);
 
   // User Group API
   rpc GetUserGroups             (UserGroup.GetReq)    returns (UserGroup.List);         // User Group info by name
-  rpc ListUserGroups            (Empty)   returns (UserGroup.Names);
+  rpc ListUserGroups            (Empty)               returns (UserGroup.Names);
   rpc CreateUserGroup           (UserGroup.Create)    returns (Empty);
   rpc UpdateUserGroup           (UserGroup.Update)    returns (Empty);
   rpc DeleteUserGroup           (UserGroup.Name)      returns (Empty);
@@ -73,7 +73,7 @@ service Manager {
   rpc DeleteLink        (Link.Id)      returns (Empty);
 
   // Service API: Info or Name? ???
-  rpc GetAllServices          (IncludeAsn)         returns (Node.Service.Names);  // All available service names.
+  rpc GetAllServices          (IncludeAsn)    returns (Node.Service.Names);  // All available service names.
   rpc GetServicesOfNetwork    (Network.Id)    returns (Node.Service.Names);       // Services available in the network.
   rpc GetServicesOfNodeGroup  (NodeGroup.Id)  returns (Node.Service.Names);       // Services available in the node group.
   rpc GetServicesOfNode       (Node.Id)       returns (Node.Service.Names);       // Services available on the node.
@@ -166,6 +166,11 @@ message TokenRefreshRequest {
   string refresh_token = 2;
 }
 
+message ResetPasswordRequest {
+  string id = 1;
+  string password = 2;
+}
+
 message LoginResponse {
   string access_token = 1;
   string refresh_token = 2;
@@ -176,34 +181,41 @@ message LoginResponse {
  * User and User Group
  */
 message User {
-  string username = 1;
-  string email = 2;
-  Phone phone = 3;
-  UserGroup.Names groups = 4;
-  repeated UserGroup.Access accesses = 5;
+  string id = 1;
+  string username = 2;
+  string email = 3;
+  Phone phone = 4;
+  UserGroup.Names groups = 5;
+  repeated UserGroup.Access accesses = 6;
 
-  message Name {
-    string username = 1;
+  message ID {
+    string id = 1;
   }
 
-  message Names {
-    repeated string names = 1;
+  message IDs {
+    repeated string ids = 1;
   }
 
   message GetReq {
     string service = 1;
-    repeated string names = 2;
+    repeated string ids = 2;
   }
 
-  message Usernames {
-    map<string, Names> usernames = 1;
+  message ServiceUserIDs {
+    map<string, IDs> ids = 1;
   }
 
-  message Operate {
+  message Create {
     string username = 1;
     string password = 2;
     string email = 3;
     Phone phone = 4;
+  }
+
+  message Update {
+    string id = 1;
+    string email = 2;
+    Phone phone = 3;
   }
 
   message ListReq {
@@ -227,7 +239,7 @@ message User {
 message UserGroup {
   string name = 1;
   int64 user_total = 2;
-  repeated string usernames = 3;
+  repeated string account_ids = 3;
   bool default = 4;
   Type type = 5;
   string remark = 6;
@@ -272,7 +284,7 @@ message UserGroup {
 
   message UserReq {
     string user_group_name = 1;
-    repeated string usernames = 2;
+    repeated string account_ids = 2;
   }
 
   enum Type {
