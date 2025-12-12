@@ -1,9 +1,9 @@
-# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+# Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
 services:
   asnsn:
     restart: always
-    image: registry.amiasys.com/asnsn:25.12.0
+    image: registry.amiasys.com/asnsn:26.0.0
     ports:
       - "50052:50052"
     volumes:

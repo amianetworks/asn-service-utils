@@ -1,4 +1,4 @@
-// Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+// Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
 package main
 
@@ -410,7 +410,7 @@ func main() {
 	}
 	asncD.Services["sapphire-iam"] = DockerService{
 		ContainerName: "sapphire-iam",
-		Image:         "registry.amiasys.com/sapphire.iam:25.12.2",
+		Image:         "registry.amiasys.com/sapphire.iam:26.0.0",
 		Restart:       "always",
 		Privileged:    true,
 		DependsOn:     []string{"asn-mdb"},
@@ -422,7 +422,7 @@ func main() {
 		},
 	}
 	asncD.Services["asnc"] = DockerService{
-		Image:       "registry.amiasys.com/asnc:25.12.0",
+		Image:       "registry.amiasys.com/asnc:26.0.0",
 		Restart:     "always",
 		DependsOn:   []string{"asn-mdb", "asn-idb", "asn-rdb", "sapphire-iam"},
 		NetworkMode: "host",
@@ -537,7 +537,7 @@ func main() {
 		asnD := asncDocker{
 			Services: map[string]DockerService{
 				"asnsn": {
-					Image:         "registry.amiasys.com/asnsn:25.12.0",
+					Image:         "registry.amiasys.com/asnsn:26.0.0",
 					ContainerName: fmt.Sprintf("network-node%d-switch%d", i, i),
 					Restart:       "always",
 					Volumes: []string{
@@ -609,7 +609,7 @@ echo "All tasks completed."`
 		panic(err)
 	}
 
-	ymlIam := `# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+	ymlIam := `# Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
 ## Log Configurations
 #log:

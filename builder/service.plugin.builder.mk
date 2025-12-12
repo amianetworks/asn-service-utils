@@ -1,4 +1,4 @@
-# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+# Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
 #$(info service.plugin.builder.mk loaded)
 

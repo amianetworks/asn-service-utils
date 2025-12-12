@@ -1,4 +1,4 @@
-# Copyright 2025 Amiasys Corporation and/or its affiliates. All rights reserved.
+# Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
 # Build base build image for ASN Service Plugins
 
