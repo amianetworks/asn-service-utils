@@ -154,7 +154,7 @@ deb-%:
 
 	@# Generate control file from service-specific control template
 	@sed -e "s/@VERSION@/$(VERSION_BUILD)/" \
-	     -e "s/@DEPENDS@/$(DEP_ASN_VERSION)/" \
+	     -e "s/@DEPENDS@/$(DEP_VERSION_ASN)/" \
 	     -e "s/@SERVICE@/$(SERVICE_NAME)/" \
 	     $(SERVICE_CONTROL) > $(DEB_SVC_DIR)/DEBIAN/control
 
