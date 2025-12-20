@@ -21,7 +21,7 @@ service Manager {
 
   // User API
   rpc GetUsersByIDs   (User.GetReq)         returns (User.List);  // User Info by name
-  rpc ListUsers       (Node.Service.Names)  returns (User.ServiceUserIDs);
+  rpc ListUsers       (Node.Service.Names)  returns (User.ServiceUsers);
   rpc CreateUser      (User.Create)         returns (Empty);
   rpc UpdateUser      (User.Update)         returns (Empty);
   rpc DeleteUser      (User.ID)             returns (Empty);
@@ -201,8 +201,17 @@ message User {
     repeated string ids = 2;
   }
 
-  message ServiceUserIDs {
-    map<string, IDs> ids = 1;
+  message ServiceUsers {
+    map<string, Users> users = 1;
+
+    message Users {
+      repeated User users = 1;
+
+      message User {
+        string id = 1;
+        string username = 2;
+      }
+    }
   }
 
   message Create {
