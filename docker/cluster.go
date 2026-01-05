@@ -428,7 +428,7 @@ func main() {
 		NetworkMode: "host",
 		Volumes: []string{
 			"./asn-cert/:/asn/cert",
-			"./asn-config/:/asn/config",
+			"./asn-config/:/etc/asn/controller/config",
 			"./asn-log/asn/:/var/log/asn/controller",
 			"./asn-services:/usr/local/asn/controller/services",
 			"./asn-web:/var/www/asnc/",
@@ -541,7 +541,7 @@ func main() {
 					ContainerName: fmt.Sprintf("network-node%d-switch%d", i, i),
 					Restart:       "always",
 					Volumes: []string{
-						"./config/:/asn/config",
+						"./config/:/etc/asn/servicenode/config",
 						"./log/:/var/log/asnsn/",
 						"../service:/usr/local/asn/servicenode/services/",
 						"./asnsncli:/asn/bin/asnsncli",

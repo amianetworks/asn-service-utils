@@ -60,7 +60,7 @@ services:
       - "asn-rdb"
       - "sapphire-iam"
     volumes:
-      - ./asn-config/:/asn/config
+      - ./asn-config/:/etc/asn/controller/config
       - ./asn-log/:/var/log/asn/controller
       - ./asn-services:/usr/local/asn/controller/services
       - ./asn-web:/var/www/asn/controller
