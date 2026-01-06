@@ -139,9 +139,6 @@ deb-%:
 	$(eval SERVICE_NAME := $*)
 	$(eval SERVICE_CONFIG := debian/deb.$(SERVICE_NAME).config)
 	$(eval SERVICE_CONTROL := debian/deb.$(SERVICE_NAME).control)
-	@if [ ! -f $(SERVICE_CONFIG) ]; then \
-		echo "Missing config: $(SERVICE_CONFIG)"; exit 1; \
-	fi
 	@if [ ! -f $(SERVICE_CONTROL) ]; then \
 		echo "Missing control: $(SERVICE_CONTROL)"; exit 1; \
 	fi
