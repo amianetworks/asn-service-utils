@@ -12,10 +12,10 @@ import (
 )
 
 type ASNC struct {
-	Mode    string             `yaml:"mode"`
-	Admin   Admin              `yaml:"admin"`
-	Network Network            `yaml:"network"`
-	Service map[string]Service `yaml:"service"`
+	Mode    string    `yaml:"mode"`
+	Admin   Admin     `yaml:"admin"`
+	Network Network   `yaml:"network"`
+	Service []Service `yaml:"service"`
 }
 
 type Admin struct {
@@ -109,8 +109,8 @@ func main() {
 			Password:        "2026@Amiasys",
 		},
 		Network: Network{},
-		Service: map[string]Service{
-			"myservice": {
+		Service: []Service{
+			{
 				Name:   "myservice",
 				Plugin: "myservice.so",
 			},
