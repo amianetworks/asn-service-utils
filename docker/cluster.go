@@ -268,7 +268,7 @@ func main() {
 					Restart:       "always",
 					Volumes: []string{
 						"./config/:/etc/asn/servicenode/config",
-						"./log/:/var/log/asnsn/",
+						"./log/:/var/log/asn/servicenode/",
 						"../service:/usr/local/asn/servicenode/services/",
 					},
 				}},
