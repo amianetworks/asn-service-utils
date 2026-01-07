@@ -13,9 +13,14 @@ import (
 
 type ASNC struct {
 	Mode    string    `yaml:"mode"`
+	API     API       `yaml:"api"`
 	Admin   Admin     `yaml:"admin"`
 	Network Network   `yaml:"network"`
 	Service []Service `yaml:"service"`
+}
+
+type API struct {
+	GrpcM string `yaml:"grpc_m"`
 }
 
 type Admin struct {
@@ -103,6 +108,9 @@ func main() {
 
 	asnConf := ASNC{
 		Mode: "dev",
+		API: API{
+			GrpcM: "localhost:12766",
+		},
 		Admin: Admin{
 			CreateWhenStart: true,
 			Name:            "asn-supervisor",
