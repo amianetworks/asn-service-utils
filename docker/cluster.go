@@ -193,7 +193,6 @@ func main() {
 			"./asn-log/asn/:/var/log/asn/controller",
 			"./asn-services:/usr/local/asn/controller/services",
 			"./asn-web:/var/www/asnc/",
-			"./asncli:/asn/bin/asncli",
 		},
 	}
 
@@ -263,7 +262,6 @@ func main() {
 						"./config/:/etc/asn/servicenode/config",
 						"./log/:/var/log/asnsn/",
 						"../service:/usr/local/asn/servicenode/services/",
-						"./asnsncli:/asn/bin/asnsncli",
 					},
 				}},
 		}
