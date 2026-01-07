@@ -3,10 +3,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"strconv"
 
@@ -14,114 +12,25 @@ import (
 )
 
 type ASNC struct {
-	Log         Log                `yaml:"log"`
-	DB          DBPair             `yaml:"db"`
-	Iam         Iam                `yaml:"iam"`
-	Grpc        GRPC               `yaml:"grpc"`
-	Restful     ASNCRestful        `yaml:"restful"`
-	Network     Network            `yaml:"network"`
-	ServiceNode ServiceNode        `yaml:"servicenode"`
-	Service     map[string]Service `yaml:"service"`
+	Mode    string             `yaml:"mode"`
+	Admin   Admin              `yaml:"admin"`
+	Network Network            `yaml:"network"`
+	Service map[string]Service `yaml:"service"`
 }
 
-type ASNCRestful struct {
-	Port uint16 `yaml:"port"`
-}
-
-type Log struct {
-	Demo   bool      `yaml:"demo"`
-	Prefix string    `yaml:"prefix"`
-	ALog   LogConfig `yaml:"api_log"`
-	RLog   LogConfig `yaml:"runtime_log"`
-	ELog   LogConfig `yaml:"entity_log"`
-	PLog   LogConfig `yaml:"perf_log"`
-}
-
-type LogConfig struct {
-	FileName string `yaml:"filename"`
-	Level    string `yaml:"level"`
-}
-
-type DB struct {
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
-	Database string `yaml:"database_name"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-}
-
-type DBPair struct {
-	MongoDB  DB `yaml:"mongodb"`
-	InfluxDB DB `yaml:"influxdb"`
-}
-
-type Iam struct {
-	Provider string `yaml:"provider"`
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
-	TLS      bool   `yaml:"tls"`
-	CaCert   string `yaml:"ca_cert"`
-	CertPem  string `yaml:"cert_pem"`
-	KeyPem   string `yaml:"key_pem"`
+type Admin struct {
+	CreateWhenStart bool   `yaml:"create_when_start"`
+	Name            string `yaml:"name"`
+	Password        string `yaml:"password"`
 }
 
 type Network struct {
-	Id          string `yaml:"id"`
-	TopoFile    string `yaml:"topo_file"`
-	TokenSecret string `yaml:"token_secret"`
-}
-
-type GRPC struct {
-	Port uint64 `yaml:"port"`
-}
-
-type ServiceNode struct {
-	KeepAlive int `yaml:"keepalive"`
+	TopoFile string `yaml:"topo_file"`
 }
 
 type Service struct {
-	AutoStart bool           `yaml:"auto_start"`
-	Version   ServiceVersion `yaml:"version"`
-	DB        DBPair         `yaml:"db"`
-}
-
-type ServiceVersion struct {
-	Min string `yaml:"min"`
-	Max string `yaml:"max"`
-}
-
-type MyNetwork struct {
-	NetworkID   string     `json:"network_id"`
-	NetworkName string     `json:"network_name"`
-	Topology    []Topology `json:"topology"`
-}
-
-type Topology struct {
-	NodeName       string   `json:"node_name"`
-	NodeType       string   `json:"nodeType"`
-	Location       Location `json:"location"`
-	Label          string   `json:"label"`
-	ExternalLinked []string `json:"external_linked"`
-	SubNodes       []Node   `json:"sub_nodes"`
-}
-
-type Location struct {
-	Coordinates Coordinate `json:"coordinates"`
-	Address     string     `json:"address"`
-}
-
-type Coordinate struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-}
-
-type Node struct {
-	NodeName       string   `json:"node_name"`
-	NodeType       string   `json:"nodeType"`
-	Location       Location `json:"location"`
-	Label          string   `json:"label"`
-	ExternalLinked []string `json:"external_linked"`
-	InternalLinked []string `json:"internal_linked"`
+	Name   string `yaml:"name"`
+	Plugin string `yaml:"plugin"`
 }
 
 type asncDocker struct {
@@ -148,54 +57,30 @@ type Volume struct {
 }
 
 type ASNSN struct {
-	Log        Log               `yaml:"log"`
-	General    General           `yaml:"general"`
-	Controller Controller        `yaml:"controller"`
-	Tsdb       TSDB              `yaml:"tsdb"`
-	Service    SNService         `yaml:"service"`
-	NetIf      map[string]string `yaml:"netif"`
+	General    General    `yaml:"general"`
+	Controller Controller `yaml:"controller"`
 }
 
 type General struct {
-	Mode            string `yaml:"mode"`
-	ID              string `yaml:"id"`
-	NetworkPath     string `yaml:"network_path"`
-	NodeName        string `yaml:"node_name"`
-	Type            string `yaml:"type"`
-	NetworkCapacity int    `yaml:"network_capacity"`
-	CliPort         int    `yaml:"cli_port"`
+	Mode     string `yaml:"mode"`
+	NodeName string `yaml:"node_name"`
+	Type     string `yaml:"type"`
 }
 
 type Controller struct {
-	IP            string `yaml:"ip"`
-	Port          int    `yaml:"port"`
-	RetryInterval int    `yaml:"retry_interval"`
-	TokenSecret   string `yaml:"token_secret"`
-}
-
-type TSDB struct {
-	Type     string `yaml:"type"`
-	Name     string `yaml:"name"`
-	IP       string `yaml:"ip"`
-	Port     int    `yaml:"port"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-}
-
-type SNService struct {
-	ConfigTimeout int `yaml:"config_timeout"`
+	Address string `yaml:"address"`
 }
 
 func main() {
 	var n int
 	var err error
 	if len(os.Args) != 2 {
-		log.Println("args error, using default value: 100")
+		log.Println("args error, using default value: 1")
 		n = 1
 	} else {
 		n, err = strconv.Atoi(os.Args[1])
 		if err != nil {
-			log.Println("args error, using default value: 100")
+			log.Println("args error, using default value: 1")
 			n = 1
 		}
 	}
@@ -217,84 +102,17 @@ func main() {
 	}
 
 	asnConf := ASNC{
-		Log: Log{
-			Demo:   true,
-			Prefix: "asn",
-			ALog: LogConfig{
-				FileName: "api.log",
-				Level:    "info",
-			},
-			RLog: LogConfig{
-				FileName: "runtime.log",
-				Level:    "info",
-			},
-			ELog: LogConfig{
-				FileName: "entity.log",
-				Level:    "info",
-			},
-			PLog: LogConfig{
-				FileName: "perf.log",
-				Level:    "info",
-			},
+		Mode: "dev",
+		Admin: Admin{
+			CreateWhenStart: true,
+			Name:            "asn-supervisor",
+			Password:        "2026@Amiasys",
 		},
-		DB: DBPair{
-			MongoDB: DB{
-				Host:     "localhost",
-				Port:     "27017",
-				Database: "asn",
-				Username: "amia",
-				Password: "2022",
-			},
-			InfluxDB: DB{
-				Host:     "localhost",
-				Port:     "8086",
-				Database: "asn",
-				Username: "amia",
-				Password: "2022",
-			},
-		},
-		Iam: Iam{
-			Provider: "sapphire",
-			Host:     "localhost",
-			Port:     "50426",
-			TLS:      false,
-			CaCert:   "/etc/asnc/cert/ca-cert",
-			CertPem:  "/etc/asnc/cert/cert-pem",
-			KeyPem:   "/etc/asnc/cert/key-pem",
-		},
-		Grpc: GRPC{50051},
-		Restful: ASNCRestful{
-			Port: 58080,
-		},
-		Network: Network{
-			Id:          "network1",
-			TopoFile:    "/etc/asnc/config/100nodes-topology.json",
-			TokenSecret: "asn-example-token-secret/FIXME_when_deploy",
-		},
-		ServiceNode: ServiceNode{3},
+		Network: Network{},
 		Service: map[string]Service{
 			"myservice": {
-				AutoStart: false,
-				Version: ServiceVersion{
-					Min: "v2.2.0",
-					Max: "v2.2.0",
-				},
-				DB: DBPair{
-					MongoDB: DB{
-						Host:     "localhost",
-						Port:     "27017",
-						Database: "asn",
-						Username: "amia",
-						Password: "2022",
-					},
-					InfluxDB: DB{
-						Host:     "localhost",
-						Port:     "8086",
-						Database: "asn",
-						Username: "amia",
-						Password: "2022",
-					},
-				},
+				Name:   "myservice",
+				Plugin: "myservice.so",
 			},
 		},
 	}
@@ -304,63 +122,6 @@ func main() {
 		panic(err)
 	}
 	err = os.WriteFile("controller/config/asn.conf", asnYaml, 0644)
-	if err != nil {
-		panic(err)
-	}
-
-	cliConf := map[string]string{
-		"server": "localhost",
-		"port":   "50051",
-		"token":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NDcwMTk0NDUsInVzZXJuYW1lIjoiYXNuLXN1cGVydmlzb3IifQ.8UlBi9qlL3NxXYllKp3NN2WUBwSs4Q1sqKvfMk3MRwI",
-	}
-	cliYaml, err := yaml.Marshal(cliConf)
-	if err != nil {
-		panic(err)
-	}
-	err = os.WriteFile("controller/config/cli.conf", cliYaml, 0644)
-	if err != nil {
-		panic(err)
-	}
-
-	// You can decide the topology network
-	network := MyNetwork{
-		NetworkID:   "network1",
-		NetworkName: "Network with 100 nodes",
-		Topology:    []Topology{},
-	}
-
-	for i := 1; i <= n; i++ {
-		location := Location{
-			Coordinates: Coordinate{
-				Latitude:  -90.0 + rand.Float64()*180,
-				Longitude: -180.0 + rand.Float64()*360,
-			},
-			Address: fmt.Sprintf("%d street", i),
-		}
-		network.Topology = append(network.Topology, Topology{
-			NodeName:       fmt.Sprintf("node%d", i),
-			NodeType:       "networkNode",
-			Location:       location,
-			Label:          "CORE",
-			ExternalLinked: []string{},
-			SubNodes: []Node{{
-				NodeName:       fmt.Sprintf("switch%d", i),
-				NodeType:       "switch",
-				Location:       location,
-				Label:          "CORE",
-				ExternalLinked: []string{},
-				InternalLinked: []string{},
-			}},
-		})
-	}
-
-	bytes, err := json.MarshalIndent(network, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-
-	fileName := "controller/config/100nodes-topology.json"
-	err = os.WriteFile(fileName, bytes, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -457,7 +218,7 @@ func main() {
 	}
 
 	for i := 1; i <= n; i++ {
-		fileName = fmt.Sprintf("sn%d", i)
+		fileName := fmt.Sprintf("sn%d", i)
 		err = os.MkdirAll("servicenode/"+fileName, 0755)
 		if err != nil {
 			panic(err)
@@ -474,55 +235,13 @@ func main() {
 		}
 
 		asnC := ASNSN{
-			Log: Log{
-				Prefix: "asn",
-				ALog: LogConfig{
-					FileName: "api.log",
-					Level:    "info",
-				},
-				RLog: LogConfig{
-					FileName: "runtime.log",
-					Level:    "info",
-				},
-				ELog: LogConfig{
-					FileName: "entity.log",
-					Level:    "info",
-				},
-				PLog: LogConfig{
-					FileName: "perf.log",
-					Level:    "info",
-				},
-			},
 			General: General{
-				Mode:            "cluster",
-				ID:              "",
-				NetworkPath:     fmt.Sprintf("network1.node%d.switch%d", i, i),
-				NodeName:        fmt.Sprintf("switch%d", i),
-				Type:            "server",
-				NetworkCapacity: 1024,
-				CliPort:         50052,
+				Mode:     "cluster",
+				NodeName: fmt.Sprintf("server%d", i),
+				Type:     "server",
 			},
 			Controller: Controller{
-				IP:            "172.17.0.1",
-				Port:          50051,
-				RetryInterval: 5,
-				TokenSecret:   "asn-example-token-secret/FIXME_when_deploy",
-			},
-			Tsdb: TSDB{
-				Type:     "influxdbv1",
-				Name:     "asn-dev",
-				IP:       "172.17.0.1",
-				Port:     8086,
-				Username: "amia",
-				Password: "2022",
-			},
-			Service: SNService{
-				ConfigTimeout: 20,
-			},
-			NetIf: map[string]string{
-				"data":       "eth0",
-				"control":    "eth0",
-				"management": "eth0",
+				Address: "172.17.0.1:12762",
 			},
 		}
 		asnCFYaml, err := yaml.Marshal(asnC)
@@ -538,7 +257,7 @@ func main() {
 			Services: map[string]DockerService{
 				"asnsn": {
 					Image:         "registry.amiasys.com/asnsn:26.1.1",
-					ContainerName: fmt.Sprintf("network-node%d-switch%d", i, i),
+					ContainerName: fmt.Sprintf("network-node%d-server%d", i, i),
 					Restart:       "always",
 					Volumes: []string{
 						"./config/:/etc/asn/servicenode/config",
@@ -558,16 +277,16 @@ func main() {
 		}
 	}
 
-	shellUp := `#!/bin/bash
+	shellUp := fmt.Sprintf(`#!/bin/bash
 # 进入 controller 文件夹并启动 Docker Compose
 cd controller || { echo "Failed to enter controller folder"; exit 1; }
 echo "Starting Docker Compose in controller folder..."
 docker compose -f asnc.yml up -d || { echo "Failed to execute docker compose in controller folder"; exit 1; }
 echo "Docker Compose started in controller folder."
 cd - || { echo "Failed to return to the previous directory"; exit 1; }
-# 进入 servicenode 文件夹并逐个启动 sn1 到 sn100
+# 进入 servicenode 文件夹并逐个启动 sn1 到 sn%d
 cd servicenode || { echo "Failed to enter servicenode folder"; exit 1; }
-for i in $(seq 1 100); do
+for i in $(seq 1 %d); do
 folder="sn$i"
 if [ -d "$folder" ]; then
 cd "$folder" || { echo "Failed to enter $folder folder"; exit 1; }
@@ -579,20 +298,20 @@ else
 echo "Folder $folder does not exist, skipping."
 fi
 done
-echo "All tasks completed."`
+echo "All tasks completed."`, n, n)
 
 	if err := os.WriteFile("up.sh", []byte(shellUp), 0755); err != nil {
 		panic(err)
 	}
 
-	shellDown := `#!/bin/bash
+	shellDown := fmt.Sprintf(`#!/bin/bash
 cd controller || { echo "Failed to enter controller folder"; exit 1; }
 echo "Starting Docker Compose in controller folder..."
 docker compose -f asnc.yml down || { echo "Failed to execute docker compose in controller folder"; exit 1; }
 echo "Docker Compose started in controller folder."
 cd - || { echo "Failed to return to the previous directory"; exit 1; }
 cd servicenode || { echo "Failed to enter servicenode folder"; exit 1; }
-for i in $(seq 1 100); do
+for i in $(seq 1 %d); do
 folder="sn$i"
 if [ -d "$folder" ]; then
 cd "$folder" || { echo "Failed to enter $folder folder"; exit 1; }
@@ -604,17 +323,50 @@ else
 echo "Folder $folder does not exist, skipping."
 fi
 done
-echo "All tasks completed."`
+echo "All tasks completed."`, n)
 	if err := os.WriteFile("down.sh", []byte(shellDown), 0755); err != nil {
 		panic(err)
 	}
 
 	ymlIam := `# Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
-## Log Configurations
-#log:
-#  level: "info" # Supported log level: panic | fatal | error | warning | info | debug | trace. Default: info
-#  file: "/var/log/sapphire/iam.log" # Default: "/var/log/sapphire/iam.log"
+###
+# Services
+#
+# Services
+# Mode
+# API
+# DB
+# Email Server
+# LDAP
+# Lock
+# Log
+#
+# Account
+# Authentication
+# Authorization
+# Group
+# Role
+# Policy
+#
+# Testing
+
+## Services
+services_provisioned: [ asn, myservice ]
+
+## Mode
+# In dev mode, all verification codes will be returned directly through API, and the default log level will be "debug".
+#mode: pro # pro | dev, Default: pro
+
+## API Configurations
+#api:
+#  grpc:
+#    port: 50426 # gRPC API port. Default:50426
+#    tls:
+#      enabled: false # Default: false
+#      root_ca: "/etc/sapphire/cert/client-ca.crt"
+#      pem_file: "/etc/sapphire/cert/server.pem"
+#      key_file: "/etc/sapphire/cert/server.key"
 
 ## Database Configurations
 #db:
@@ -622,6 +374,65 @@ echo "All tasks completed."`
 #  url: "localhost:27017" # Default: "localhost:27017"
 #  username: "amia" # Default: "amia"
 #  password: "2022" # Default: "2022"
+
+## Email Service
+#smtp: # SMTP email server config
+#  enabled: false # Default: false
+#  expire : 5 # in minutes, Default: 5
+#  resend_interval: 1 # in minutes, Default: 1
+#  tls: true
+#  host: "smtp.office365.com"
+#  email: "email@amiasys.com"
+#  username: "email@amiasys.com"
+#  password: ""
+#  port: 587
+
+## Phone Service
+#phone:
+#  enabled: false # Default: false
+#  expire : 5 # in minutes, Default: 5
+#  resend_interval: 1 # in minutes, Default: 1
+#  services:
+#    86: # if multiple country codes are using the same config, use comma to separate them, i.e., 86,852,853
+#      provider: "aliyun" # "tencent" || "aliyun"
+#      app_id: ""
+#      app_secret: "" # not needed for tencent
+#      secret_id: "" # not needed for aliyun
+#      secret_key: "" # not needed for aliyun
+#      sign_name: ""
+#      template_id: "" # for SMS verification code
+#    1: # if multiple country codes are using the same config, use comma to separate them, i.e., 86,852,853
+#      provider: "tencent" # "tencent" || "aliyun"
+#      app_id: ""
+#      app_secret: "" # not needed for tencent
+#      secret_id: "" # not needed for aliyun
+#      secret_key: "" # not needed for aliyun
+#      sign_name: ""
+#      template_id: "" # for SMS verification code
+
+## Sign In with Apple
+#apple:
+#  asn:
+#    - "xxx.xxx.xxx" # bundle ID
+#    - "xxx.xxx.xxx" # bundle ID
+#  swan:
+#    - "xxx.xxx.xxx" # bundle ID
+#    - "xxx.xxx.xxx" # bundle ID
+#  scarlette:
+#    - "xxx.xxx.xxx" # bundle ID
+#    - "xxx.xxx.xxx" # bundle ID
+
+## WeChat
+#wechat:
+#  asn:
+#    appID1: appSecret1
+#    appID2: appSecret2
+#  swan:
+#    appID1: appSecret1
+#    appID2: appSecret2
+#  scarlette:
+#    appID1: appSecret1
+#    appID2: appSecret2
 
 ## LDAP Configurations
 #ldap:
@@ -631,39 +442,9 @@ echo "All tasks completed."`
 #  base_dn: "dc=amianetworks,dc=com" # Default: "dc=amianetworks,dc=com"
 #  password_cn: "cn=admin" # Default: "cn=admin"
 #  password: "2022" # Default: "2022"
-#  mapping:
-#    account: # other fields will be added to descriptions, name will be filled to cn and sn by default
-#      ou: "account" # Default: "account"
-#      name: "uid" # Default: "uid"
-#      password: "userPassword" # Default: "userPassword"
-#      email: "mail" # Default: "mail"
-#      phone: "telephoneNumber" # Default: "telephoneNumber"
-#      description:
-#        id: "id" # Default: "id"
-#        created_at: "createdAt" # Default: "createdAt"
-#        updated_at: "updatedAt" # Default: "updatedAt"
-#        type: "type" # Default: "type"
-#        totp: "totp" # Default: "totp"
-#        mfa_config: "mfaConfig" # Default: "mfaConfig"
-#        metadata: "metadata" # Default: "metadata"
-#    group: # other fields will be added to descriptions
-#      ou: "group" # Default: "group"
-#      name: "cn" # Default: "cn"
-#      accounts: "member" # Default: "member"
-#      description:
-#        id: "id" # Default: "id"
-#        created_at: "createdAt" # Default: "createdAt"
-#        updated_at: "updatedAt" # Default: "updatedAt"
-#        metadata: "metadata" # Default: "metadata"
-
-## API Configurations
-#api:
-#  grpc:
-#    port: 50426 # gRPC API port. Default:50426
-#    tls:
-#      root_ca: "/etc/sapphire/cert/ca.crt" # Default: "/etc/sapphire/cert/ca.crt"
-#      pem_file: "/etc/sapphire/cert/server.pem" # Default: "/etc/sapphire/cert/server.pem"
-#      key_file: "/etc/sapphire/cert/server.key" # Default: "/etc/sapphire/cert/server.key"
+#  ous:
+#    account: "People"
+#    group: "Group"
 
 # Lock
 #
@@ -685,19 +466,23 @@ echo "All tasks completed."`
 #      dbs:
 #        - 0 # index: 0 ~ 15 (Default: 0)
 
-## Email Service
-#smtp: # SMTP email server config
-#  enabled: false # Default: false
-#  tls: true
-#  host: "smtp.office365.com"
-#  email: "email@amiasys.com"
-#  username: "email@amiasys.com"
-#  password: ""
-#  port: 587
+## Log Configurations
+#log:
+#  level: "info" # panic | fatal | error | warning | info | debug | trace. Default: pro: info, dev: debug
+#  file: "/var/log/sapphire/iam.log" # Default: "/var/log/sapphire/iam.log"
 
 ## Account Configurations
 #account:
-#  special_key: "SpecialAccount@AmiaNetworks2025"
+#  special_key: "SpecialAccount@AmiaNetworks2025" # Used to create special accounts which skips MFA.
+#  password_algo: sha1 # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: sha256. CAUTION: more demanding algorithms like argon2id are not recommended in VMs.
+#
+#  # Username must be unique system wide, and it is the default identifier for login.
+#  # Other fields, like email and phone number, can also be used as login identifier, as soon as explicitly set below.
+#  # However, Sapphire only enforce the uniqueness at creatation of an account. Declaring a field as unique here doesn't
+#  # guarantee the uniqueness of existing values of this field. Sapphire won't allow login with non-unique values.
+#  unique_fields:
+#    email: true # Default: true
+#    phone: true # Default: true
 #
 #  # Regular expressions are used here to specify the format of username, password, and user group.
 #  # ^, $: start-of-line and end-of-line respectively.
@@ -712,19 +497,33 @@ echo "All tasks completed."`
 #    country_code: "^(?:\\d{1,3})?$"
 #    phone: "^(?:$|[\\d\\s\\-\\(\\)\\.]{6,15})$"
 #
-#  # You can recover the account through email or SMS(TBD).
-#  # If none of the above methods are available, the admin can reset the account through the cli command line.
-#  # TBD: recover account by SMS
-#  recovery:
-#    email: # Sending a code to your recovery email # Code format:  "^[0-9a-zA-Z-:.]{6,128}$"
-#      expire: 5 # Expiration time in minutes. Default 5 minutes.
-#      resend_interval: 1 # Resending interval in minutes. Default 1 minute
+#  # Provisioning Rules at Account Creation
+#  # Though all accounts are unique in the system, the service may not share users by default.
+#  # At creation of an account FROM a service, Sapphire checks the provisioning rules below.
+#  # Rules related to a service which is not provisioned will be ignored.
+#  provisioning_rules: # The following rules will be applied to provision accounts across services:
+#    # add all asn/viewer_group users to swan/swan_ug_default
+#    - from:
+#        service: asn
+#        user_groups: [ viewer_group ]
+#      to:
+#        - service: swan
+#          user_groups: [ swan_ug_default ]
+#
+#    # add all swan/{admin,network_admin} to scarlette/network_viewer
+#    - from:
+#        service: swan
+#        user_groups: [ admin, network_admin ]
+#      to:
+#        - service: scarlette
+#          user_groups: [ network_viewer ]
 
 ## Authentication Configurations
 #authentication:
 #  service:
-#    client_ca: "/etc/sapphire/cert/ca.crt"
-#    name: "^[0-9a-zA-Z_-]{2,36}$"
+#    mtls: false # Default: false
+#    client_ca: "/etc/sapphire/cert/client-ca.crt"
+#    name: "^[0-9a-zA-Z_.-]{2,36}$"
 #
 #  # Attempt frequency can limit the frequency of user attempts to log in.
 #  attempt_frequency:
@@ -742,11 +541,10 @@ echo "All tasks completed."`
 #  # Configure MFA(Multi-Factor Authentication) information
 #  # By using the TOTP(Time-Based One Time Password) method, one time password is created on the user side through a smartphone application.
 #  # Applications that are known to work with TOTP： Microsoft Authenticator、Google Authenticator）
-#  # TBD: SMS
 #  mfa:
 #    totp:
 #      # The issuer indicates the provider or service this account is associated with, URL-encoded according to RFC 3986.
-#      issuer: "Amianetworks"
+#      issuer: "Amia Networks Inc."
 
 ## Authorization Configurations
 #authorization:
@@ -756,8 +554,8 @@ echo "All tasks completed."`
 #    issuer: "amianetworks.com"
 #    # RS256 Key Set for JWT signature.
 #    # [NOT RECOMMENDED!!!] If either is set to empty, a random set will be used.
-#    public_key_file: ""
-#    private_key_file: ""
+#    public_key_file: "" # Default: /etc/sapphire/cert/jwt.pem (can be auto-generated)
+#    private_key_file: "" # Default: /etc/sapphire/cert/jwt.key (can be auto-generated)
 #    access_token:
 #      expire: 60   # Access token expiration time in minutes. Default: 60 minutes.
 #    refresh_token:
@@ -785,6 +583,13 @@ echo "All tasks completed."`
 ## Policy Configurations
 #policy:
 #  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+
+## Testing Configurations
+# Caution: This part should only be configured when testing.
+#testing:
+#  apple_token_secret: testAppleTokenSecret@2025
+#  wechat_bypass_server: true
+
 `
 	if err := os.WriteFile("controller/config/iam.yml", []byte(ymlIam), 0644); err != nil {
 		panic(err)
