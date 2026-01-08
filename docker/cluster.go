@@ -144,7 +144,7 @@ func main() {
 	}
 	asncD.Services["asn-mdb"] = DockerService{
 		ContainerName: "asn-mdb",
-		Image:         "mongo:7.0",
+		Image:         "mongo:8",
 		Restart:       "always",
 		Ulimits: map[string]int{
 			"nofile": 100000,
@@ -195,6 +195,9 @@ func main() {
 		Restart:     "always",
 		DependsOn:   []string{"asn-mdb", "asn-idb", "asn-rdb", "sapphire-iam"},
 		NetworkMode: "host",
+		Ulimits: map[string]int{
+			"nofile": 100000,
+		},
 		Volumes: []string{
 			"./asn-cert/:/asn/cert",
 			"./asn-config/:/etc/asn/controller/config",
