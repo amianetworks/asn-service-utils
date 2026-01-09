@@ -51,10 +51,10 @@ type DockerService struct {
 	Ulimits       map[string]int    `yaml:"ulimits,omitempty"`
 	Environment   map[string]string `yaml:"environment,omitempty"`
 	NetworkMode   string            `yaml:"network_mode,omitempty"`
-	Ports         []string          `yaml:"ports,omitempty"`
-	Volumes       []string          `yaml:"volumes,omitempty"`
-	Command       string            `yaml:"command,omitempty"`
-	DependsOn     []string          `yaml:"depends_on,omitempty"`
+	// Ports         []string          `yaml:"ports,omitempty"`
+	Volumes   []string `yaml:"volumes,omitempty"`
+	Command   string   `yaml:"command,omitempty"`
+	DependsOn []string `yaml:"depends_on,omitempty"`
 }
 
 type Volume struct {
@@ -92,6 +92,11 @@ func main() {
 
 	// generate controller file
 	err = os.MkdirAll("controller", 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	err = os.MkdirAll("controller/cert", 0755)
 	if err != nil {
 		panic(err)
 	}
@@ -145,65 +150,79 @@ func main() {
 	asncD.Services["asn-mdb"] = DockerService{
 		ContainerName: "asn-mdb",
 		Image:         "mongo:8",
-		Restart:       "always",
+		Restart:       "unless-stopped",
 		Ulimits: map[string]int{
 			"nofile": 100000,
+			"nproc":  65535,
 		},
 		Environment: map[string]string{
 			"MONGO_INITDB_ROOT_USERNAME": "amia",
 			"MONGO_INITDB_ROOT_PASSWORD": "2022",
 		},
-		Ports:   []string{"27017:27017"},
-		Volumes: []string{"./data/:/data/db"},
-		Command: "--bind_ip_all --auth",
+		NetworkMode: "host",
+		Volumes:     []string{"./data/:/data/db"},
+		Command:     "--bind_ip_all --auth",
 	}
 	asncD.Services["asn-idb"] = DockerService{
 		ContainerName: "asn-idb",
 		Image:         "influxdb:2.7",
-		Ports:         []string{"8086:8086"},
+		NetworkMode:   "host",
 		Environment: map[string]string{
-			"INFLUXDB_DB":             "asn",
-			"INFLUXDB_ADMIN_USER":     "amia",
-			"INFLUXDB_ADMIN_PASSWORD": "2022",
-			"INFLUXDB_USER":           "amia",
-			"INFLUXDB_USER_PASSWORD":  "2022",
+			"DOCKER_INFLUXDB_INIT_MODE":        "setup",
+			"DOCKER_INFLUXDB_INIT_USERNAME":    "amia",
+			"DOCKER_INFLUXDB_INIT_PASSWORD":    "Amiasys2025",
+			"DOCKER_INFLUXDB_INIT_ORG":         "amia",
+			"DOCKER_INFLUXDB_INIT_BUCKET":      "asn",
+			"DOCKER_INFLUXDB_INIT_ADMIN_TOKEN": "Amiasys2025",
+			"DOCKER_INFLUXDB_INIT_RETENTION":   "0",
+		},
+		Volumes: []string{"influxdb_data:/var/lib/influxdb2"},
+		Ulimits: map[string]int{
+			"nofile": 100000,
+			"nproc":  65535,
 		},
 	}
 	asncD.Services["asn-rdb"] = DockerService{
 		ContainerName: "asn-rdb",
 		Image:         "redis:8",
-		Restart:       "always",
+		Restart:       "unless-stopped",
 		NetworkMode:   "host",
-		Ports:         nil,
 		Command:       "redis-server --save --appendonly yes --requirepass 2022 --port 6379 --bind 0.0.0.0",
+		Ulimits: map[string]int{
+			"nofile": 100000,
+			"nproc":  65535,
+		},
 	}
 	asncD.Services["sapphire-iam"] = DockerService{
 		ContainerName: "sapphire-iam",
 		Image:         "registry.amiasys.com/sapphire.iam:26.0.2",
-		Restart:       "always",
+		NetworkMode:   "host",
+		Restart:       "unless-stopped",
 		Privileged:    true,
-		DependsOn:     []string{"asn-mdb"},
-		Ports:         []string{"50426:50426", "17931:17931"},
+		DependsOn:     []string{"asn-mdb", "asn-idb", "asn-rdb"},
 		Volumes: []string{
-			"./iam-cert/:/usr/local/sapphire/conf/",
-			"./iam-config/:/usr/local/sapphire/",
-			"./iam-log/iam/:/var/log/iam/",
+			"./cert/:/etc/sapphire/cert/",
+			"./config/:/etc/sapphire/config/",
+			"./log/iam/:/var/log/iam/",
+		},
+		Ulimits: map[string]int{
+			"nofile": 100000,
+			"nproc":  65535,
 		},
 	}
 	asncD.Services["asnc"] = DockerService{
 		Image:       "registry.amiasys.com/asnc:26.1.1",
-		Restart:     "always",
+		Restart:     "unless-stopped",
 		DependsOn:   []string{"asn-mdb", "asn-idb", "asn-rdb", "sapphire-iam"},
 		NetworkMode: "host",
 		Ulimits: map[string]int{
 			"nofile": 100000,
+			"nproc":  65535,
 		},
 		Volumes: []string{
-			"./asn-cert/:/asn/cert",
-			"./asn-config/:/etc/asn/controller/config",
-			"./asn-log/asn/:/var/log/asn/controller",
-			"./asn-services:/usr/local/asn/controller/services",
-			"./asn-web:/var/www/asnc/",
+			"./config/:/etc/asn/controller/config",
+			"./log/asn/:/var/log/asn/controller",
+			"./services:/usr/local/asn/controller/services",
 		},
 	}
 
@@ -227,6 +246,10 @@ func main() {
 		panic(err)
 	}
 
+	asnD := asncDocker{
+		Services: map[string]DockerService{},
+	}
+
 	for i := 1; i <= n; i++ {
 		fileName := fmt.Sprintf("sn%d", i)
 		err = os.MkdirAll("servicenode/"+fileName, 0755)
@@ -244,95 +267,93 @@ func main() {
 			panic(err)
 		}
 
-		asnC := ASNSN{
+		asnSN := ASNSN{
 			General: General{
 				Mode:     "cluster",
 				NodeName: fmt.Sprintf("server%d", i),
 				Type:     "server",
 			},
 			Controller: Controller{
-				Address: "172.17.0.1:12762",
+				Address: "127.0.0.1:12762",
 			},
 		}
-		asnCFYaml, err := yaml.Marshal(asnC)
+		asnSNFYaml, err := yaml.Marshal(asnSN)
 		if err != nil {
 			panic(err)
 		}
-		err = os.WriteFile(fmt.Sprintf("servicenode/%s/config/asn.conf", fileName), asnCFYaml, 0644)
+		err = os.WriteFile(fmt.Sprintf("servicenode/%s/config/asn.conf", fileName), asnSNFYaml, 0644)
 		if err != nil {
 			panic(err)
 		}
 
-		asnD := asncDocker{
-			Services: map[string]DockerService{
-				"asnsn": {
-					Image:         "registry.amiasys.com/asnsn:26.1.1",
-					ContainerName: fmt.Sprintf("network-node%d-server%d", i, i),
-					Restart:       "always",
-					Volumes: []string{
-						"./config/:/etc/asn/servicenode/config",
-						"./log/:/var/log/asn/servicenode/",
-						"../service:/usr/local/asn/servicenode/services/",
-					},
-				}},
-		}
-		asnDY, err := yaml.Marshal(asnD)
-		if err != nil {
-			panic(err)
-		}
-		err = os.WriteFile(fmt.Sprintf("servicenode/%s/asnsn.yml", fileName), asnDY, 0644)
-		if err != nil {
-			panic(err)
+		asnD.Services[fmt.Sprintf("asnsn-%d", i)] = DockerService{
+			Image:         "registry.amiasys.com/asnsn:26.1.1",
+			ContainerName: fmt.Sprintf("asnsn-%d", i),
+			NetworkMode:   "host",
+			Restart:       "unless-stopped",
+			Environment: map[string]string{
+				"GOMAXPROCS": "1",
+			},
+			Volumes: []string{
+				fmt.Sprintf("./%s/config/:/etc/asn/servicenode/config", fileName),
+				fmt.Sprintf("./%s/log/:/var/log/asn/servicenode/", fileName),
+				"./services:/usr/local/asn/servicenode/services/",
+			},
 		}
 	}
 
-	shellUp := fmt.Sprintf(`#!/bin/bash
-# 进入 controller 文件夹并启动 Docker Compose
+	asnDY, err := yaml.Marshal(asnD)
+	if err != nil {
+		panic(err)
+	}
+	err = os.WriteFile("servicenode/asnsn.yml", asnDY, 0644)
+	if err != nil {
+		panic(err)
+	}
+
+	shellUp := `#!/bin/bash
+
+# 定义并发批次大小
+# Controller 部分
 cd controller || { echo "Failed to enter controller folder"; exit 1; }
 echo "Starting Docker Compose in controller folder..."
 docker compose -f asnc.yml up -d || { echo "Failed to execute docker compose in controller folder"; exit 1; }
 echo "Docker Compose started in controller folder."
 cd - || { echo "Failed to return to the previous directory"; exit 1; }
-# 进入 servicenode 文件夹并逐个启动 sn1 到 sn%d
+
+# 进入 servicenode 文件夹
 cd servicenode || { echo "Failed to enter servicenode folder"; exit 1; }
-for i in $(seq 1 %d); do
-folder="sn$i"
-if [ -d "$folder" ]; then
-cd "$folder" || { echo "Failed to enter $folder folder"; exit 1; }
-echo "Starting Docker Compose in $folder..."
-docker compose -f asnsn.yml up -d || { echo "Failed to execute docker compose in $folder"; exit 1; }
-echo "Docker Compose started in $folder."
-cd - >/dev/null || { echo "Failed to return to servicenode folder"; exit 1; }
-else
-echo "Folder $folder does not exist, skipping."
-fi
-done
-echo "All tasks completed."`, n, n)
+
+echo "Starting service nodes..."
+
+# 启动
+(set -o pipefail; COMPOSE_PARALLEL_LIMIT=100 docker compose -f asnsn.yml up -d 2>&1 | sed '/Creating/d; /Starting/d') || { echo "Failed to execute docker compose in servicenode folder"; exit 1; }
+echo "All tasks completed."`
 
 	if err := os.WriteFile("up.sh", []byte(shellUp), 0755); err != nil {
 		panic(err)
 	}
 
-	shellDown := fmt.Sprintf(`#!/bin/bash
-cd controller || { echo "Failed to enter controller folder"; exit 1; }
-echo "Starting Docker Compose in controller folder..."
-docker compose -f asnc.yml down || { echo "Failed to execute docker compose in controller folder"; exit 1; }
-echo "Docker Compose started in controller folder."
-cd - || { echo "Failed to return to the previous directory"; exit 1; }
+	shellDown := `#!/bin/bash
+
+# 1. 先进入 servicenode 目录停止 Service Nodes
 cd servicenode || { echo "Failed to enter servicenode folder"; exit 1; }
-for i in $(seq 1 %d); do
-folder="sn$i"
-if [ -d "$folder" ]; then
-cd "$folder" || { echo "Failed to enter $folder folder"; exit 1; }
-echo "Starting Docker Compose in $folder..."
-docker compose -f asnsn.yml down || { echo "Failed to execute docker compose in $folder"; exit 1; }
-echo "Docker Compose started in $folder."
-cd - >/dev/null || { echo "Failed to return to servicenode folder"; exit 1; }
-else
-echo "Folder $folder does not exist, skipping."
-fi
-done
-echo "All tasks completed."`, n)
+
+echo "Stopping service nodes (asnsn.yml)..."
+(set -o pipefail; COMPOSE_PARALLEL_LIMIT=100 docker compose -f asnsn.yml down 2>&1 | sed '/Stopping/d; /Removing/d') || { echo "Failed to execute docker compose in servicenode folder"; exit 1; }
+echo "Service nodes stopped."
+
+# 重要：返回上一级目录，确保后续能正确找到 controller 文件夹
+cd - || { echo "Failed to return to the previous directory"; exit 1; }
+
+# 2. 再进入 controller 目录停止 Controller
+cd controller || { echo "Failed to enter controller folder"; exit 1; }
+
+echo "Stopping Docker Compose in controller folder..."
+docker compose -f asnc.yml down || { echo "Failed to execute docker compose in controller folder"; exit 1; }
+echo "Controller stopped."
+
+echo "All tasks completed."`
 	if err := os.WriteFile("down.sh", []byte(shellDown), 0755); err != nil {
 		panic(err)
 	}
@@ -365,7 +386,7 @@ services_provisioned: [ asn, myservice ]
 
 ## Mode
 # In dev mode, all verification codes will be returned directly through API, and the default log level will be "debug".
-#mode: pro # pro | dev, Default: pro
+mode: dev # pro | dev, Default: pro
 
 ## API Configurations
 #api:
@@ -598,7 +619,6 @@ services_provisioned: [ asn, myservice ]
 #testing:
 #  apple_token_secret: testAppleTokenSecret@2025
 #  wechat_bypass_server: true
-
 `
 	if err := os.WriteFile("controller/config/iam.yml", []byte(ymlIam), 0644); err != nil {
 		panic(err)

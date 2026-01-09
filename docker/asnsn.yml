@@ -5,7 +5,7 @@ services:
     restart: always
     image: registry.amiasys.com/asnsn:26.1.1
     ports:
-      - "50052:50052"
+      - "50052:52767"
     volumes:
       - ./cert/:/asn/cert
       - ./config/:/etc/asn/servicenode/config
