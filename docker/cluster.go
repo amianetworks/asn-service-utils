@@ -24,9 +24,7 @@ type API struct {
 }
 
 type Admin struct {
-	CreateWhenStart bool   `yaml:"create_when_start"`
-	Name            string `yaml:"name"`
-	Password        string `yaml:"password"`
+	CreateWhenStart bool `yaml:"create_when_start"`
 }
 
 type Network struct {
@@ -123,8 +121,6 @@ func main() {
 		},
 		Admin: Admin{
 			CreateWhenStart: true,
-			Name:            "asn-supervisor",
-			Password:        "2026@Amiasys",
 		},
 		Network: Network{},
 		Service: []Service{
