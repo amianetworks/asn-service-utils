@@ -111,6 +111,11 @@ func main() {
 		panic(err)
 	}
 
+	err = os.MkdirAll("controller/services", 0755)
+	if err != nil {
+		panic(err)
+	}
+
 	asnConf := ASNC{
 		Mode: "dev",
 		API: API{
@@ -241,7 +246,7 @@ func main() {
 		panic(err)
 	}
 
-	err = os.MkdirAll("servicenode/service", 0755)
+	err = os.MkdirAll("servicenode/services", 0755)
 	if err != nil {
 		panic(err)
 	}
