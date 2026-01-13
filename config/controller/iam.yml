@@ -92,6 +92,21 @@ services_provisioned: [ asn, swan, scarlette ]
 #    - "xxx.xxx.xxx" # bundle ID
 #    - "xxx.xxx.xxx" # bundle ID
 
+## Sign In with Google
+#google:
+#  asn:
+#    client_ids:
+#      - "xxx.xxx.xxx" # client ID
+#      - "xxx.xxx.xxx" # client ID
+#  swan:
+#    client_ids:
+#      - "xxx.xxx.xxx" # client ID
+#      - "xxx.xxx.xxx" # client ID
+#  scarlette:
+#    client_ids:
+#      - "xxx.xxx.xxx" # client ID
+#      - "xxx.xxx.xxx" # client ID
+
 ## WeChat
 #wechat:
 #  asn:
@@ -258,4 +273,5 @@ services_provisioned: [ asn, swan, scarlette ]
 # Caution: This part should only be configured when testing.
 #testing:
 #  apple_token_secret: testAppleTokenSecret@2025
+#  google_token_secret: testGoogleTokenSecret@2025
 #  wechat_bypass_server: true
