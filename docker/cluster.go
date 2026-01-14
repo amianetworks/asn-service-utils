@@ -291,7 +291,6 @@ func main() {
 			Image:         "registry.amiasys.com/asnsn:26.1.8",
 			ContainerName: fmt.Sprintf("asnsn-%d", i),
 			NetworkMode:   "host",
-			Restart:       "unless-stopped",
 			Environment: map[string]string{
 				"GOMAXPROCS": "1",
 			},
