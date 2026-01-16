@@ -83,14 +83,32 @@ services_provisioned: [ asn, swan, scarlette ]
 ## Sign In with Apple
 #apple:
 #  asn:
-#    - "xxx.xxx.xxx" # bundle ID
-#    - "xxx.xxx.xxx" # bundle ID
+#    bundle_ids:
+#      - "xxx.xxx.xxx" # bundle ID
+#      - "xxx.xxx.xxx" # bundle ID
+#    callback:
+#      android:
+#        package_name: "xxx.xxx.xxx" # package name
+#        host: "asnAppleLogin" # android:host
+#        scheme: "asnAppleLogin" # android:scheme
 #  swan:
-#    - "xxx.xxx.xxx" # bundle ID
-#    - "xxx.xxx.xxx" # bundle ID
+#    bundle_ids:
+#      - "xxx.xxx.xxx" # bundle ID
+#      - "xxx.xxx.xxx" # bundle ID
+#    callback:
+#      android:
+#        package_name: "xxx.xxx.xxx" # package name
+#        host: "swanAppleLogin" # android:host
+#        scheme: "swanAppleLogin" # android:scheme
 #  scarlette:
-#    - "xxx.xxx.xxx" # bundle ID
-#    - "xxx.xxx.xxx" # bundle ID
+#    bundle_ids:
+#      - "xxx.xxx.xxx" # bundle ID
+#      - "xxx.xxx.xxx" # bundle ID
+#    callback:
+#      android:
+#        package_name: "xxx.xxx.xxx" # package name
+#        host: "scarletteAppleLogin" # android:host
+#        scheme: "scarletteAppleLogin" # android:scheme
 
 ## Sign In with Google
 #google:
@@ -160,6 +178,7 @@ services_provisioned: [ asn, swan, scarlette ]
 #account:
 #  special_key: "SpecialAccount@AmiaNetworks2025" # Used to create special accounts which skips MFA.
 #  password_algo: sha1 # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: sha256. CAUTION: more demanding algorithms like argon2id are not recommended in VMs.
+#  rename: false # whether renaming an account's username is allowed. Default: false
 #
 #  # Username must be unique system wide, and it is the default identifier for login.
 #  # Other fields, like email and phone number, can also be used as login identifier, as soon as explicitly set below.
@@ -179,8 +198,6 @@ services_provisioned: [ asn, swan, scarlette ]
 #    name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
 #    password: "^[0-9a-zA-Z!@$._-]{6,128}$"
 #    email: "^(?:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})?$"
-#    country_code: "^(?:\\d{1,3})?$"
-#    phone: "^(?:$|[\\d\\s\\-\\(\\)\\.]{6,15})$"
 #
 #  # Provisioning Rules at Account Creation
 #  # Though all accounts are unique in the system, the service may not share users by default.
