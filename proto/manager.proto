@@ -441,6 +441,7 @@ message Node {
     string name = 3;
     NodeState state = 4;
     string message = 5;
+    map<string, string> meta = 6;
   }
 
   message Display {
@@ -587,6 +588,7 @@ message Node {
       string config = 5;
       string node_group_id = 6;
       repeated Node.Service.ConfigOp config_ops= 7;
+      string meta = 8;
     }
   }
 
