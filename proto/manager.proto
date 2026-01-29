@@ -55,16 +55,22 @@ service Manager {
   rpc CreateNode                   (Node.Create)                        returns (Empty);
   rpc UpdateNode                   (Node.Update)                        returns (Empty);
   rpc DeleteNode                   (Node.Id)                            returns (Empty);
+  rpc AddNodeConfigOps             (Node.SetConfigOp)                   returns (Empty);
+  rpc UpdateNodeConfigOp           (Node.SetConfigOp)                   returns (Empty);
+  rpc RemoveNodeConfigOps          (Node.SetConfigOp)                   returns (Empty);
   rpc AddNodeInterface             (Node.NodeInfo.OperateInterface)     returns (Empty);
   rpc UpdateNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty);
   rpc RemoveNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty);
 
   // Node Group API
-  rpc GetNodeGroupsByIds      (NodeGroup.Ids)       returns (NodeGroup.List); // Node Group info
-  rpc ListNodeGroups          (NodeGroup.ListReq)   returns (NodeGroup.Ids);  // List Node Group IDs.
-  rpc CreateNodeGroup         (NodeGroup.Create)    returns (Empty);
-  rpc UpdateNodeGroup         (NodeGroup.Update)    returns (Empty);
-  rpc DeleteNodeGroup         (NodeGroup.Id)        returns (Empty);
+  rpc GetNodeGroupsByIds          (NodeGroup.Ids)             returns (NodeGroup.List); // Node Group info
+  rpc ListNodeGroups              (NodeGroup.ListReq)         returns (NodeGroup.Ids);  // List Node Group IDs.
+  rpc CreateNodeGroup             (NodeGroup.Create)          returns (Empty);
+  rpc UpdateNodeGroup             (NodeGroup.Update)          returns (Empty);
+  rpc DeleteNodeGroup             (NodeGroup.Id)              returns (Empty);
+  rpc AddNodeGroupConfigOps       (NodeGroup.SetConfigOp)     returns (Empty);
+  rpc UpdateNodeGroupConfigOp     (NodeGroup.SetConfigOp)     returns (Empty);
+  rpc RemoveNodeGroupConfigOps    (NodeGroup.SetConfigOp)     returns (Empty);
 
   // Link API
   rpc GetLinksOfNode    (Node.Id)      returns (Link.List); // All links of a network. Internal and External.
@@ -483,6 +489,13 @@ message Node {
     string config = 3;
   }
 
+  message SetConfigOp {
+    string node_id = 1;
+    string service_name = 2;
+    string op_id = 3;
+    repeated string op_params = 4;
+  }
+
   message NodeInfo {
     repeated Interface interfaces = 1;
     Ipmi ipmi = 2;
@@ -573,6 +586,7 @@ message Node {
       bool customize_config = 4;
       string config = 5;
       string node_group_id = 6;
+      repeated Node.Service.ConfigOp config_ops= 7;
     }
   }
 
@@ -610,6 +624,12 @@ message Node {
         string network_id = 1;
         string service_name = 2;
       }
+    }
+
+    message ConfigOp {
+      string id = 1;
+      string param = 2;
+      bool customize_config = 3;
     }
   }
 }
@@ -661,6 +681,12 @@ message NodeGroup {
   string remark = 5;
   int64 num_node = 6;
   string config = 7;
+  repeated ConfigOp configOps = 8;
+
+  message ConfigOp {
+    string id = 1;
+    string param = 2;
+  }
 
   message Id {
     string node_group_id = 1;
@@ -694,6 +720,12 @@ message NodeGroup {
     string remark = 3;
     repeated string nodes = 4;
     string config = 5;
+  }
+
+  message SetConfigOp {
+    string node_group_id = 1;
+    string op_id = 2;
+    repeated string op_params = 3;
   }
 }
 
