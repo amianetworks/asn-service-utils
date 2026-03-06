@@ -8,9 +8,11 @@ require (
 	asn.amiasys.com/asn-service-api/v26 v26.3.2
 	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.3.3
 	github.com/amianetworks/am.modules/v26 v26.1.5
+	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/gin-gonic/gin v1.11.0
 	github.com/goccy/go-json v0.10.5
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/google/uuid v1.6.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/shirou/gopsutil/v3 v3.24.5
@@ -45,7 +47,6 @@ require (
 	github.com/gogf/gf v1.16.9 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grafana/regexp v0.0.0-20250905093917-f7b3be9d1853 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
