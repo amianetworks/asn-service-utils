@@ -640,12 +640,14 @@ message Link {
   string link_id = 1;
   string description = 2;
   string from_id = 3;
-  bool   from_node = 4;
-  string from_interface = 5;
-  string to_id = 6;
-  bool   to_node = 7;
-  string to_interface = 8;
-  uint64 bandwidth = 9;
+  string from_name = 4;
+  bool   from_node = 5;
+  string from_interface = 6;
+  string to_id = 7;
+  string to_name = 8;
+  bool   to_node = 9;
+  string to_interface = 10;
+  uint64 bandwidth = 11;
 
   message Id {
     string link_id = 1;
