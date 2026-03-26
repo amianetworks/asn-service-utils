@@ -155,6 +155,14 @@ deb-%:
 	     -e "s/@SERVICE@/$(SERVICE_NAME)/" \
 	     $(SERVICE_CONTROL) > $(DEB_SVC_DIR)/DEBIAN/control
 
+	@if [ -f debian/conffiles.$(SERVICE_NAME) ]; then \
+			echo "Copying service-specific conffiles for $(SERVICE_NAME)..."; \
+			cp debian/conffiles.$(SERVICE_NAME) $(DEB_SVC_DIR)/DEBIAN/conffiles; \
+			chmod 644 $(DEB_SVC_DIR)/DEBIAN/conffiles; \
+		else \
+			echo "No conffiles found for $(SERVICE_NAME), skipping"; \
+		fi
+
 	@# Copy files from DEBIAN_FILES
 	@for pair in $(DEBIAN_FILES); do \
 		SRC=$$(echo $$pair | cut -d: -f1); \
