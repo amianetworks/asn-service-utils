@@ -12,6 +12,332 @@
 #SSH_PRIVATE_KEY
 #SERVICE_UTILS_DIR
 
+##----------------------------------------------------------------------------##
+## *All* Targets
+# *-all targets could be used as it.
+build-all:
+	@$(MAKE) build-prepare
+	@$(MAKE) build-plugin
+	@$(MAKE) build-docker
+
+#push-all:
+#	@$(MAKE) push-base
+#	@$(MAKE) debs-push
+#	@$(MAKE) docker-push
+
+
+##----------------------------------------------------------------------------##
+## Main targets ##
+## All dependent used below targets are defined in service.plugin.build.env.mk.
+
+# Call it to build base image. All 'build-prepare' when service-api updates.
+build-prepare: clean proto-gen prepare-service-builder-base
+	@echo "Successfully built base image."
+	@echo
+
+check-prepare: check-service-builder-base
+
+
+build-fresh: clean proto-gen service-build-from-scratch
+	@echo "Built new base image and artifacts (DIR):"
+	@find ./build -maxdepth 1 -print
+	@echo
+
+#build-plugin:
+# build-plugin: clean check-version increment-build  proto-gen service-build-once
+build-plugin: clean check-version increment-build  proto-gen service-build-once
+	@echo "Built artifacts (DIR):"
+	@find ./build -maxdepth 1 -print
+	@echo
+
+# Any artifacts should be under build/. Cleaning is simple.
+clean: .init_build_file
+	@rm -rf build/
+
+
+check-vars: .check_vars
+
+check-version: .check_version
+
+set-version: .check_version
+	@echo "Modify config.mk to update the version and build."
+	@echo "NOTE: Only CI/CD or maintainer should change the version with caution."
+
+increment-build: .increment_build
+
+##----------------------------------------------------------------------------##
+## Debian Package handling ##
+
+uppercase = $(shell echo $(1) | tr a-z A-Z)
+
+# Push and publish Debian packages.
+debs:
+	@echo "Please make target \"build-plugin\" instead."
+
+# Push and publish Debian packages.
+debs-push-%:
+	$(eval REPO := $(call uppercase,$*))
+	$(eval S_PATH := ${DEBIAN_PATH})
+	$(eval T_HOST := ${DEB_REPO_HOST_$(REPO)})
+	$(eval T_USER := ${DEB_REPO_USER_$(REPO)})
+	$(eval T_PATH := ${DEB_REPO_PATH_$(REPO)})
+	$(eval T_SUBREPO := ${DEB_REPO_SUBREPO_$(REPO)})
+	$(eval T_SNAPSHOT := ${DEB_REPO_SUBREPO_$(REPO)}-$(shell date +%s))
+	$(eval DISTS := ${DEBIAN_DIST_STABLE})
+
+	$(eval T_T := ${T_USER}@${T_HOST})
+	@$(call func_check_version_for_repo,$(REPO),$(CURRENT_BUILD))
+	$(call func_push_debs)
+
+
+# List local debs and debs of the same service in the repo.
+debs-list-%:
+	$(eval REPO := $(call uppercase,$*))
+	$(eval S_PATH := ${DEBIAN_PATH})
+	$(eval T_HOST := ${DEB_REPO_HOST_$(REPO)})
+	$(eval T_USER := ${DEB_REPO_USER_$(REPO)})
+	$(eval T_PATH := ${DEB_REPO_PATH_$(REPO)})
+	$(eval T_SUBREPO := ${DEB_REPO_SUBREPO_$(REPO)})
+	$(eval DISTS := ${DEBIAN_DIST_STABLE})
+
+	$(eval T_T := ${T_USER}@${T_HOST})
+	$(call func_list_debs)
+
+
+
+# Function: func_check_variable
+func_check_variable = $(if $(value $(1)),,$(error $(1) is not set))
+
+# Function: func_check_version_for_repo
+# Check if the build number is valid for the target repository
+# $(1): REPO (DEV, CN, COM, etc.)
+# $(2): BUILD_NUMBER
+define func_check_version_for_repo
+	@echo "Checking version compatibility for repository: $(1)"
+	@echo "Current build number: $(2)"
+	@if [ "$(1)" = "DEV" ]; then \
+		if [ $(2) -lt 100 ]; then \
+			echo "❌ ERROR: Build number $(2) is not allowed for DEV repository."; \
+			echo "   DEV repository requires build number >= 100"; \
+			echo "   Current version: $(VERSION_BUILD)"; \
+			echo ""; \
+			echo "   Please use BUILD_MODE=dev to build packages for DEV repository."; \
+			exit 1; \
+		else \
+			echo "✅ Version check passed: Build number $(2) is valid for DEV repository (>= 100)"; \
+		fi; \
+	else \
+		if [ $(2) -ge 100 ]; then \
+			echo "❌ ERROR: Build number $(2) is not allowed for $(1) repository."; \
+			echo "   Production repositories (CN, COM) require build number < 100"; \
+			echo "   Current version: $(VERSION_BUILD)"; \
+			echo ""; \
+			echo "   Please use BUILD_MODE=pro and set BUILD number < 100 in make/config.mk"; \
+			exit 1; \
+		else \
+			echo "✅ Version check passed: Build number $(2) is valid for $(1) repository (< 100)"; \
+		fi; \
+	fi
+	@echo ""
+endef
+
+# Function to push debian packages.
+define func_push_debs
+	$(call func_check_variable,T_HOST)
+	$(call func_check_variable,T_USER)
+	$(call func_check_variable,T_PATH)
+	$(call func_check_variable,S_PATH)
+	$(call func_check_variable,T_SUBREPO)
+	$(call func_check_variable,DEBIAN_SERVICES)
+	$(call func_check_variable,DISTS)
+
+	@echo "🧹 Cleaning up temporary directory before upload..."
+	@http_code=$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$(T_USER)" "$(T_HOST)/files/${T_SUBREPO}"); \
+	if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then \
+		echo "✅ Temporary directory cleaned successfully (HTTP $http_code)"; \
+	elif [ "$http_code" -eq 404 ]; then \
+		echo "ℹ️  Temporary directory does not exist (HTTP $http_code) - will be created"; \
+	else \
+		echo "⚠️  Warning: Failed to clean temporary directory (HTTP $http_code)"; \
+		cat /tmp/curl_response.txt 2>/dev/null; \
+		echo "   Continuing with upload..."; \
+	fi; \
+	rm -f /tmp/curl_response.txt
+	@echo ""
+	@echo "🔍 Checking for duplicate packages in repository..."
+	@response=$(curl -k -s -X GET -u "$(T_USER)" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
+	if [ -z "$response" ]; then \
+		echo "⚠️  Warning: Could not fetch repository package list"; \
+		echo "   Continuing with upload..."; \
+	else \
+		duplicate_found=false; \
+		for svc in $(DEBIAN_SERVICES); do \
+			files=$(ls $(S_PATH)/$svc*.deb 2>/dev/null); \
+			if [ -z "$files" ]; then \
+				continue; \
+			fi; \
+			for file in $files; do \
+				pkg_name=$(dpkg-deb -f $file Package 2>/dev/null); \
+				pkg_version=$(dpkg-deb -f $file Version 2>/dev/null); \
+				if [ -n "$pkg_name" ] && [ -n "$pkg_version" ]; then \
+					if echo "$response" | grep -q "\"$pkg_name\" \"$pkg_version\""; then \
+						echo "❌ ERROR: Package $pkg_name version $pkg_version already exists in repository"; \
+						duplicate_found=true; \
+					fi; \
+				fi; \
+			done; \
+		done; \
+		if [ "$duplicate_found" = "true" ]; then \
+			echo ""; \
+			echo "❌ Duplicate package(s) found in repository. Aborting upload."; \
+			echo "   Please increment the version number and rebuild."; \
+			exit 1; \
+		else \
+			echo "✅ No duplicate packages found"; \
+		fi; \
+	fi
+	@echo ""
+	@echo "- Locally built .deb files  for services: \"$(DEBIAN_SERVICES)\""
+	@echo ""
+	@upload_success=true; \
+	uploaded_files=""; \
+	for svc in $(DEBIAN_SERVICES); do \
+		files=$$(ls $(S_PATH)/$$svc*.deb 2>/dev/null); \
+		if [ -z "$$files" ]; then \
+			echo "⚠️  No .deb files found for $$svc in $(S_PATH)"; \
+			continue; \
+		fi; \
+		for file in $$files; do \
+			echo -n "📦 Uploading $$(basename $$file) to temporary directory..."; \
+			http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$(T_USER)" -F file=@$$file "$(T_HOST)/files/${T_SUBREPO}"); \
+			if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
+				echo " ✅ (HTTP $$http_code)"; \
+				uploaded_files="$$uploaded_files$$file "; \
+			else \
+				echo " ❌ Failed (HTTP $$http_code)"; \
+				cat /tmp/curl_response.txt 2>/dev/null; \
+				echo ""; \
+				upload_success=false; \
+				break 2; \
+			fi; \
+		done; \
+	done; \
+	rm -f /tmp/curl_response.txt; \
+	if [ "$$upload_success" = "false" ]; then \
+		echo ""; \
+		echo "❌ Upload failed. Cleaning up temporary files..."; \
+		for file in $$uploaded_files; do \
+			filename=$$(basename $$file); \
+			echo -n "   Deleting $$filename from temporary directory..."; \
+			curl -k -s -X DELETE -u "$(T_USER)" "$(T_HOST)/files/${T_SUBREPO}/$$filename" >/dev/null 2>&1; \
+			echo " done"; \
+		done; \
+		echo ""; \
+		echo "❌ ERROR: Debian package upload failed. Process aborted."; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "✅ All files uploaded successfully to temporary directory"; \
+	echo ""
+	@echo "📋 Pushing files from temporary directory to repository..."
+	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$(T_USER)" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); \
+	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
+		echo "✅ Files pushed to repository successfully (HTTP $$http_code)"; \
+	else \
+		echo "❌ Failed to push files to repository (HTTP $$http_code)"; \
+		cat /tmp/curl_response.txt 2>/dev/null; \
+		echo ""; \
+		echo "⚠️  WARNING: Files remain in temporary directory ${T_SUBREPO}"; \
+		echo "   Manual cleanup may be required"; \
+		rm -f /tmp/curl_response.txt; \
+		exit 1; \
+	fi; \
+	rm -f /tmp/curl_response.txt
+	@echo ""
+	@echo "📸 Creating Snapshot ${T_SNAPSHOT}..."
+	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$(T_USER)" -H "Content-Type: application/json" -d "{\"Name\": \"${T_SNAPSHOT}\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); \
+	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
+		echo "✅ Snapshot created successfully (HTTP $$http_code)"; \
+	else \
+		echo "❌ Failed to create snapshot (HTTP $$http_code)"; \
+		cat /tmp/curl_response.txt 2>/dev/null; \
+		rm -f /tmp/curl_response.txt; \
+		exit 1; \
+	fi; \
+	rm -f /tmp/curl_response.txt
+	@echo ""
+	@echo "🚀 Publishing Snapshot ${T_SNAPSHOT}..."
+	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X PUT -u "$(T_USER)" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"${T_SNAPSHOT}\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); \
+	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
+		echo "✅ Snapshot published successfully (HTTP $$http_code)"; \
+	else \
+		echo "❌ Failed to publish snapshot (HTTP $$http_code)"; \
+		cat /tmp/curl_response.txt 2>/dev/null; \
+		rm -f /tmp/curl_response.txt; \
+		exit 1; \
+	fi; \
+	rm -f /tmp/curl_response.txt
+	@echo ""
+	@echo "🎉 Debian package deployment completed successfully!"
+	@echo ""
+endef
+
+# Function to list debian packages.
+define func_list_debs
+	$(call func_check_variable,T_HOST)
+	$(call func_check_variable,T_USER)
+	$(call func_check_variable,T_PATH)
+	$(call func_check_variable,S_PATH)
+	$(call func_check_variable,T_SUBREPO)
+	$(call func_check_variable,DEBIAN_SERVICES)
+	$(call func_check_variable,DISTS)
+
+	@echo "========================================"
+	@echo "📦 Locally Built .deb Packages"
+	@echo "========================================"
+	@echo "Services: \"$(DEBIAN_SERVICES)\""
+	@echo ""
+	@if find $(S_PATH) -maxdepth 1 -name "*.deb" -print -quit 2>/dev/null | grep -q .; then \
+		printf "%-50s %-15s %-10s\n" "FILENAME" "SIZE" "MODIFIED"; \
+		printf "%-50s %-15s %-10s\n" "--------" "----" "--------"; \
+		find $(S_PATH) -maxdepth 1 -name "*.deb" -exec sh -c 'printf "%-50s %-15s %-10s\n" "$$(basename "{}")" "$$(ls -lh "{}" | awk "{print \$$5}")" "$$(stat -f "%Sm" -t "%Y-%m-%d" "{}")"' \; | sort; \
+	else \
+		echo "(none)"; \
+	fi
+	@echo ""
+	@echo "========================================"
+	@echo "🌐 Remote Repository Packages"
+	@echo "========================================"
+	@echo "Repository: $(T_SUBREPO)"
+	@echo ""
+	@response=$$(curl -k -s -X GET -u "$(T_USER)" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
+	if [ -z "$$response" ]; then \
+		echo "(empty response from server)"; \
+	elif command -v jq >/dev/null 2>&1; then \
+		echo "$$response" | jq -e . >/dev/null 2>&1; \
+		if [ $$? -eq 0 ]; then \
+			count=$$(echo "$$response" | jq 'length'); \
+			echo "$$response" | jq -r 'if type == "array" and length > 0 then (map(split(" ") | {pkg: .[1], ver: .[2], arch: (.[0] | ltrimstr("P")), hash: .[3], verparts: (.[2] | split(".") | map(tonumber))}) | sort_by([.pkg, .verparts]) | ["PACKAGE", "VERSION", "ARCH", "HASH"] as $$headers | ($$headers | @tsv), (["--------", "-------", "----", "----"] | @tsv), (.[] | [.pkg, .ver, .arch, .hash] | @tsv)) else "(no packages found)" end' \
+			| column -t -s $$'\t'; \
+			echo ""; \
+			echo "Total: $$count package(s)"; \
+		else \
+			echo "⚠️  Invalid JSON response:"; \
+			echo "$$response"; \
+		fi; \
+	else \
+		echo "⚠️  jq not installed - showing raw response:"; \
+		echo "   Install jq for better formatting: brew install jq"; \
+		echo ""; \
+		echo "$$response" | python3 -m json.tool 2>/dev/null || echo "$$response"; \
+	fi
+	@echo ""
+	@echo "========================================"
+endef
+
+##----------------------------------------------------------------------------##
+## Docker Image Handling ##
+
 #------------------------------------------------------------------------------#
 
 include $(BUILD_ENV_ASN_VERSION_FILE)
