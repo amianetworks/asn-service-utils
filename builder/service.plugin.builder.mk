@@ -27,11 +27,6 @@ build-all:
 
 
 ##----------------------------------------------------------------------------##
-## Build Linux client CLI ##
-build-client:
-	@GOOS=linux GOARCH=amd64 go build $(SERVICE_C_CLI_GO_FLAGS) -o $(BUILD_SVC_CLIENTS_DIR)/${BUILDER_LOCAL_ENV_VERSION}/$(SERVICE_CLIENT_NAME) client/daemon/*.go
-
-##----------------------------------------------------------------------------##
 ## Main targets ##
 ## All dependent used below targets are defined in service.plugin.build.env.mk.
 
