@@ -152,42 +152,43 @@ define func_push_debs
 	$(call func_check_variable,DISTS)
 
 	@echo "🧹 Cleaning up temporary directory before upload..."
-	@http_code=$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$(T_USER)" "$(T_HOST)/files/${T_SUBREPO}"); \
-	if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then \
-		echo "✅ Temporary directory cleaned successfully (HTTP $http_code)"; \
-	elif [ "$http_code" -eq 404 ]; then \
-		echo "ℹ️  Temporary directory does not exist (HTTP $http_code) - will be created"; \
+	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$(T_USER)" "$(T_HOST)/files/${T_SUBREPO}"); \
+	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
+		echo "✅ Temporary directory cleaned successfully (HTTP $$http_code)"; \
+	elif [ "$$http_code" -eq 404 ]; then \
+		echo "ℹ️  Temporary directory does not exist (HTTP $$http_code) - will be created"; \
 	else \
-		echo "⚠️  Warning: Failed to clean temporary directory (HTTP $http_code)"; \
+		echo "⚠️  Warning: Failed to clean temporary directory (HTTP $$http_code)"; \
 		cat /tmp/curl_response.txt 2>/dev/null; \
 		echo "   Continuing with upload..."; \
 	fi; \
 	rm -f /tmp/curl_response.txt
 	@echo ""
+
 	@echo "🔍 Checking for duplicate packages in repository..."
-	@response=$(curl -k -s -X GET -u "$(T_USER)" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
-	if [ -z "$response" ]; then \
+	@response=$$(curl -k -s -X GET -u "$(T_USER)" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
+	if [ -z "$$response" ]; then \
 		echo "⚠️  Warning: Could not fetch repository package list"; \
 		echo "   Continuing with upload..."; \
 	else \
 		duplicate_found=false; \
 		for svc in $(DEBIAN_SERVICES); do \
-			files=$(ls $(S_PATH)/$svc*.deb 2>/dev/null); \
-			if [ -z "$files" ]; then \
+			files=$$(ls $(S_PATH)/$$svc*.deb 2>/dev/null); \
+			if [ -z "$$files" ]; then \
 				continue; \
 			fi; \
-			for file in $files; do \
-				pkg_name=$(dpkg-deb -f $file Package 2>/dev/null); \
-				pkg_version=$(dpkg-deb -f $file Version 2>/dev/null); \
-				if [ -n "$pkg_name" ] && [ -n "$pkg_version" ]; then \
-					if echo "$response" | grep -q "\"$pkg_name\" \"$pkg_version\""; then \
-						echo "❌ ERROR: Package $pkg_name version $pkg_version already exists in repository"; \
+			for file in $$files; do \
+				pkg_name=$$(dpkg-deb -f $$file Package 2>/dev/null); \
+				pkg_version=$$(dpkg-deb -f $$file Version 2>/dev/null); \
+				if [ -n "$$pkg_name" ] && [ -n "$$pkg_version" ]; then \
+					if echo "$$response" | grep -q "\"$$pkg_name\" \"$$pkg_version\""; then \
+						echo "❌ ERROR: Package $$pkg_name version $$pkg_version already exists in repository"; \
 						duplicate_found=true; \
 					fi; \
 				fi; \
 			done; \
 		done; \
-		if [ "$duplicate_found" = "true" ]; then \
+	   if [ "$$duplicate_found" = "true" ]; then \
 			echo ""; \
 			echo "❌ Duplicate package(s) found in repository. Aborting upload."; \
 			echo "   Please increment the version number and rebuild."; \
@@ -197,6 +198,7 @@ define func_push_debs
 		fi; \
 	fi
 	@echo ""
+
 	@echo "- Locally built .deb files  for services: \"$(DEBIAN_SERVICES)\""
 	@echo ""
 	@upload_success=true; \
@@ -239,6 +241,7 @@ define func_push_debs
 	echo ""; \
 	echo "✅ All files uploaded successfully to temporary directory"; \
 	echo ""
+
 	@echo "📋 Pushing files from temporary directory to repository..."
 	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$(T_USER)" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
@@ -254,6 +257,7 @@ define func_push_debs
 	fi; \
 	rm -f /tmp/curl_response.txt
 	@echo ""
+
 	@echo "📸 Creating Snapshot ${T_SNAPSHOT}..."
 	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$(T_USER)" -H "Content-Type: application/json" -d "{\"Name\": \"${T_SNAPSHOT}\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
@@ -266,6 +270,7 @@ define func_push_debs
 	fi; \
 	rm -f /tmp/curl_response.txt
 	@echo ""
+
 	@echo "🚀 Publishing Snapshot ${T_SNAPSHOT}..."
 	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X PUT -u "$(T_USER)" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"${T_SNAPSHOT}\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
