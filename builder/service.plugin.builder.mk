@@ -486,6 +486,40 @@ deb-%:
 	     -e "s/@SERVICE@/$(SERVICE_NAME)/" \
 	     $(SERVICE_CONTROL) > $(DEB_SVC_DIR)/DEBIAN/control
 
+	$(eval SERVICE_POSTINST := debian/deb.$(SERVICE_NAME).postinst)
+	@if [ -f $(SERVICE_POSTINST) ]; then \
+  		cp $(SERVICE_POSTINST) $(DEB_SVC_DIR)/DEBIAN/postinst; \
+  		chmod 755 $(DEB_SVC_DIR)/DEBIAN/postinst; \
+		chmod +x $(DEB_SVC_DIR)/DEBIAN/postinst; \
+  	fi
+
+	$(eval SERVICE_POSTRM := debian/deb.$(SERVICE_NAME).postrm)
+	@if [ -f $(SERVICE_POSTRM) ]; then \
+		cp $(SERVICE_POSTRM) $(DEB_SVC_DIR)/DEBIAN/postrm; \
+		chmod 755 $(DEB_SVC_DIR)/DEBIAN/postrm; \
+		chmod +x $(DEB_SVC_DIR)/DEBIAN/postrm; \
+	fi
+
+	$(eval SERVICE_PREINST := debian/deb.$(SERVICE_NAME).preinst)
+	@if [ -f $(SERVICE_PREINST) ]; then \
+		cp $(SERVICE_PREINST) $(DEB_SVC_DIR)/DEBIAN/preinst; \
+		chmod 755 $(DEB_SVC_DIR)/DEBIAN/preinst; \
+		chmod +x $(DEB_SVC_DIR)/DEBIAN/preinst; \
+	fi
+
+	$(eval SERVICE_PRERM := debian/deb.$(SERVICE_NAME).prerm)
+	@if [ -f $(SERVICE_PRERM) ]; then \
+		cp $(SERVICE_PRERM) $(DEB_SVC_DIR)/DEBIAN/prerm; \
+		chmod 755 $(DEB_SVC_DIR)/DEBIAN/prerm; \
+		chmod +x $(DEB_SVC_DIR)/DEBIAN/prerm; \
+	fi
+
+	$(eval SERVICE_FILE := debian/deb.$(SERVICE_NAME).service)
+	@if [ -f $(SERVICE_FILE) ]; then \
+		mkdir -p $(DEB_SVC_DIR)/lib/systemd/system; \
+		cp $(SERVICE_FILE) $(DEB_SVC_DIR)/lib/systemd/system/$(SERVICE_NAME).service; \
+	fi
+
 	@# Copy files from DEBIAN_FILES
 	@for pair in $(DEBIAN_FILES); do \
 		SRC=$$(echo $$pair | cut -d: -f1); \
@@ -493,7 +527,7 @@ deb-%:
 		echo "Processing file: $$SRC -> $(DEB_SVC_DIR)/$$DST"; \
 		mkdir -p $(DEB_SVC_DIR)/$$DST; \
 		cp "$$SRC" "$(DEB_SVC_DIR)/$$DST/" || { echo "Failed to copy $$SRC"; exit 1; }; \
-		chmod 644 "$(DEB_SVC_DIR)/$$DST/$$(basename $$SRC)"; \
+#		chmod 644 "$(DEB_SVC_DIR)/$$DST/$$(basename $$SRC)"; \
 	done
 	@echo "Prepared to packing .deb."
 
