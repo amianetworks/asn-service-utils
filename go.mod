@@ -6,11 +6,10 @@ replace asn.amiasys.com/asn-service-api/v26 => github.com/amianetworks/asn-servi
 
 require (
 	asn.amiasys.com/asn-service-api/v26 v26.4.0
-	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.3.3
-	github.com/amianetworks/am.modules/v26 v26.1.5
+	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.4.0
+	github.com/amianetworks/am.modules/v26 v26.1.10
 	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/gin-gonic/gin v1.11.0
-	github.com/goccy/go-json v0.10.5
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
@@ -19,7 +18,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.39.0
 	golang.org/x/term v0.38.0
-	google.golang.org/grpc v1.77.0
+	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -43,6 +42,7 @@ require (
 	github.com/go-playground/validator/v10 v10.29.0 // indirect
 	github.com/go-redsync/redsync/v4 v4.15.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.0 // indirect
 	github.com/gogf/gf v1.16.9 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
