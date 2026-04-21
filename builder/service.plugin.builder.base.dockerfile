@@ -22,7 +22,7 @@ RUN wget -q https://go.dev/dl/go1.24.4.linux-amd64.tar.gz && \
     tar -C /etc -xzf go1.24.4.linux-amd64.tar.gz && \
     rm -f go1.24.4.linux-amd64.tar.gz
 ENV PATH="${PATH}:/etc/go/bin"
-ENV GOPROXY="https://goproxy.io,direct"
+#ENV GOPROXY="https://goproxy.io,direct"
 #ENV GOPATH=/go
 #ENV GOCACHE=${GOPATH}/.cache
 #ENV GOMODCACHE=${GOPATH}/pkg/mod
