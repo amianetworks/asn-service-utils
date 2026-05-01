@@ -1,92 +1,167 @@
 # ASN Service Utils
 
-## IMPORTANT
-This is a subproject and contains utils only.
+`service-utils` is a shared utility submodule for ASN Services implemented as plugins.
 
-## Development Rules
-Before developing, check out this submodule to the branch with the same name as the `asn-service-api` version
-you are using, i.e., `v26.1.2`. Then, keep this submodule to the latest commit on that branch.
+It is not the ASN Service API itself. The ASN Service API is provided by the `asn-service-api` Go module. This repository contains the common builder, Docker, config, topology, and dependency metadata used by services that plug into the ASN Framework.
 
-## Description
-ASN (AI-Driving Secure Networking) is a distributed framework of secure network functions.\
-This API package is shared by all ASN services built as plugins.
-To build an ASN Distributed Service, you can refer to `asn-service-template` to get started.\
-The latest version is `v26.1.2`.
+## Repository Layout
 
-## API Layout
-    ├── builder       // Makefiles and Dockerfiles needed to build `YOUR_SERVICE`
-    ├── config        // config files needed to deploy `ASN` and `YOUR_SERVICE`
-    ├── docker        // docker compose files needed to deploy `ASN` and `YOUR_SERVICE`
-    ├── proto         // ASN's manager proto
-    └── go.mod        // dependencies used by `ASN`
+```text
+builder/    Makefiles, Dockerfiles, and ASN Framework version metadata for plugin builds
+config/     ASN Controller and ASN Service Node config templates and topology examples
+docker/     Docker Compose examples and cluster-generation helper
+proto/      ASN manager/local protobuf definitions used by utility tooling
+workflow/   ASN Service API and version-control design notes
+go.mod      Go dependencies used by service-utils itself
+```
 
-## How to use the API
-1. Implement all functions in controller.ASNController in `YOUR_SERVICE` controller module.
-   This is API provided by `YOUR_SERVICE` and called by ASN controller.
-2. Provide the init controller function
-   ```
-       func NewASNServiceController() controller.ASNServiceController
-   ```
-   in `YOUR_SERVICE` controller module.
-   The function name, parameter and return type should be EXACTLY THE SAME with the function above.
-   This is used for ASN controller to recognize `YOUR_SERVICE` controller.
-   ASNController is an interface defined in `./controller/asn.go`.
-   ASNServiceController is an interface defined in `./controller/service.go`.
-3. Implement all functions in servicenode.ASNService in `YOUR_SERVICE` servicenode module.
-   This is the API provided by `YOUR_SERVICE` and called by ASN service node.
-4. Provide the init service node function
-   ```
-       func NewASNService(asnServiceNode ASNServiceNode) (servicenode.ASNService, error)
-   ```
-   in `YOUR_SERVICE`'s service node module.
-   The function name, parameter and return type should be EXACTLY THE SAME with the function above.
-   This is used for ASN service node to recognize `YOUR_SERVICE` node.
-   ASNServiceNode is an interface defined in `./servicenode/asn.go`.
-   ASNService is an interface defined in `./servicenode/service.go`.
-5. Finish `YOUR_SERVICE` code. Use the function defined in `ASNController` and `ASNServiceNode` instead to manage the relation between `YOUR_SERVICE` controller and servicenode.
+## Version Control Model
 
-## How to compile `YOUR_SERVICE`
-1. Check the version of ASN API is corresponding with the version in ASN and `YOUR_SERVICE`.
-2. Check the dependency in `./go.mod`.
-   If you use the dependency list there, make sure the version is EXACTLY THE SAME one.
-   If you are building multiple plugins in one system, make sure the dependency they use have no different version.
-3. Git submodule `asn-service-api` in `YOUR_SERVICE` and export SERVICE_API_PATH = `YOUR SUBMODULE PATH`
-4. Include `./builder/service.plugin.builder.mk` in `YOUR_SERVICE` Makefile
-5. Provide "make build" command in `YOUR_SERVICE` Makefile
-6. Run `make compile-plugin` and can get the build directory like
-    ```
-        build
-        ├── controller    
-            ├── YOUR_SERVICE_NAME.so 
-            └── conf
-        └── servicenode
-            ├── YOUR_SERVICE_NAME.so 
-            └── conf
-    ```
-7. Move `controller/[YOUR_SERVICE].so` file to your ASN controller plugins directory
-   and `servicenode/[YOUR_SERVICE].so` file to your ASN servicenode plugins directory.
+ASN Services have several related but separate versions:
 
-## Deploy
-1. To deploy `YOUR_SERVICE` as one controller and one service node structure, refer to `./docker/*.yml`.
-   Make your project as the structure below
-   ```
-       project name
-       ├── controller    
-           ├── config
-           ├── services
-               └── YOUR_SERVICE_NAME.so 
-           └── asnc.yml
-       └── servicenode
-           ├── config
-           ├── services
-               └── YOUR_SERVICE_NAME.so 
-           └── asnsn.yml
-   ```
-   Then, use docker compose to start both controller and service node server.
-2. To deploy `YOUR_SERVICE` as one controller and multiple service nodes structure.
-   Run the scripts in the `./docker/cluster.go`.
-   This will generate the file similar to the structure as `./docker/*.yml`.
-   Move the `.so` files under plugins directory and then use docker compose to start the service.
-3. To deploy `YOUR_SERVICE` in your own topology. Please carefully read the Introduction in `ASN.25`.
-   Move your `*-topology.yml` file under `project name/controller/config`.
-   Move the `.so` files under plugins directory. Then can use docker compose to start the service.
+| Version | Controlled By | Meaning |
+|---|---|---|
+| ASN Service API version | Consuming service `ASN_SERVICE_API_VERSION` and consuming service `go.mod` | Go API contract used by the service plugin. |
+| `service-utils` checkout | Consuming service submodule commit, or `update_service_utils` | Builder/config/deploy utility version paired with the API version. |
+| ASN Framework/runtime version | `builder/ASN_VERSION` `DEP_VERSION_ASN` | ASN Controller / ASN Service Node runtime dependency version. |
+| ASN Service product version | Consuming service `VERSION`, `BUILD`, and `BUILD_MODE` | Product artifact version for that service. |
+
+The intended relationship, also documented in consuming service `make/config.mk` comments, is:
+
+```text
+ASN_SERVICE_API    ASN_SERVICE_UTILS    ASN Framework    ASN Service
+git tag/version    git branch/tag       runtime version  product version
+```
+
+The API version and `service-utils` checkout are normally paired. In the current Makefile convention, a consuming service sets:
+
+```make
+ASN_SERVICE_API_VERSION := <api-version>
+```
+
+and the builder helper can update this submodule with:
+
+```make
+git checkout v$(ASN_SERVICE_API_VERSION)
+```
+
+The ASN Framework/runtime version is separate. It is recorded in:
+
+```text
+builder/ASN_VERSION
+```
+
+as:
+
+```make
+DEP_VERSION_ASN=<framework-version>
+```
+
+`DEP_VERSION_ASN` is set by ASN Framework release tooling. Service plugin work should not edit `builder/ASN_VERSION` directly unless the task is explicitly ASN Framework/runtime version maintenance.
+
+The consuming service product version is independent from both the API version and the framework/runtime version.
+
+## Makefile Control Order
+
+A typical consuming service Makefile includes files in this order:
+
+1. The service includes its own `make/config.mk`.
+2. The service config sets product version fields and `ASN_SERVICE_API_VERSION`.
+3. The service Makefile includes `service-utils/builder/service.plugin.builder.mk`.
+4. `service.plugin.builder.mk` includes `builder/ASN_VERSION`.
+
+Because `builder/ASN_VERSION` is included after the service config, its `DEP_VERSION_ASN` value is the effective ASN Framework/runtime dependency for builder/package/runtime dependency paths under normal Make execution.
+
+This is why `ASN_SERVICE_API_VERSION` and `DEP_VERSION_ASN` must not be treated as the same version. They are a compatibility pair.
+
+## Service Implementation Contract
+
+ASN owns the framework runtime. A service owns its product behavior.
+
+Controller side:
+
+- The ASN Framework provides `controller.ASNController`.
+- The service implements `controller.ASNServiceController`.
+- The service exports:
+
+```go
+func NewASNServiceController() controller.ASNServiceController
+```
+
+Service Node side:
+
+- The ASN Framework provides `servicenode.ASNServiceNode`.
+- The service implements `servicenode.ASNService`.
+- The service exports:
+
+```go
+func NewASNService(asnServiceNode servicenode.ASNServiceNode) (servicenode.ASNService, error)
+```
+
+For lifecycle, state, operation, and concurrency rules, see:
+
+- `workflow/Design.md`
+- the `asn-service-api` package comments
+
+For version-control details, see:
+
+- `workflow/VersionControl.md`
+
+## Using service-utils in a Service
+
+A consuming service should:
+
+1. Set `ASN_SERVICE_API_VERSION` in its build config.
+2. Use a root `go.mod` dependency that matches the intended ASN Service API version.
+3. Add `service-utils` as a submodule at the intended compatible checkout.
+4. Include `service-utils/builder/service.plugin.builder.mk` from its root Makefile.
+5. Provide the service-specific build targets expected by the builder, usually through the service's internal makefile.
+6. Rebuild the builder base image when the service API, framework/runtime dependency, Go toolchain, protobuf tooling, private dependencies, or builder Dockerfiles change.
+
+Common high-level targets exposed by consuming services include:
+
+```bash
+make build-prepare
+make build-plugin
+```
+
+Exact target names may vary by service repository.
+
+## Build Outputs
+
+A plugin build normally produces artifacts similar to:
+
+```text
+build/
++-- controller/
+|   +-- <service>.so
+|   +-- config files
++-- servicenode/
+    +-- <service>.so
+    +-- config files
+```
+
+Service repositories may also build service-specific CLIs, client daemons, Debian packages, Docker images, or deployment bundles.
+
+## Deployment Assets
+
+The `docker/` and `config/` directories contain reusable examples for deploying ASN Controller, ASN Service Nodes, and service plugins.
+
+Treat these as templates. Production deployment requires service-specific review of:
+
+- runtime image versions,
+- database/cache/time-series dependencies,
+- IAM dependencies,
+- config paths,
+- certificates,
+- service plugin locations,
+- topology files,
+- host networking and port behavior.
+
+## Release Safety Rules
+
+- Do not assume `ASN_SERVICE_API_VERSION` equals `DEP_VERSION_ASN`.
+- Do not edit `builder/ASN_VERSION` from a service repo unless explicitly performing ASN Framework/runtime version maintenance.
+- Do not run `update_service_utils` casually; it performs networked git operations and can move the submodule checkout.
+- Do not publish packages, push images, or run deployment commands without explicit approval.
+- Record the intended API, `service-utils`, framework/runtime, and service product version pairing for every release.

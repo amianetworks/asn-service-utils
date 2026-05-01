@@ -1,4 +1,4 @@
-# ASN Service Utils Version Control Design
+# ASN Service Utils Version Control
 
 Status: initial reusable design note for review  
 Scope: version-control behavior for ASN Service Plugins that consume `service-utils`  
@@ -18,6 +18,17 @@ This document explains how versions are controlled so service maintainers and co
 - Builder image/toolchain version.
 
 The rules here are generic for ASN Services. Service-specific design documents should record the concrete values used by each service release.
+
+The consuming service's `make/config.mk` should be treated as the service-side entry point for version intent. Its version comments describe four related columns:
+
+| Column | Meaning |
+|---|---|
+| `ASN_SERVICE_API` | The API contract version selected by the service. |
+| `ASN_SERVICE_UTILS` | The `service-utils` branch/tag paired with that API version. |
+| `ASN(Framework)` | The ASN Controller / ASN Service Node runtime version dependency. |
+| `ASN Services` | The consuming service's own product version. |
+
+These columns are related, but they are not one version number.
 
 ## Version Sources
 
@@ -56,7 +67,7 @@ Sources:
 
 - The consuming service project, usually `make/config.mk`.
 - The consuming service project's `go.mod`.
-- `service-utils/go.mod`.
+- `service-utils/go.mod` as the utility submodule's own dependency reference.
 
 Typical variable/package:
 
@@ -70,7 +81,10 @@ Meaning:
 
 Control rule:
 
-- The consuming service's configured `ASN_SERVICE_API_VERSION`, the consuming service's `go.mod`, and `service-utils/go.mod` should use the intended same ASN service API version unless there is a documented compatibility exception.
+- The consuming service's configured `ASN_SERVICE_API_VERSION` expresses release intent and is used by `update_service_utils` to choose a `service-utils` checkout.
+- The consuming service's `go.mod` controls the actual Go service API dependency used to compile that service.
+- `service-utils/go.mod` records the API dependency for the utility submodule itself. It is compatibility evidence, not the primary compile authority for the consuming service.
+- These API references should use the intended same ASN service API version unless there is a documented compatibility exception.
 - When `ASN_SERVICE_API_VERSION` changes, the builder base image must be rebuilt because it caches Go packages and plugin build dependencies.
 - Changing the service API version is a compatibility-sensitive change and should be treated as release work.
 
@@ -90,6 +104,7 @@ Meaning:
 - It is consumed by `service.plugin.builder.mk` through `include $(BUILD_ENV_ASN_VERSION_FILE)`.
 - It is injected into Debian package control files as `@DEPENDS@`.
 - Consuming service projects may also pass `DEP_VERSION_ASN` into Docker build arguments for ASN Controller and ASN Service Node runtime images.
+- In the common Makefile flow, the consuming service includes its own config first, then includes `service.plugin.builder.mk`; `service.plugin.builder.mk` includes `service-utils/builder/ASN_VERSION` later. That later assignment becomes the effective `DEP_VERSION_ASN` under normal Makefile execution.
 
 Control rule:
 
@@ -103,13 +118,13 @@ Control rule:
 Sources:
 
 - The consuming service project's `.gitmodules`.
-- `service-utils/README.md`.
 - `service-utils/builder/service.plugin.builder.mk`.
 - The current submodule checkout state.
+- The consuming service's API/util pairing policy in `make/config.mk` comments.
 
 Intended behavior:
 
-- `service-utils/README.md` says to check out the submodule to the branch with the same name as the `asn-service-api` version being used.
+- `ASN_SERVICE_UTILS` is paired with `ASN_SERVICE_API` in the consuming service's version policy.
 - `service.plugin.builder.mk` target `update_service_utils` runs:
 
 ```make
@@ -180,12 +195,14 @@ Consuming service make/config.mk
   |     +--> service-utils checkout target v$(ASN_SERVICE_API_VERSION)
   |     +--> rebuild trigger for builder base image
   |
+  +-- early/default DEP_VERSION_ASN
+  |
   +-- BUILD_ENV_ASN_VERSION_FILE
         |
         v
 service-utils/builder/ASN_VERSION
   |
-  +-- DEP_VERSION_ASN
+  +-- effective DEP_VERSION_ASN
         |
         +--> Debian package dependency version
         +--> Docker build args for ASN runtime dependency
@@ -236,12 +253,43 @@ Before build or release work, verify:
 
 1. The consuming service's configured `ASN_SERVICE_API_VERSION` matches the intended Go API version.
 2. The consuming service's `go.mod` uses the same intended ASN service API version.
-3. `service-utils/go.mod` uses the same intended ASN service API version, or a documented compatible exception exists.
-4. `service-utils/builder/ASN_VERSION` `DEP_VERSION_ASN` is an intended compatible ASN Framework/runtime version.
-5. `service-utils` checkout state is intentional for the selected API version.
+3. `service-utils` checkout state is intentional for the selected API version.
+4. `service-utils/go.mod` uses the same intended ASN service API version, or a documented compatible exception exists.
+5. `service-utils/builder/ASN_VERSION` `DEP_VERSION_ASN` is an intended compatible ASN Framework/runtime version.
 6. Builder base image has been rebuilt after any API/toolchain/dependency change.
 7. Debian and Docker dependency versions are expected to follow `DEP_VERSION_ASN`.
 8. Service product artifacts are expected to follow `VERSION_BUILD`.
+
+## Mechanism Review
+
+The current mechanism is workable, but it is not very clear or friendly for maintainers.
+
+Good parts:
+
+- The version model separates ASN service API, `service-utils`, ASN Framework/runtime, and service product versions.
+- `make/config.mk` gives each consuming service one visible place to declare service-side version intent.
+- `builder/ASN_VERSION` keeps the ASN Framework/runtime dependency under ASN Framework release control.
+- Build-number checks prevent development build numbers from being published to production repositories and production build numbers from being published to the development repository.
+- Debian package generation uses the service product version for package version and `DEP_VERSION_ASN` for ASN runtime dependency.
+
+Unclear or risky parts:
+
+- `DEP_VERSION_ASN` is assigned once in the consuming service config and then assigned again after `builder/ASN_VERSION` is included. The later value is effective, but this is not obvious when reading only the service config.
+- `update_service_utils` is hidden inside build-preparation targets and can move the submodule checkout based on `ASN_SERVICE_API_VERSION`.
+- There is no read-only target that reports all version authorities before a build.
+- `build-plugin` increments the development build number as a side effect.
+- `build-prepare` combines cleanup, protobuf generation, submodule update, and Docker builder image work.
+- The service API version must be kept in both service config and root `go.mod`, but there is no explicit consistency check.
+- The utility submodule's `go.mod` can look like a control point even though it is only the utility module's own dependency reference.
+
+Recommended improvements:
+
+- Add a read-only `version-report` target that prints service product version, build mode, root Go API dependency, configured `ASN_SERVICE_API_VERSION`, `service-utils` checkout, `service-utils/go.mod` API dependency, and effective `DEP_VERSION_ASN`.
+- Add a `version-check` target that fails on undocumented mismatches.
+- Split `update_service_utils` from build-preparation targets, or require an explicit variable such as `UPDATE_SERVICE_UTILS=1`.
+- Rename the early/default `DEP_VERSION_ASN` in consuming service config if it is only a fallback, or remove it if the framework-owned value is always required.
+- Make build-number incrementing an explicit step for release workflows, or clearly distinguish `check-version` from `increment-build`.
+- Document the approved API/utils/framework pairing in release notes before building artifacts.
 
 ## Agentic Workflow Rules
 
