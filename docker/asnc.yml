@@ -39,7 +39,7 @@ services:
     volumes:
       - redis_data:/data
   sapphire-iam:
-    image: registry.amiasys.com/sapphire.iam:26.5.3
+    image: registry.amiasys.com/sapphire.iam:26.5.10
     container_name: sapphire-iam
     privileged: true
     restart: always
@@ -52,7 +52,7 @@ services:
       - ./iam-log/:/var/log/sapphire/
   asnc:
     restart: always
-    image: registry.amiasys.com/asnc:26.5.5
+    image: registry.amiasys.com/asnc:26.5.6
     network_mode: host
     depends_on:
       - "asn-mdb"
