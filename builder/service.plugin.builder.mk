@@ -37,7 +37,7 @@ version-report: .version_report
 version-check: .version_check
 
 # Init service-utils, then select the branch/tag matching ASN_SERVICE_API_VERSION.
-build-init: init_submodule update_service_utils
+build-init: init_service_utils update_service_utils
 
 # Call it to build base image. All 'build-prepare' when service-api updates.
 build-prepare: clean proto-gen prepare-service-builder-base
@@ -624,7 +624,7 @@ show-prepare:
 	@echo " Ran the container once to show the artifacts."
 
 #------------------------------------------------------------------------------#
-init_submodule:
+init_service_utils:
 	@if [ -z "$(SERVICE_UTILS_DIR)" ]; then \
 		echo "ERROR: SERVICE_UTILS_DIR is not set."; \
 		exit 1; \
@@ -632,10 +632,7 @@ init_submodule:
 	@git submodule sync --recursive $(SERVICE_UTILS_DIR)
 	@git submodule update --init --recursive $(SERVICE_UTILS_DIR)
 
-# Backward-compatible alias.
-init_submodules: init_submodule
-
-update_service_utils: init_submodule
+update_service_utils: init_service_utils
 	@if [ -z "$(ASN_SERVICE_API_VERSION)" ]; then \
 		echo "ERROR: ASN_SERVICE_API_VERSION is not set."; \
 		exit 1; \
