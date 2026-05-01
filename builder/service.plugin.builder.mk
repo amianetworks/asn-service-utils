@@ -36,6 +36,9 @@ version-report: .version_report
 
 version-check: .version_check
 
+# Init service-utils, then select the branch/tag matching ASN_SERVICE_API_VERSION.
+build-init: init_submodule update_service_utils
+
 # Call it to build base image. All 'build-prepare' when service-api updates.
 build-prepare: clean proto-gen prepare-service-builder-base
 	@echo "Successfully built base image."
@@ -552,10 +555,10 @@ deb-%:
 
 	$(eval SERVICE_POSTINST := debian/deb.$(SERVICE_NAME).postinst)
 	@if [ -f $(SERVICE_POSTINST) ]; then \
-  		cp $(SERVICE_POSTINST) $(DEB_SVC_DIR)/DEBIAN/postinst; \
-  		chmod 755 $(DEB_SVC_DIR)/DEBIAN/postinst; \
+		cp $(SERVICE_POSTINST) $(DEB_SVC_DIR)/DEBIAN/postinst; \
+		chmod 755 $(DEB_SVC_DIR)/DEBIAN/postinst; \
 		chmod +x $(DEB_SVC_DIR)/DEBIAN/postinst; \
-  	fi
+	fi
 
 	$(eval SERVICE_POSTRM := debian/deb.$(SERVICE_NAME).postrm)
 	@if [ -f $(SERVICE_POSTRM) ]; then \
@@ -621,5 +624,35 @@ show-prepare:
 	@echo " Ran the container once to show the artifacts."
 
 #------------------------------------------------------------------------------#
-update_service_utils:
-	@cd $(SERVICE_UTILS_DIR) && git fetch && git checkout v$(ASN_SERVICE_API_VERSION) && git pull
+init_submodule:
+	@if [ -z "$(SERVICE_UTILS_DIR)" ]; then \
+		echo "ERROR: SERVICE_UTILS_DIR is not set."; \
+		exit 1; \
+	fi
+	@git submodule sync --recursive $(SERVICE_UTILS_DIR)
+	@git submodule update --init --recursive $(SERVICE_UTILS_DIR)
+
+# Backward-compatible alias.
+init_submodules: init_submodule
+
+update_service_utils: init_submodule
+	@if [ -z "$(ASN_SERVICE_API_VERSION)" ]; then \
+		echo "ERROR: ASN_SERVICE_API_VERSION is not set."; \
+		exit 1; \
+	fi
+	@echo "Selecting service-utils ref v$(ASN_SERVICE_API_VERSION)"
+	@cd $(SERVICE_UTILS_DIR) && \
+		git fetch --prune origin && \
+		if git show-ref --verify --quiet refs/remotes/origin/v$(ASN_SERVICE_API_VERSION); then \
+			if git show-ref --verify --quiet refs/heads/v$(ASN_SERVICE_API_VERSION); then \
+				git checkout v$(ASN_SERVICE_API_VERSION); \
+				git pull --ff-only origin v$(ASN_SERVICE_API_VERSION); \
+			else \
+				git checkout -b v$(ASN_SERVICE_API_VERSION) origin/v$(ASN_SERVICE_API_VERSION); \
+			fi; \
+		elif git show-ref --verify --quiet refs/tags/v$(ASN_SERVICE_API_VERSION); then \
+			git checkout v$(ASN_SERVICE_API_VERSION); \
+		else \
+			echo "ERROR: service-utils ref v$(ASN_SERVICE_API_VERSION) was not found as an origin branch or tag."; \
+			exit 1; \
+		fi
