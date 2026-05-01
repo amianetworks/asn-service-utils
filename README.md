@@ -121,11 +121,15 @@ A consuming service should:
 Common high-level targets exposed by consuming services include:
 
 ```bash
+make version-report
+make version-check
 make build-prepare
 make build-plugin
 ```
 
 Exact target names may vary by service repository.
+
+`version-report` and `version-check` do not sync `service-utils` or build artifacts. `build-prepare` is the approved synchronization point that can run `update_service_utils`.
 
 ## Build Outputs
 

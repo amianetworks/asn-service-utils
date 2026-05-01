@@ -30,6 +30,12 @@ build-all:
 ## Main targets ##
 ## All dependent used below targets are defined in service.plugin.build.env.mk.
 
+.PHONY: version-report version-check .version_report .version_check
+
+version-report: .version_report
+
+version-check: .version_check
+
 # Call it to build base image. All 'build-prepare' when service-api updates.
 build-prepare: clean proto-gen prepare-service-builder-base
 	@echo "Successfully built base image."
@@ -346,6 +352,64 @@ endef
 #------------------------------------------------------------------------------#
 
 include $(BUILD_ENV_ASN_VERSION_FILE)
+
+#------------------------------------------------------------------------------#
+.version_report:
+	@echo "###"
+	@echo "### ASN Service Version Report"
+	@echo "Service: $(SERVICE)"
+	@echo "Product Version: $(VERSION_BUILD)"
+	@echo "Build Mode: $(BUILD_MODE)"
+	@echo "Configured ASN Service API: $(ASN_SERVICE_API_VERSION)"
+	@root_api=$$(awk '/asn\.amiasys\.com\/asn-service-api\/v[0-9]+/ { for (i = 1; i <= NF; i++) if ($$i ~ /^v[0-9]+\./) { sub(/^v/, "", $$i); print $$i; exit } }' go.mod 2>/dev/null); \
+	echo "Root go.mod ASN Service API: $${root_api:-unknown}"
+	@expected_ref="v$(ASN_SERVICE_API_VERSION)"; \
+	current_ref=$$(git -C $(SERVICE_UTILS_DIR) symbolic-ref --short -q HEAD 2>/dev/null || git -C $(SERVICE_UTILS_DIR) describe --tags --exact-match 2>/dev/null || echo "detached:$$(git -C $(SERVICE_UTILS_DIR) rev-parse --short HEAD 2>/dev/null || echo unknown)"); \
+	current_commit=$$(git -C $(SERVICE_UTILS_DIR) rev-parse --short HEAD 2>/dev/null || echo unknown); \
+	utils_api=$$(awk '/asn\.amiasys\.com\/asn-service-api\/v[0-9]+/ { for (i = 1; i <= NF; i++) if ($$i ~ /^v[0-9]+\./) { sub(/^v/, "", $$i); print $$i; exit } }' $(SERVICE_UTILS_DIR)/go.mod 2>/dev/null); \
+	echo "Expected service-utils ref: $$expected_ref"; \
+	echo "Current service-utils ref: $$current_ref"; \
+	echo "Current service-utils commit: $$current_commit"; \
+	echo "service-utils go.mod ASN Service API: $${utils_api:-unknown}"
+	@echo "ASN Version File: $(BUILD_ENV_ASN_VERSION_FILE)"
+	@echo "Effective ASN Framework Version: $(DEP_VERSION_ASN)"
+	@echo ""
+	@echo "Note: version-report does not sync service-utils or build artifacts. Run build-prepare to sync service-utils when approved."
+	@echo "###"
+
+.version_check:
+	@failed=0; \
+	expected_ref="v$(ASN_SERVICE_API_VERSION)"; \
+	root_api=$$(awk '/asn\.amiasys\.com\/asn-service-api\/v[0-9]+/ { for (i = 1; i <= NF; i++) if ($$i ~ /^v[0-9]+\./) { sub(/^v/, "", $$i); print $$i; exit } }' go.mod 2>/dev/null); \
+	current_ref=$$(git -C $(SERVICE_UTILS_DIR) symbolic-ref --short -q HEAD 2>/dev/null || git -C $(SERVICE_UTILS_DIR) describe --tags --exact-match 2>/dev/null || echo "detached:$$(git -C $(SERVICE_UTILS_DIR) rev-parse --short HEAD 2>/dev/null || echo unknown)"); \
+	utils_api=$$(awk '/asn\.amiasys\.com\/asn-service-api\/v[0-9]+/ { for (i = 1; i <= NF; i++) if ($$i ~ /^v[0-9]+\./) { sub(/^v/, "", $$i); print $$i; exit } }' $(SERVICE_UTILS_DIR)/go.mod 2>/dev/null); \
+	if [ -z "$(ASN_SERVICE_API_VERSION)" ]; then \
+		echo "ERROR: ASN_SERVICE_API_VERSION is not set."; failed=1; \
+	fi; \
+	if [ -z "$$root_api" ]; then \
+		echo "ERROR: root go.mod ASN Service API version was not found."; failed=1; \
+	elif [ "$$root_api" != "$(ASN_SERVICE_API_VERSION)" ]; then \
+		echo "ERROR: root go.mod ASN Service API ($$root_api) does not match ASN_SERVICE_API_VERSION ($(ASN_SERVICE_API_VERSION))."; failed=1; \
+	fi; \
+	if [ ! -d "$(SERVICE_UTILS_DIR)" ]; then \
+		echo "ERROR: service-utils directory was not found at $(SERVICE_UTILS_DIR)."; failed=1; \
+	elif [ "$$current_ref" != "$$expected_ref" ]; then \
+		echo "ERROR: service-utils ref ($$current_ref) does not match expected ref ($$expected_ref)."; \
+		echo "       Run build-prepare when approved to sync service-utils through update_service_utils."; failed=1; \
+	fi; \
+	if [ -z "$$utils_api" ]; then \
+		echo "ERROR: service-utils go.mod ASN Service API version was not found."; failed=1; \
+	elif [ "$$utils_api" != "$(ASN_SERVICE_API_VERSION)" ]; then \
+		echo "ERROR: service-utils go.mod ASN Service API ($$utils_api) does not match ASN_SERVICE_API_VERSION ($(ASN_SERVICE_API_VERSION))."; failed=1; \
+	fi; \
+	if [ -z "$(DEP_VERSION_ASN)" ]; then \
+		echo "ERROR: DEP_VERSION_ASN is not set after including $(BUILD_ENV_ASN_VERSION_FILE)."; failed=1; \
+	fi; \
+	if [ "$$failed" -ne 0 ]; then \
+		echo "Version check failed."; \
+		exit 1; \
+	fi; \
+	echo "Version check passed: API, service-utils ref, and ASN Framework dependency are consistent."
 
 #------------------------------------------------------------------------------#
 service-build-: update_service_utils

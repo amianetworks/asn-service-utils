@@ -282,11 +282,15 @@ Unclear or risky parts:
 - The service API version must be kept in both service config and root `go.mod`, but there is no explicit consistency check.
 - The utility submodule's `go.mod` can look like a control point even though it is only the utility module's own dependency reference.
 
+Implemented checks:
+
+- `version-report` prints service product version, build mode, root Go API dependency, configured `ASN_SERVICE_API_VERSION`, `service-utils` checkout, `service-utils/go.mod` API dependency, and effective `DEP_VERSION_ASN`.
+- `version-check` fails when API, `service-utils`, or ASN Framework dependency controls are inconsistent.
+
 Recommended improvements:
 
-- Add a read-only `version-report` target that prints service product version, build mode, root Go API dependency, configured `ASN_SERVICE_API_VERSION`, `service-utils` checkout, `service-utils/go.mod` API dependency, and effective `DEP_VERSION_ASN`.
-- Add a `version-check` target that fails on undocumented mismatches.
-- Split `update_service_utils` from build-preparation targets, or require an explicit variable such as `UPDATE_SERVICE_UTILS=1`.
+- Keep `version-report` and `version-check` free of submodule-sync and build-artifact side effects.
+- Consider adding a release-specific check that validates the selected repository target against `BUILD_MODE` before publishing.
 - Rename the early/default `DEP_VERSION_ASN` in consuming service config if it is only a fallback, or remove it if the framework-owned value is always required.
 - Make build-number incrementing an explicit step for release workflows, or clearly distinguish `check-version` from `increment-build`.
 - Document the approved API/utils/framework pairing in release notes before building artifacts.
