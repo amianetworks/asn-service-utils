@@ -30,7 +30,7 @@ COPY . .
 ARG MAKE_TARGET=build.targets
 
 # Run make specified targets: $(MAKE_TARGETS)
-RUN make -f make/internal.mk ${MAKE_TARGET}
+RUN --mount=type=secret,id=sshkey make -f make/internal.mk ${MAKE_TARGET}
 
 # Move the build dir to /
 RUN mv build /

@@ -30,31 +30,27 @@ build-all:
 ## Main targets ##
 ## All dependent used below targets are defined in service.plugin.build.env.mk.
 
-.PHONY: version-report version-check .version_report .version_check
+.PHONY: check-version check-go-mod
 
-version-report: .version_report
+# Ensure service-utils exists, then select the branch/tag matching ASN_SERVICE_API_VERSION
+# only when the current checkout is not already on the expected ref.
+build-init: update_service_utils
 
-version-check: .version_check
-
-# Init service-utils, then select the branch/tag matching ASN_SERVICE_API_VERSION.
-build-init: init_service_utils update_service_utils
-
-# Call it to build base image. All 'build-prepare' when service-api updates.
-build-prepare: clean proto-gen prepare-service-builder-base
+# Build the required builder base image. Run this on a fresh build host or when
+# ASN_SERVICE_API_VERSION changes.
+build-prepare: build-init clean proto-gen prepare-service-builder-base
 	@echo "Successfully built base image."
 	@echo
 
-check-prepare: check-service-builder-base
+check-prepare: check-version check-service-builder-base
 
 
-build-fresh: clean proto-gen service-build-from-scratch
+build-fresh: build-init clean proto-gen service-build-from-scratch
 	@echo "Built new base image and artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
 
-#build-plugin:
-# build-plugin: clean check-version increment-build  proto-gen service-build-once
-build-plugin: clean check-version increment-build  proto-gen service-build-once
+build-plugin: check-prepare clean increment-build proto-gen service-build-once
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
@@ -66,9 +62,52 @@ clean: .init_build_file
 
 check-vars: .check_vars
 
-check-version: .check_version
+check-version: .init_build_file
+	@echo "          Service: $(SERVICE)"
+	@echo "  ASN SERVICE_API: [$(ASN_SERVICE_API_VERSION)]"
+	@echo ""
+	@echo "       Build Mode: $(BUILD_MODE)"
+	@echo "  Current Version: [$(VERSION_BUILD)]"
+	@echo "       Next Build: ($$(expr $(CURRENT_BUILD))->$$(expr $(CURRENT_BUILD) + 1))"
+	@echo ""
+	@$(MAKE) --no-print-directory check-go-mod
 
-set-version: .check_version
+check-go-mod:
+	@failed=0; compared=0; skipped=0; \
+	root_requires=$$(mktemp); utils_requires=$$(mktemp); \
+	extract_requires() { \
+		awk ' \
+			$$1 == "require" && NF >= 3 { print $$2, $$3; next } \
+			$$1 == "require" && $$2 == "(" { in_require = 1; next } \
+			in_require && $$1 == ")" { in_require = 0; next } \
+			in_require && NF >= 2 && $$1 !~ /^\/\// { print $$1, $$2 } \
+		' "$$1" | sort; \
+	}; \
+	extract_requires go.mod > "$$root_requires"; \
+	extract_requires $(SERVICE_UTILS_DIR)/go.mod > "$$utils_requires"; \
+	while read -r module expected; do \
+		[ -z "$$module" ] && continue; \
+		actual=$$(awk -v module="$$module" '$$1 == module { print $$2; exit }' "$$root_requires"); \
+		if [ -z "$$actual" ]; then \
+			skipped=$$(expr $$skipped + 1); \
+		elif [ "$$actual" != "$$expected" ]; then \
+			compared=$$(expr $$compared + 1); \
+			printf "  %-48s Version: %s (expected %s). FAIL\n" "$$module" "$$actual" "$$expected"; \
+			failed=1; \
+		else \
+			compared=$$(expr $$compared + 1); \
+		fi; \
+	done < "$$utils_requires"; \
+	rm -f "$$root_requires" "$$utils_requires"; \
+	if [ "$$failed" -ne 0 ]; then \
+		echo ""; \
+		echo ">>go.mod conflict check failed: shared packages must use the same versions."; \
+		exit 1; \
+	fi; \
+	echo ">>go.mod conflict check passed: $$compared shared packages matched; $$skipped service-utils-only packages ignored."
+	@echo ""
+
+set-version: check-version
 	@echo "Modify config.mk to update the version and build."
 	@echo "NOTE: Only CI/CD or maintainer should change the version with caution."
 
@@ -357,73 +396,10 @@ endef
 include $(BUILD_ENV_ASN_VERSION_FILE)
 
 #------------------------------------------------------------------------------#
-.version_report:
-	@echo "###"
-	@echo "### ASN Service Version Report"
-	@echo "Service: $(SERVICE)"
-	@echo "Product Version: $(VERSION_BUILD)"
-	@echo "Build Mode: $(BUILD_MODE)"
-	@echo "Configured ASN Service API: $(ASN_SERVICE_API_VERSION)"
-	@root_api=$$(awk '/asn\.amiasys\.com\/asn-service-api\/v[0-9]+/ { for (i = 1; i <= NF; i++) if ($$i ~ /^v[0-9]+\./) { sub(/^v/, "", $$i); print $$i; exit } }' go.mod 2>/dev/null); \
-	echo "Root go.mod ASN Service API: $${root_api:-unknown}"
-	@expected_ref="v$(ASN_SERVICE_API_VERSION)"; \
-	current_ref=$$(git -C $(SERVICE_UTILS_DIR) symbolic-ref --short -q HEAD 2>/dev/null || git -C $(SERVICE_UTILS_DIR) describe --tags --exact-match 2>/dev/null || echo "detached:$$(git -C $(SERVICE_UTILS_DIR) rev-parse --short HEAD 2>/dev/null || echo unknown)"); \
-	current_commit=$$(git -C $(SERVICE_UTILS_DIR) rev-parse --short HEAD 2>/dev/null || echo unknown); \
-	utils_api=$$(awk '/asn\.amiasys\.com\/asn-service-api\/v[0-9]+/ { for (i = 1; i <= NF; i++) if ($$i ~ /^v[0-9]+\./) { sub(/^v/, "", $$i); print $$i; exit } }' $(SERVICE_UTILS_DIR)/go.mod 2>/dev/null); \
-	echo "Expected service-utils ref: $$expected_ref"; \
-	echo "Current service-utils ref: $$current_ref"; \
-	echo "Current service-utils commit: $$current_commit"; \
-	echo "service-utils go.mod ASN Service API: $${utils_api:-unknown}"
-	@echo "ASN Version File: $(BUILD_ENV_ASN_VERSION_FILE)"
-	@echo "Effective ASN Framework Version: $(DEP_VERSION_ASN)"
-	@echo ""
-	@echo "Note: version-report does not sync service-utils or build artifacts. Run build-prepare to sync service-utils when approved."
-	@echo "###"
-
-.version_check:
-	@failed=0; \
-	expected_ref="v$(ASN_SERVICE_API_VERSION)"; \
-	root_api=$$(awk '/asn\.amiasys\.com\/asn-service-api\/v[0-9]+/ { for (i = 1; i <= NF; i++) if ($$i ~ /^v[0-9]+\./) { sub(/^v/, "", $$i); print $$i; exit } }' go.mod 2>/dev/null); \
-	current_ref=$$(git -C $(SERVICE_UTILS_DIR) symbolic-ref --short -q HEAD 2>/dev/null || git -C $(SERVICE_UTILS_DIR) describe --tags --exact-match 2>/dev/null || echo "detached:$$(git -C $(SERVICE_UTILS_DIR) rev-parse --short HEAD 2>/dev/null || echo unknown)"); \
-	utils_api=$$(awk '/asn\.amiasys\.com\/asn-service-api\/v[0-9]+/ { for (i = 1; i <= NF; i++) if ($$i ~ /^v[0-9]+\./) { sub(/^v/, "", $$i); print $$i; exit } }' $(SERVICE_UTILS_DIR)/go.mod 2>/dev/null); \
-	if [ -z "$(ASN_SERVICE_API_VERSION)" ]; then \
-		echo "ERROR: ASN_SERVICE_API_VERSION is not set."; failed=1; \
-	fi; \
-	if [ -z "$$root_api" ]; then \
-		echo "ERROR: root go.mod ASN Service API version was not found."; failed=1; \
-	elif [ "$$root_api" != "$(ASN_SERVICE_API_VERSION)" ]; then \
-		echo "ERROR: root go.mod ASN Service API ($$root_api) does not match ASN_SERVICE_API_VERSION ($(ASN_SERVICE_API_VERSION))."; failed=1; \
-	fi; \
-	if [ ! -d "$(SERVICE_UTILS_DIR)" ]; then \
-		echo "ERROR: service-utils directory was not found at $(SERVICE_UTILS_DIR)."; failed=1; \
-	elif [ "$$current_ref" != "$$expected_ref" ]; then \
-		echo "ERROR: service-utils ref ($$current_ref) does not match expected ref ($$expected_ref)."; \
-		echo "       Run build-prepare when approved to sync service-utils through update_service_utils."; failed=1; \
-	fi; \
-	if [ -z "$$utils_api" ]; then \
-		echo "ERROR: service-utils go.mod ASN Service API version was not found."; failed=1; \
-	elif [ "$$utils_api" != "$(ASN_SERVICE_API_VERSION)" ]; then \
-		echo "ERROR: service-utils go.mod ASN Service API ($$utils_api) does not match ASN_SERVICE_API_VERSION ($(ASN_SERVICE_API_VERSION))."; failed=1; \
-	fi; \
-	if [ -z "$(DEP_VERSION_ASN)" ]; then \
-		echo "ERROR: DEP_VERSION_ASN is not set after including $(BUILD_ENV_ASN_VERSION_FILE)."; failed=1; \
-	fi; \
-	if [ "$$failed" -ne 0 ]; then \
-		echo "Version check failed."; \
-		exit 1; \
-	fi; \
-	echo "Version check passed: API, service-utils ref, and ASN Framework dependency are consistent."
-
-#------------------------------------------------------------------------------#
-service-build-: update_service_utils
-	@echo "Current working directory: ${PWD}"
-	@echo "Start building $(BUILD_ENV_IMAGE):latest"
-
-
 
 #------------------------------------------------------------------------------#
 # Prepare for base docker image to build ASN Service Plugins.
-prepare-service-builder-base: update_service_utils
+prepare-service-builder-base:
 	@echo "Current working directory: ${PWD}"
 	@echo "Building $(BUILD_ENV_BASE_IMAGE):latest"
 
@@ -437,6 +413,8 @@ prepare-service-builder-base: update_service_utils
 		--platform linux/amd64 \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
 		--secret id=sshkey,src=$(SSH_PRIVATE_KEY) \
+		--label asn.service_api=$(ASN_SERVICE_API_VERSION) \
+		--label asn.framework=$(DEP_VERSION_ASN) \
 		-t $(BUILD_ENV_BASE_IMAGE):latest .
 	@echo ""
 	@echo "Successfully built $(BUILD_ENV_BASE_IMAGE):latest as the base image."
@@ -448,12 +426,28 @@ prepare-service-builder-base: update_service_utils
 	@echo " - Run \`make build-docker\` to build standalone docker images, for non-plugin setup."
 	@echo ""
 
-# Check Prepare for base docker image to build ASN Service Plugins.
+# Check the builder base image required to build ASN Service Plugins.
 check-service-builder-base:
-	@docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^$(BUILD_ENV_BASE_IMAGE)(:|$$)' || echo "No Builder Base Image Found."
+	@if ! docker image inspect $(BUILD_ENV_BASE_IMAGE):latest >/dev/null 2>&1; then \
+		echo "ERROR: builder base image ($(BUILD_ENV_BASE_IMAGE):latest) was not found."; \
+		echo "       Run build-prepare before build-plugin."; \
+		echo "Builder base image check failed."; \
+		exit 1; \
+	fi; \
+	failed=0; \
+	api=$$(docker image inspect $(BUILD_ENV_BASE_IMAGE):latest --format '{{ index .Config.Labels "asn.service_api" }}' 2>/dev/null); \
+	framework=$$(docker image inspect $(BUILD_ENV_BASE_IMAGE):latest --format '{{ index .Config.Labels "asn.framework" }}' 2>/dev/null); \
+	print_check() { label="$$1"; actual="$$2"; expected="$$3"; if [ "$$actual" = "$$expected" ]; then printf "  %-24s Version: %s (expected). PASS\n" "$$label" "$${actual:-unknown}"; else printf "  %-24s Version: %s (expected %s). FAIL\n" "$$label" "$${actual:-unknown}" "$$expected"; failed=1; fi; }; \
+	print_check "Builder API" "$$api" "$(ASN_SERVICE_API_VERSION)"; \
+	print_check "Builder ASN Framework" "$$framework" "$(DEP_VERSION_ASN)"; \
+	if [ "$$failed" -ne 0 ]; then \
+		echo "Builder base image check failed. Run build-prepare."; \
+		exit 1; \
+	fi; \
+	echo "Builder base image check passed: $(BUILD_ENV_BASE_IMAGE):latest matches API/framework versions."
 
 # Rebuild everything from scratch.
-service-build-from-scratch: update_service_utils
+service-build-from-scratch:
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building $(BUILD_ENV_BASE_IMAGE):latest"
 
@@ -467,6 +461,8 @@ service-build-from-scratch: update_service_utils
 		--platform linux/amd64 \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
 		--secret id=sshkey,src=$(SSH_PRIVATE_KEY) \
+		--label asn.service_api=$(ASN_SERVICE_API_VERSION) \
+		--label asn.framework=$(DEP_VERSION_ASN) \
 		-t $(BUILD_ENV_BASE_IMAGE):latest .
 	@echo "Successfully built $(BUILD_ENV_BASE_IMAGE):latest."
 
@@ -508,7 +504,8 @@ service-build-once:
 #		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 
 	 # Build the service environment image.
-	@docker buildx build --platform linux/amd64 $(BUILD_ARGS) \
+	@DOCKER_BUILDKIT=1 docker buildx build --platform linux/amd64 $(BUILD_ARGS) \
+		--secret id=sshkey,src=$(SSH_PRIVATE_KEY) \
 		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 	@echo "Successfully built $(BUILD_ENV_IMAGE):latest."
 	@docker run -d --platform linux/amd64 --name $(BUILD_ENV_IMAGE) $(BUILD_ENV_IMAGE):latest
@@ -629,16 +626,26 @@ init_service_utils:
 		echo "ERROR: SERVICE_UTILS_DIR is not set."; \
 		exit 1; \
 	fi
-	@git submodule sync --recursive $(SERVICE_UTILS_DIR)
-	@git submodule update --init --recursive $(SERVICE_UTILS_DIR)
+	@if [ -d "$(SERVICE_UTILS_DIR)" ] && git -C "$(SERVICE_UTILS_DIR)" rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+		echo "service-utils is already present."; \
+	else \
+		echo "Initializing service-utils submodule."; \
+		git submodule sync --recursive $(SERVICE_UTILS_DIR); \
+		git submodule update --init --recursive $(SERVICE_UTILS_DIR); \
+	fi
 
 update_service_utils: init_service_utils
 	@if [ -z "$(ASN_SERVICE_API_VERSION)" ]; then \
 		echo "ERROR: ASN_SERVICE_API_VERSION is not set."; \
 		exit 1; \
 	fi
-	@echo "Selecting service-utils ref v$(ASN_SERVICE_API_VERSION)"
-	@cd $(SERVICE_UTILS_DIR) && \
+	@expected="v$(ASN_SERVICE_API_VERSION)"; \
+	current=$$(git -C "$(SERVICE_UTILS_DIR)" symbolic-ref --quiet --short HEAD 2>/dev/null || git -C "$(SERVICE_UTILS_DIR)" describe --tags --exact-match 2>/dev/null || git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD); \
+	if [ "$$current" = "$$expected" ]; then \
+		echo "service-utils ref $$current already selected."; \
+	else \
+		echo "Selecting service-utils ref $$expected"; \
+		cd $(SERVICE_UTILS_DIR) && \
 		git fetch --prune origin && \
 		if git show-ref --verify --quiet refs/remotes/origin/v$(ASN_SERVICE_API_VERSION); then \
 			if git show-ref --verify --quiet refs/heads/v$(ASN_SERVICE_API_VERSION); then \
@@ -652,4 +659,5 @@ update_service_utils: init_service_utils
 		else \
 			echo "ERROR: service-utils ref v$(ASN_SERVICE_API_VERSION) was not found as an origin branch or tag."; \
 			exit 1; \
-		fi
+		fi; \
+	fi
