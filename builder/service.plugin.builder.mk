@@ -428,7 +428,14 @@ prepare-service-builder-base:
 
 # Check the builder base image required to build ASN Service Plugins.
 check-service-builder-base:
-	@if ! docker image inspect $(BUILD_ENV_BASE_IMAGE):latest >/dev/null 2>&1; then \
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "ERROR: Docker daemon is not reachable."; \
+		echo "       check-prepare cannot verify $(BUILD_ENV_BASE_IMAGE):latest without Docker access."; \
+		echo "       Fix Docker access or rerun in an approved Docker-capable environment."; \
+		echo "Builder base image check failed."; \
+		exit 1; \
+	fi; \
+	if ! docker image inspect $(BUILD_ENV_BASE_IMAGE):latest >/dev/null 2>&1; then \
 		echo "ERROR: builder base image ($(BUILD_ENV_BASE_IMAGE):latest) was not found."; \
 		echo "       Run build-prepare before build-plugin."; \
 		echo "Builder base image check failed."; \
