@@ -63,12 +63,13 @@ clean: .init_build_file
 check-vars: .check_vars
 
 check-version: .init_build_file
-	@echo "          Service: $(SERVICE)"
-	@echo "  ASN SERVICE_API: [$(ASN_SERVICE_API_VERSION)]"
-	@echo ""
-	@echo "       Build Mode: $(BUILD_MODE)"
-	@echo "  Current Version: [$(VERSION_BUILD)]"
-	@echo "       Next Build: ($$(expr $(CURRENT_BUILD))->$$(expr $(CURRENT_BUILD) + 1))"
+	@next_build=$$(expr $(CURRENT_BUILD) + 1); \
+	echo ">> Version Check"; \
+	printf "  %-15s : %s\n" "Service" "$(SERVICE)"; \
+	printf "  %-15s : %s\n" "ASN Service API" "$(ASN_SERVICE_API_VERSION)"; \
+	printf "  %-15s : %s\n" "Build Mode" "$(BUILD_MODE)"; \
+	printf "  %-15s : %s\n" "Current Version" "$(VERSION_BUILD)"; \
+	printf "  %-15s : $(VERSION).%s\n" "Next Version" "$$next_build"
 	@echo ""
 	@$(MAKE) --no-print-directory check-go-mod
 
@@ -92,7 +93,7 @@ check-go-mod:
 			skipped=$$(expr $$skipped + 1); \
 		elif [ "$$actual" != "$$expected" ]; then \
 			compared=$$(expr $$compared + 1); \
-			printf "  %-48s Version: %s (expected %s). FAIL\n" "$$module" "$$actual" "$$expected"; \
+			printf "            %-48s Root: %s, service-utils: %s. FAIL\n" "$$module" "$$actual" "$$expected"; \
 			failed=1; \
 		else \
 			compared=$$(expr $$compared + 1); \
@@ -101,10 +102,13 @@ check-go-mod:
 	rm -f "$$root_requires" "$$utils_requires"; \
 	if [ "$$failed" -ne 0 ]; then \
 		echo ""; \
-		echo ">>go.mod conflict check failed: shared packages must use the same versions."; \
+		echo ">> go.mod Conflict Check: [FAIL]"; \
+		echo "            Shared package versions must match between root go.mod and service-utils/go.mod."; \
 		exit 1; \
 	fi; \
-	echo ">>go.mod conflict check passed: $$compared shared packages matched; $$skipped service-utils-only packages ignored."
+	echo ">> go.mod Conflict Check: [PASS]"; \
+	printf "  %-15s : %s matched\n" "Shared Packages" "$$compared"; \
+	printf "  %-15s : %s ignored\n" "Utils-only Mods" "$$skipped"
 	@echo ""
 
 set-version: check-version
@@ -426,32 +430,67 @@ prepare-service-builder-base:
 	@echo " - Run \`make build-docker\` to build standalone docker images, for non-plugin setup."
 	@echo ""
 
-# Check the builder base image required to build ASN Service Plugins.
+# Check the local builder base image required to build ASN Service Plugins.
+# This is a local Docker image check only; never query an online registry for it.
 check-service-builder-base:
-	@if ! docker info >/dev/null 2>&1; then \
-		echo "ERROR: Docker daemon is not reachable."; \
-		echo "       check-prepare cannot verify $(BUILD_ENV_BASE_IMAGE):latest without Docker access."; \
-		echo "       Fix Docker access or rerun in an approved Docker-capable environment."; \
-		echo "Builder base image check failed."; \
+	@image="$(BUILD_ENV_BASE_IMAGE):latest"; \
+	if ! docker info >/dev/null 2>&1; then \
+		echo ">> Builder Version and Base Image Check: [FAIL]"; \
+		printf "  %-15s : unavailable\n" "Docker"; \
+		echo "Local builder base image check failed: Docker daemon is not reachable."; \
 		exit 1; \
 	fi; \
-	if ! docker image inspect $(BUILD_ENV_BASE_IMAGE):latest >/dev/null 2>&1; then \
-		echo "ERROR: builder base image ($(BUILD_ENV_BASE_IMAGE):latest) was not found."; \
-		echo "       Run build-prepare before build-plugin."; \
-		echo "Builder base image check failed."; \
+	image_id=$$(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' | awk -v image="$$image" '$$1 == image { print $$2; exit }'); \
+	if [ -z "$$image_id" ]; then \
+		echo ">> Builder Version and Base Image Check: [FAIL]"; \
+		printf "  %-15s : %s (missing)\n" "Base Image" "$$image"; \
+		echo "Local builder base image check failed: run make build-prepare before make build-plugin."; \
 		exit 1; \
 	fi; \
+	inspect_err=$$(mktemp); \
+	inspect_id=$$(docker image inspect "$$image_id" --format '{{.Id}}' 2>"$$inspect_err"); \
+	inspect_status=$$?; \
+	if [ "$$inspect_status" -ne 0 ]; then \
+		echo ">> Builder Version and Base Image Check: [FAIL]"; \
+		if grep -qi "No such image" "$$inspect_err"; then \
+			printf "  %-15s : %s (listed, unusable)\n" "Base Image" "$$image"; \
+			echo "Local builder base image check failed: stale Docker image ID; run make build-prepare."; \
+		else \
+			printf "  %-15s : %s (inspect failed)\n" "Base Image" "$$image"; \
+			echo "Local builder base image check failed: docker image inspect failed."; \
+			sed 's/^/  Docker Error             /' "$$inspect_err"; \
+		fi; \
+		rm -f "$$inspect_err"; \
+		exit 1; \
+	fi; \
+	rm -f "$$inspect_err"; \
 	failed=0; \
-	api=$$(docker image inspect $(BUILD_ENV_BASE_IMAGE):latest --format '{{ index .Config.Labels "asn.service_api" }}' 2>/dev/null); \
-	framework=$$(docker image inspect $(BUILD_ENV_BASE_IMAGE):latest --format '{{ index .Config.Labels "asn.framework" }}' 2>/dev/null); \
-	print_check() { label="$$1"; actual="$$2"; expected="$$3"; if [ "$$actual" = "$$expected" ]; then printf "  %-24s Version: %s (expected). PASS\n" "$$label" "$${actual:-unknown}"; else printf "  %-24s Version: %s (expected %s). FAIL\n" "$$label" "$${actual:-unknown}" "$$expected"; failed=1; fi; }; \
-	print_check "Builder API" "$$api" "$(ASN_SERVICE_API_VERSION)"; \
-	print_check "Builder ASN Framework" "$$framework" "$(DEP_VERSION_ASN)"; \
+	api=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_api" }}' 2>/dev/null); \
+	framework=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.framework" }}' 2>/dev/null); \
+	if [ "$$api" != "$(ASN_SERVICE_API_VERSION)" ]; then failed=1; fi; \
+	if [ "$$framework" != "$(DEP_VERSION_ASN)" ]; then failed=1; fi; \
 	if [ "$$failed" -ne 0 ]; then \
-		echo "Builder base image check failed. Run build-prepare."; \
+		echo ">> Builder Version and Base Image Check: [FAIL]"; \
+		printf "  %-15s : %s\n" "Base Image" "$$image"; \
+		printf "  %-15s : %s\n" "ID" "$${inspect_id#sha256:}"; \
+		if [ "$$api" = "$(ASN_SERVICE_API_VERSION)" ]; then \
+			printf "  %-15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "$${api:-unknown}"; \
+		else \
+			printf "  %-15s : %s (expected %s as ASN_SERVICE_API_VERSION). FAIL\n" "API Version" "$${api:-unknown}" "$(ASN_SERVICE_API_VERSION)"; \
+		fi; \
+		if [ "$$framework" = "$(DEP_VERSION_ASN)" ]; then \
+			printf "  %-15s : %s (expected from service-utils)\n" "ASN Version" "$${framework:-unknown}"; \
+		else \
+			printf "  %-15s : %s (expected %s from service-utils). FAIL\n" "ASN Version" "$${framework:-unknown}" "$(DEP_VERSION_ASN)"; \
+		fi; \
+		echo "Local builder base image check failed. Run build-prepare."; \
 		exit 1; \
 	fi; \
-	echo "Builder base image check passed: $(BUILD_ENV_BASE_IMAGE):latest matches API/framework versions."
+	echo ">> Builder Version and Base Image Check: [PASS]"; \
+	printf "  %-15s : %s\n" "Base Image" "$$image"; \
+	printf "  %-15s : %s\n" "ID" "$${inspect_id#sha256:}"; \
+	printf "  %-15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "$$api"; \
+	printf "  %-15s : %s (expected from service-utils)\n" "ASN Version" "$$framework"
 
 # Rebuild everything from scratch.
 service-build-from-scratch:
