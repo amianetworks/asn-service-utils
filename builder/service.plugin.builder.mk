@@ -413,14 +413,14 @@ prepare-service-builder-base:
 	-docker rmi $(BUILD_ENV_BASE_IMAGE):latest
 
 	 # Build the base image and run 'build' once to get all go packages.
-	@service_deps_hash=$$({ [ -f go.mod ] && cat go.mod; [ -f go.sum ] && cat go.sum; } | shasum -a 256 | awk '{ print $$1 }'); \
+	@service_go_mod_hash=$$(shasum -a 256 go.mod | awk '{ print $$1 }'); \
 	DOCKER_BUILDKIT=1 docker buildx build \
 		--platform linux/amd64 \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
 		--secret id=sshkey,src=$(SSH_PRIVATE_KEY) \
 		--label asn.service_api=$(ASN_SERVICE_API_VERSION) \
 		--label asn.framework=$(DEP_VERSION_ASN) \
-		--label asn.service_deps="$$service_deps_hash" \
+		--label asn.service_go_mod="$$service_go_mod_hash" \
 		-t $(BUILD_ENV_BASE_IMAGE):latest .
 	@echo ""
 	@echo "Successfully built $(BUILD_ENV_BASE_IMAGE):latest as the base image."
@@ -469,11 +469,11 @@ check-service-builder-base:
 	failed=0; \
 	api=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_api" }}' 2>/dev/null); \
 	framework=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.framework" }}' 2>/dev/null); \
-	deps=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_deps" }}' 2>/dev/null); \
-	expected_deps=$$({ [ -f go.mod ] && cat go.mod; [ -f go.sum ] && cat go.sum; } | shasum -a 256 | awk '{ print $$1 }'); \
+	go_mod=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_go_mod" }}' 2>/dev/null); \
+	expected_go_mod=$$(shasum -a 256 go.mod | awk '{ print $$1 }'); \
 	if [ "$$api" != "$(ASN_SERVICE_API_VERSION)" ]; then failed=1; fi; \
 	if [ "$$framework" != "$(DEP_VERSION_ASN)" ]; then failed=1; fi; \
-	if [ "$$deps" != "$$expected_deps" ]; then failed=1; fi; \
+	if [ "$$go_mod" != "$$expected_go_mod" ]; then failed=1; fi; \
 	if [ "$$failed" -ne 0 ]; then \
 		echo ">> Builder Version and Base Image Check: [FAIL]"; \
 		printf "  %-15s : %s\n" "Base Image" "$$image"; \
@@ -488,10 +488,10 @@ check-service-builder-base:
 		else \
 			printf "  %-15s : %s (expected %s from service-utils). FAIL\n" "ASN Version" "$${framework:-unknown}" "$(DEP_VERSION_ASN)"; \
 		fi; \
-		if [ "$$deps" = "$$expected_deps" ]; then \
-			printf "  %-15s : %s (expected from service go.mod/go.sum)\n" "Service Deps" "$${deps:-unknown}"; \
+		if [ "$$go_mod" = "$$expected_go_mod" ]; then \
+			printf "  %-15s : %s (expected from service go.mod).\n" "Service go.mod" "$${go_mod:-unknown}"; \
 		else \
-			printf "  %-15s : %s (expected %s from service go.mod/go.sum). FAIL\n" "Service Deps" "$${deps:-missing}" "$$expected_deps"; \
+			printf "  %-15s : %s (expected %s from service go.mod). FAIL\n" "Service go.mod" "$${go_mod:-missing}" "$$expected_go_mod"; \
 		fi; \
 		echo "Local builder base image check failed. Run build-prepare."; \
 		exit 1; \
@@ -501,7 +501,7 @@ check-service-builder-base:
 	printf "  %15s : %s\n" "ID" "$${inspect_id#sha256:}"; \
 	printf "  %15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "$$api"; \
 	printf "  %15s : %s (expected from service-utils)\n" "ASN Version" "$$framework"; \
-	printf "  %15s : %s (expected from service go.mod/go.sum)\n" "Service Deps" "$$deps"
+	printf "  %15s : %s (expected from service go.mod).\n" "Service go.mod" "$$go_mod"
 
 # Rebuild everything from scratch.
 service-build-from-scratch:
@@ -514,14 +514,14 @@ service-build-from-scratch:
 	-docker rmi $(BUILD_ENV_BASE_IMAGE):latest
 
 	 # Build the base image and run 'build' once.
-	@service_deps_hash=$$({ [ -f go.mod ] && cat go.mod; [ -f go.sum ] && cat go.sum; } | shasum -a 256 | awk '{ print $$1 }'); \
+	@service_go_mod_hash=$$(shasum -a 256 go.mod | awk '{ print $$1 }'); \
 	DOCKER_BUILDKIT=1 docker buildx build \
 		--platform linux/amd64 \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
 		--secret id=sshkey,src=$(SSH_PRIVATE_KEY) \
 		--label asn.service_api=$(ASN_SERVICE_API_VERSION) \
 		--label asn.framework=$(DEP_VERSION_ASN) \
-		--label asn.service_deps="$$service_deps_hash" \
+		--label asn.service_go_mod="$$service_go_mod_hash" \
 		-t $(BUILD_ENV_BASE_IMAGE):latest .
 	@echo "Successfully built $(BUILD_ENV_BASE_IMAGE):latest."
 
