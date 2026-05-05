@@ -700,12 +700,16 @@ update_service_utils: init_service_utils
 	fi
 	@expected="v$(ASN_SERVICE_API_VERSION)"; \
 	current=$$(git -C "$(SERVICE_UTILS_DIR)" symbolic-ref --quiet --short HEAD 2>/dev/null || git -C "$(SERVICE_UTILS_DIR)" describe --tags --exact-match 2>/dev/null || git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD); \
+	cd $(SERVICE_UTILS_DIR) && \
+	git fetch --prune origin && \
 	if [ "$$current" = "$$expected" ]; then \
-		echo "service-utils ref $$current already selected."; \
+		if git show-ref --verify --quiet refs/remotes/origin/v$(ASN_SERVICE_API_VERSION); then \
+			git pull --ff-only origin v$(ASN_SERVICE_API_VERSION); \
+		else \
+			echo "service-utils ref $$current already selected (tag, no pull needed)."; \
+		fi; \
 	else \
 		echo "Selecting service-utils ref $$expected"; \
-		cd $(SERVICE_UTILS_DIR) && \
-		git fetch --prune origin && \
 		if git show-ref --verify --quiet refs/remotes/origin/v$(ASN_SERVICE_API_VERSION); then \
 			if git show-ref --verify --quiet refs/heads/v$(ASN_SERVICE_API_VERSION); then \
 				git checkout v$(ASN_SERVICE_API_VERSION); \
