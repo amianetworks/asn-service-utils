@@ -413,7 +413,7 @@ prepare-service-builder-base:
 	-docker rmi $(BUILD_ENV_BASE_IMAGE):latest
 
 	 # Build the base image and run 'build' once to get all go packages.
-	@service_deps_hash=$$({ [ -f go.mod ] && cat go.mod; [ -f go.sum ] && cat go.sum; } | shasum -a 256 | awk '{ print $$1 }'); \
+	@service_deps_hash=$$({ [ -f go.mod ] && cat go.mod; } | shasum -a 256 | awk '{ print $$1 }'); \
 	DOCKER_BUILDKIT=1 docker buildx build \
 		--platform linux/amd64 \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
@@ -470,7 +470,7 @@ check-service-builder-base:
 	api=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_api" }}' 2>/dev/null); \
 	framework=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.framework" }}' 2>/dev/null); \
 	deps=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_deps" }}' 2>/dev/null); \
-	expected_deps=$$({ [ -f go.mod ] && cat go.mod; [ -f go.sum ] && cat go.sum; } | shasum -a 256 | awk '{ print $$1 }'); \
+	expected_deps=$$({ [ -f go.mod ] && cat go.mod; } | shasum -a 256 | awk '{ print $$1 }'); \
 	if [ "$$api" != "$(ASN_SERVICE_API_VERSION)" ]; then failed=1; fi; \
 	if [ "$$framework" != "$(DEP_VERSION_ASN)" ]; then failed=1; fi; \
 	if [ "$$deps" != "$$expected_deps" ]; then failed=1; fi; \
@@ -489,9 +489,9 @@ check-service-builder-base:
 			printf "  %-15s : %s (expected %s from service-utils). FAIL\n" "ASN Version" "$${framework:-unknown}" "$(DEP_VERSION_ASN)"; \
 		fi; \
 		if [ "$$deps" = "$$expected_deps" ]; then \
-			printf "  %-15s : %s (expected from service go.mod/go.sum)\n" "Service Deps" "$${deps:-unknown}"; \
+			printf "  %-15s : %s (expected from service go.mod)\n" "Service Deps" "$${deps:-unknown}"; \
 		else \
-			printf "  %-15s : %s (expected %s from service go.mod/go.sum). FAIL\n" "Service Deps" "$${deps:-missing}" "$$expected_deps"; \
+			printf "  %-15s : %s (expected %s from service go.mod). FAIL\n" "Service Deps" "$${deps:-missing}" "$$expected_deps"; \
 		fi; \
 		echo "Local builder base image check failed. Run build-prepare."; \
 		exit 1; \
@@ -501,7 +501,7 @@ check-service-builder-base:
 	printf "  %15s : %s\n" "ID" "$${inspect_id#sha256:}"; \
 	printf "  %15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "$$api"; \
 	printf "  %15s : %s (expected from service-utils)\n" "ASN Version" "$$framework"; \
-	printf "  %15s : %s (expected from service go.mod/go.sum)\n" "Service Deps" "$$deps"
+	printf "  %15s : %s (expected from service go.mod)\n" "Service Deps" "$$deps"
 
 # Rebuild everything from scratch.
 service-build-from-scratch:
@@ -514,7 +514,7 @@ service-build-from-scratch:
 	-docker rmi $(BUILD_ENV_BASE_IMAGE):latest
 
 	 # Build the base image and run 'build' once.
-	@service_deps_hash=$$({ [ -f go.mod ] && cat go.mod; [ -f go.sum ] && cat go.sum; } | shasum -a 256 | awk '{ print $$1 }'); \
+	@service_deps_hash=$$({ [ -f go.mod ] && cat go.mod; } | shasum -a 256 | awk '{ print $$1 }'); \
 	DOCKER_BUILDKIT=1 docker buildx build \
 		--platform linux/amd64 \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
