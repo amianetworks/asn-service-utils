@@ -65,11 +65,11 @@ check-vars: .check_vars
 check-version: .init_build_file
 	@next_build=$$(expr $(CURRENT_BUILD) + 1); \
 	echo ">> Version Check"; \
-	printf "  %-15s : %s\n" "Service" "$(SERVICE)"; \
-	printf "  %-15s : %s\n" "ASN Service API" "$(ASN_SERVICE_API_VERSION)"; \
-	printf "  %-15s : %s\n" "Build Mode" "$(BUILD_MODE)"; \
-	printf "  %-15s : %s\n" "Current Version" "$(VERSION_BUILD)"; \
-	printf "  %-15s : $(VERSION).%s\n" "Next Version" "$$next_build"
+	printf "  %15s : %s\n" "Service" "$(SERVICE)"; \
+	printf "  %15s : %s\n" "ASN Service API" "$(ASN_SERVICE_API_VERSION)"; \
+	printf "  %15s : %s\n" "Build Mode" "$(BUILD_MODE)"; \
+	printf "  %15s : %s\n" "Current Version" "$(VERSION_BUILD)"; \
+	printf "  %15s : $(VERSION).%s\n" "Next Version" "$$next_build"
 	@echo ""
 	@$(MAKE) --no-print-directory check-go-mod
 
@@ -107,8 +107,8 @@ check-go-mod:
 		exit 1; \
 	fi; \
 	echo ">> go.mod Conflict Check: [PASS]"; \
-	printf "  %-15s : %s matched\n" "Shared Packages" "$$compared"; \
-	printf "  %-15s : %s ignored\n" "Utils-only Mods" "$$skipped"
+	printf "  %15s : %s matched\n" "Shared Packages" "$$compared"; \
+	printf "  %15s : %s ignored\n" "Utils-only Mods" "$$skipped"
 	@echo ""
 
 set-version: check-version
@@ -355,8 +355,8 @@ define func_list_debs
 	@echo "Services: \"$(DEBIAN_SERVICES)\""
 	@echo ""
 	@if find $(S_PATH) -maxdepth 1 -name "*.deb" -print -quit 2>/dev/null | grep -q .; then \
-		printf "%-50s %-15s %-10s\n" "FILENAME" "SIZE" "MODIFIED"; \
-		printf "%-50s %-15s %-10s\n" "--------" "----" "--------"; \
+		printf "%-50s %15s %-10s\n" "FILENAME" "SIZE" "MODIFIED"; \
+		printf "%-50s %15s %-10s\n" "--------" "----" "--------"; \
 		find $(S_PATH) -maxdepth 1 -name "*.deb" -exec sh -c 'printf "%-50s %-15s %-10s\n" "$$(basename "{}")" "$$(ls -lh "{}" | awk "{print \$$5}")" "$$(stat -f "%Sm" -t "%Y-%m-%d" "{}")"' \; | sort; \
 	else \
 		echo "(none)"; \
@@ -487,10 +487,10 @@ check-service-builder-base:
 		exit 1; \
 	fi; \
 	echo ">> Builder Version and Base Image Check: [PASS]"; \
-	printf "  %-15s : %s\n" "Base Image" "$$image"; \
-	printf "  %-15s : %s\n" "ID" "$${inspect_id#sha256:}"; \
-	printf "  %-15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "$$api"; \
-	printf "  %-15s : %s (expected from service-utils)\n" "ASN Version" "$$framework"
+	printf "  %15s : %s\n" "Base Image" "$$image"; \
+	printf "  %15s : %s\n" "ID" "$${inspect_id#sha256:}"; \
+	printf "  %15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "$$api"; \
+	printf "  %15s : %s (expected from service-utils)\n" "ASN Version" "$$framework"
 
 # Rebuild everything from scratch.
 service-build-from-scratch:
