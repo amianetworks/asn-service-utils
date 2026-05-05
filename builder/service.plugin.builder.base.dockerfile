@@ -38,6 +38,10 @@ RUN git config --global --add url."git@github.com:".insteadOf "https://github.co
 # Copy project files
 COPY . .
 
+# Download all modules declared by the service so later plugin builds do not
+# depend on ad hoc network access for service-specific Go dependencies.
+RUN --mount=type=secret,id=sshkey go mod download
+
 # Run build.so once to get all Go packages downloaded.
 RUN --mount=type=secret,id=sshkey make -f make/internal.mk build.so
 
