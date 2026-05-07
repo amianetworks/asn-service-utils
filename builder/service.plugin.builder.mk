@@ -349,8 +349,8 @@ define func_push_debs
 		echo "   Continuing with upload..."; \
 	else \
 		duplicate_found=false; \
-		for svc in $(DEBIAN_SERVICES); do \
-			files=$$(ls $(S_PATH)/$$svc*.deb 2>/dev/null); \
+			for svc in $(DEBIAN_SERVICES); do \
+				files=$$(ls $(S_PATH)/$${svc}_*.deb 2>/dev/null); \
 			if [ -z "$$files" ]; then \
 				continue; \
 			fi; \
@@ -380,8 +380,8 @@ define func_push_debs
 	@echo ""
 	@upload_success=true; \
 	uploaded_files=""; \
-	for svc in $(DEBIAN_SERVICES); do \
-		files=$$(ls $(S_PATH)/$$svc*.deb 2>/dev/null); \
+		for svc in $(DEBIAN_SERVICES); do \
+			files=$$(ls $(S_PATH)/$${svc}_*.deb 2>/dev/null); \
 		if [ -z "$$files" ]; then \
 			echo "⚠️  No .deb files found for $$svc in $(S_PATH)"; \
 			continue; \
