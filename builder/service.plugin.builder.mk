@@ -26,7 +26,7 @@ build-all:
 
 #push-all:
 #	@$(MAKE) push-base
-#	@$(MAKE) debs-push
+#	@$(MAKE) push-debian
 #	@$(MAKE) docker-push
 
 
@@ -37,6 +37,7 @@ build-all:
 .PHONY: \
 	check-version \
 	check-go-mod \
+	debian \
 	check-push-debian-sites \
 	push-debian \
 	push-debian-cn \
@@ -147,9 +148,8 @@ increment-build: .increment_build
 
 uppercase = $(shell echo $(1) | tr a-z A-Z)
 
-# Push and publish Debian packages.
-debs:
-	@echo "Please make target \"build-plugin\" instead."
+# Build Debian packages.
+debian: build-plugin
 
 # Push and publish Debian packages.
 push-debian: check-push-debian-sites
@@ -165,9 +165,6 @@ push-debian-us:
 
 push-debian-%:
 	@$(MAKE) -s .push-debian-site SITE=$(call uppercase,$*)
-
-debs-push-%:
-	@$(MAKE) --no-print-directory push-debian-$*
 
 check-push-debian-sites:
 	$(call func_check_release_mode)
@@ -216,7 +213,7 @@ check-push-debian-sites:
 	@echo ""
 	$(call func_push_debs)
 
-# List local debs and debs of the same service in the repo.
+# List local Debian packages and packages of the same service in the repo.
 list-debian:
 	@for site in $(DEBIAN_REPOS); do \
 		$(MAKE) -s .list-debian-site SITE=$$site; \
@@ -230,9 +227,6 @@ list-debian-us:
 
 list-debian-%:
 	@$(MAKE) -s .list-debian-site SITE=$(call uppercase,$*)
-
-debs-list-%:
-	@$(MAKE) --no-print-directory list-debian-$*
 
 .list-debian-site:
 	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
