@@ -1,5 +1,4 @@
 .git
 .cache
 .DS_Store
-build
 workflow/tests/results

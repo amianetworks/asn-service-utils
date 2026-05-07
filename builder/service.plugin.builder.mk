@@ -38,13 +38,18 @@ build-all:
 	check-version \
 	check-go-mod \
 	debian \
+	clean-debian \
+	check-debian-inputs \
 	check-push-debian-sites \
 	push-debian \
 	push-debian-cn \
 	push-debian-us \
 	list-debian \
 	list-debian-cn \
-	list-debian-us
+	list-debian-us \
+	service-build-plugin \
+	service-build-debian \
+	service-build-once
 
 # Ensure service-utils exists, then select the branch/tag matching ASN_SERVICE_API_VERSION
 # only when the current checkout is not already on the expected ref.
@@ -64,7 +69,7 @@ build-fresh: build-init clean proto-gen service-build-from-scratch
 	@find ./build -maxdepth 1 -print
 	@echo
 
-build-plugin: check-prepare clean increment-build proto-gen service-build-once
+build-plugin: check-prepare clean increment-build proto-gen service-build-plugin
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
@@ -148,8 +153,17 @@ increment-build: .increment_build
 
 uppercase = $(shell echo $(1) | tr a-z A-Z)
 
-# Build Debian packages.
-debian: build-plugin
+# Build Debian packages from existing plugin artifacts.
+debian: check-prepare check-debian-inputs clean-debian service-build-debian
+	@echo "Built Debian packages (DIR):"
+	@if [ -d "$(DEBIAN_PATH)" ]; then find ./$(DEBIAN_PATH) -maxdepth 1 -print; else echo "(none)"; fi
+	@echo
+
+clean-debian:
+	@rm -rf "$(DEBIAN_PATH)"
+
+check-debian-inputs:
+	@$(MAKE) --no-print-directory -f make/internal.mk check.deb
 
 # Push and publish Debian packages.
 push-debian: check-push-debian-sites
@@ -537,7 +551,8 @@ prepare-service-builder-base:
 	@echo "NOTE:"
 	@echo " - MUST BE DONE everytime when service-api version changes."
 	@echo " - Run \`docker images | grep asn\` to list the images."
-	@echo " - Run \`make build-plugin\` to build the plugin artifacts, .so and .deb."
+	@echo " - Run \`make build-plugin\` to build plugin artifacts."
+	@echo " - Run \`make debian\` to build Debian packages from plugin artifacts."
 	@echo " - Run \`make build-docker\` to build standalone docker images, for non-plugin setup."
 	@echo ""
 
@@ -656,23 +671,32 @@ service-build-from-scratch:
 
 # Build the plugins.
 # Note: Actual targets are built inside a container, so check out make/internal.mk for more details.
-# - Target 'build.so' is executed to build .so files.
-# - Target 'build.deb' is executed to build .deb files.
+# - Target 'build.plugin' is executed to build .so and CLI artifacts.
+# - Target 'build.deb' is executed by 'make debian' to build .deb files.
 # - No Docker images built here. Separate targets, build.docker*, are available.
+service-build-plugin:
+	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.plugin
+
+service-build-debian:
+	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.deb
+
+BUILD_MAKE_TARGET ?= build.targets
+
 service-build-once:
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building $(BUILD_ENV_IMAGE):latest"
+	@echo "Build target: $(BUILD_MAKE_TARGET)"
 
-	 # Clean up previously built images.
-	-docker stop $(BUILD_ENV_IMAGE)
-	-docker rm $(BUILD_ENV_IMAGE)
-	-docker rmi $(BUILD_ENV_IMAGE):latest
+	@# Clean up previously built images.
+	@docker rm -f $(BUILD_ENV_IMAGE) >/dev/null 2>&1 || true
+	@docker rmi $(BUILD_ENV_IMAGE):latest >/dev/null 2>&1 || true
 
 #	@docker buildx build --platform linux/amd64 --build-arg MAKE_TARGET=$(MAKE_TARGETS)") \
 #		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 
-	 # Build the service environment image.
+	@# Build the service environment image.
 	@DOCKER_BUILDKIT=1 docker buildx build --platform linux/amd64 $(BUILD_ARGS) \
+		--build-arg MAKE_TARGET=$(BUILD_MAKE_TARGET) \
 		--secret id=sshkey,src=$(SSH_PRIVATE_KEY) \
 		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 	@echo "Successfully built $(BUILD_ENV_IMAGE):latest."
@@ -681,14 +705,14 @@ service-build-once:
 	@mkdir -p build
 	@docker cp $(BUILD_ENV_IMAGE):/build ./
 
-	 # Clean up.
+	@# Clean up.
 	@echo -n "Stopped: "
 	@docker stop $(BUILD_ENV_IMAGE)
 	@echo -n "Removed: "
 	@docker rm $(BUILD_ENV_IMAGE)
 	@docker rmi $(BUILD_ENV_IMAGE):latest
 	@echo ""
-	@echo "Successfully built plugin artifacts, then removed $(BUILD_ENV_IMAGE):latest."
+	@echo "Successfully ran builder target $(BUILD_MAKE_TARGET), then removed $(BUILD_ENV_IMAGE):latest."
 	@echo ""
 	@echo "NOTE:"
 	@echo " - If the ASN Service API has updated, make sure the base image has been rebuilt."
@@ -697,18 +721,41 @@ service-build-once:
 
 
 ###
-# Generic deb packaging rule: deb-<service>
-deb-%:
+# Generic deb input check rule: check-deb-<service>
+check-deb-%:
 	$(eval SERVICE_NAME := $*)
 	$(eval SERVICE_CONFIG := debian/deb.$(SERVICE_NAME).config)
 	$(eval SERVICE_CONTROL := debian/deb.$(SERVICE_NAME).control)
+	@if [ ! -f $(SERVICE_CONFIG) ]; then \
+		echo "Missing config: $(SERVICE_CONFIG)"; exit 1; \
+	fi
 	@if [ ! -f $(SERVICE_CONTROL) ]; then \
 		echo "Missing control: $(SERVICE_CONTROL)"; exit 1; \
 	fi
 	$(eval include $(SERVICE_CONFIG))
+	@echo "SERVICE_NAME: $(SERVICE_NAME)"
+	@missing=0; \
+	for pair in $(DEBIAN_FILES); do \
+		SRC=$$(echo $$pair | cut -d: -f1); \
+		if [ ! -e "$$SRC" ]; then \
+			echo "Missing Debian input: $$SRC"; \
+			missing=1; \
+		fi; \
+	done; \
+	if [ "$$missing" -ne 0 ]; then \
+		echo "Build plugin artifacts before running make debian."; \
+		exit 1; \
+	fi
+
+###
+# Generic deb packaging rule: deb-<service>
+deb-%: check-deb-%
+	$(eval SERVICE_NAME := $*)
+	$(eval SERVICE_CONFIG := debian/deb.$(SERVICE_NAME).config)
+	$(eval SERVICE_CONTROL := debian/deb.$(SERVICE_NAME).control)
+	$(eval include $(SERVICE_CONFIG))
 	$(eval DEB_SVC_DIR := $(DEBIAN_PATH)/$(SERVICE_NAME))
 
-	@echo "SERVICE_NAME: $(SERVICE_NAME)"
 	@echo "DEBIAN_PATH: $(DEB_SVC_DIR)"
 	@mkdir -p $(DEB_SVC_DIR)/DEBIAN
 
