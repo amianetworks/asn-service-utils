@@ -34,7 +34,16 @@ build-all:
 ## Main targets ##
 ## All dependent used below targets are defined in service.plugin.build.env.mk.
 
-.PHONY: check-version check-go-mod
+.PHONY: \
+	check-version \
+	check-go-mod \
+	check-push-debian-sites \
+	push-debian \
+	push-debian-cn \
+	push-debian-us \
+	list-debian \
+	list-debian-cn \
+	list-debian-us
 
 # Ensure service-utils exists, then select the branch/tag matching ASN_SERVICE_API_VERSION
 # only when the current checkout is not already on the expected ref.
@@ -143,17 +152,105 @@ debs:
 	@echo "Please make target \"build-plugin\" instead."
 
 # Push and publish Debian packages.
-debs-push-%:
-	@echo "Target '$@' is deprecated for ASN service repositories."
-	@echo "Use the service-owned publish targets, such as 'make push-debian-cn', 'make push-debian-us', or 'make push-debian'."
-	@exit 1
+push-debian: check-push-debian-sites
+	@for site in $(DEBIAN_REPOS); do \
+		$(MAKE) -s .push-debian-site SITE=$$site; \
+	done
 
+push-debian-cn:
+	@$(MAKE) -s .push-debian-site SITE=CN
+
+push-debian-us:
+	@$(MAKE) -s .push-debian-site SITE=US
+
+push-debian-%:
+	@$(MAKE) -s .push-debian-site SITE=$(call uppercase,$*)
+
+debs-push-%:
+	@$(MAKE) --no-print-directory push-debian-$*
+
+check-push-debian-sites:
+	$(call func_check_release_mode)
+	@if [ -z "$(strip $(DEBIAN_REPOS))" ]; then \
+		echo "ERROR: DEBIAN_REPOS is empty."; \
+		exit 1; \
+	fi
+	@for site in $(DEBIAN_REPOS); do \
+		$(MAKE) -s .check-debian-repo SITE=$$site; \
+	done
+	@echo "Debian publish site preflight passed: $(DEBIAN_REPOS)"
+	@echo ""
+
+.check-debian-repo:
+	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
+	@if [ -z "$(DEBIAN_REPO_HOST_$(DEBIAN_SITE))" ] || [ -z "$(DEBIAN_REPO_USER_$(DEBIAN_SITE))" ]; then \
+		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
+		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
+		exit 1; \
+	fi
+
+.push-debian-site:
+	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
+	$(eval CHANNEL := $(call uppercase,$(RELEASE_CHANNEL)))
+	$(eval S_PATH := ${DEBIAN_PATH})
+	$(eval T_HOST := $(if ${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},__UNCONFIGURED__))
+	$(eval T_USER := $(if ${DEBIAN_REPO_USER_$(DEBIAN_SITE)},${DEBIAN_REPO_USER_$(DEBIAN_SITE)},__UNCONFIGURED__))
+	$(eval T_SUBREPO := $(if ${DEBIAN_REPO_SUBREPO_$(CHANNEL)},${DEBIAN_REPO_SUBREPO_$(CHANNEL)},__UNCONFIGURED__))
+	$(eval T_SNAPSHOT := ${T_SUBREPO}-$(shell date +%s))
+	$(call func_check_release_mode)
+	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ] || [ "$(T_USER)" = "__UNCONFIGURED__" ]; then \
+		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
+		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
+		exit 1; \
+	fi
+	@if [ "$(T_SUBREPO)" = "__UNCONFIGURED__" ]; then \
+		echo "ERROR: DEBIAN_REPO_SUBREPO_$(CHANNEL) is not configured."; \
+		exit 1; \
+	fi
+	@echo ">> Debian Publish Target"
+	@printf "  %15s : %s\n" "Site" "$(DEBIAN_SITE)"
+	@printf "  %15s : %s\n" "Repo Host" "$(T_HOST)"
+	@printf "  %15s : %s\n" "Subrepo" "$(T_SUBREPO)"
+	@printf "  %15s : %s\n" "Build Mode" "$(BUILD_MODE)"
+	@printf "  %15s : %s\n" "Version" "$(VERSION_BUILD)"
+	@echo ""
+	$(call func_push_debs)
 
 # List local debs and debs of the same service in the repo.
+list-debian:
+	@for site in $(DEBIAN_REPOS); do \
+		$(MAKE) -s .list-debian-site SITE=$$site; \
+	done
+
+list-debian-cn:
+	@$(MAKE) -s .list-debian-site SITE=CN
+
+list-debian-us:
+	@$(MAKE) -s .list-debian-site SITE=US
+
+list-debian-%:
+	@$(MAKE) -s .list-debian-site SITE=$(call uppercase,$*)
+
 debs-list-%:
-	@echo "Target '$@' is deprecated for ASN service repositories."
-	@echo "Use the service-owned list targets, such as 'make list-debian-cn', 'make list-debian-us', or 'make list-debian'."
-	@exit 1
+	@$(MAKE) --no-print-directory list-debian-$*
+
+.list-debian-site:
+	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
+	$(eval CHANNEL := $(call uppercase,$(RELEASE_CHANNEL)))
+	$(eval S_PATH := ${DEBIAN_PATH})
+	$(eval T_HOST := $(if ${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},__UNCONFIGURED__))
+	$(eval T_USER := $(if ${DEBIAN_REPO_USER_$(DEBIAN_SITE)},${DEBIAN_REPO_USER_$(DEBIAN_SITE)},__UNCONFIGURED__))
+	$(eval T_SUBREPO := $(if ${DEBIAN_REPO_SUBREPO_$(CHANNEL)},${DEBIAN_REPO_SUBREPO_$(CHANNEL)},__UNCONFIGURED__))
+	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ] || [ "$(T_USER)" = "__UNCONFIGURED__" ]; then \
+		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
+		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
+		exit 1; \
+	fi
+	@if [ "$(T_SUBREPO)" = "__UNCONFIGURED__" ]; then \
+		echo "ERROR: DEBIAN_REPO_SUBREPO_$(CHANNEL) is not configured."; \
+		exit 1; \
+	fi
+	$(call func_list_debs)
 
 
 
@@ -193,15 +290,35 @@ define func_check_version_for_repo
 	@echo ""
 endef
 
+# Function: func_check_release_mode
+# Validate BUILD_MODE and build number before publishing release artifacts.
+define func_check_release_mode
+	@echo ">> Release Mode Check"
+	@printf "  %15s : %s\n" "Build Mode" "$(BUILD_MODE)"
+	@printf "  %15s : %s\n" "Channel" "$(RELEASE_CHANNEL)"
+	@printf "  %15s : %s\n" "Version" "$(VERSION_BUILD)"
+	@if [ "$(BUILD_MODE)" != "dev" ] && [ "$(BUILD_MODE)" != "pro" ]; then \
+		echo "ERROR: BUILD_MODE must be dev or pro before publishing."; \
+		exit 1; \
+	fi; \
+	if [ "$(BUILD_MODE)" = "dev" ] && [ "$(CURRENT_BUILD)" -lt 100 ]; then \
+		echo "ERROR: DEV release requires build number >= 100."; \
+		exit 1; \
+	fi; \
+	if [ "$(BUILD_MODE)" = "pro" ] && [ "$(CURRENT_BUILD)" -ge 100 ]; then \
+		echo "ERROR: PRO release requires build number < 100."; \
+		exit 1; \
+	fi
+	@echo ""
+endef
+
 # Function to push debian packages.
 define func_push_debs
 	$(call func_check_variable,T_HOST)
 	$(call func_check_variable,T_USER)
-	$(call func_check_variable,T_PATH)
 	$(call func_check_variable,S_PATH)
 	$(call func_check_variable,T_SUBREPO)
 	$(call func_check_variable,DEBIAN_SERVICES)
-	$(call func_check_variable,DISTS)
 
 	@echo "🧹 Cleaning up temporary directory before upload..."
 	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$(T_USER)" "$(T_HOST)/files/${T_SUBREPO}"); \
@@ -343,11 +460,9 @@ endef
 define func_list_debs
 	$(call func_check_variable,T_HOST)
 	$(call func_check_variable,T_USER)
-	$(call func_check_variable,T_PATH)
 	$(call func_check_variable,S_PATH)
 	$(call func_check_variable,T_SUBREPO)
 	$(call func_check_variable,DEBIAN_SERVICES)
-	$(call func_check_variable,DISTS)
 
 	@echo "========================================"
 	@echo "📦 Locally Built .deb Packages"
