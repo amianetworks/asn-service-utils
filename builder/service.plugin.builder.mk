@@ -48,6 +48,18 @@ build-all:
 	list-debian-local \
 	list-debian-cn \
 	list-debian-us \
+	docker \
+	clean-docker \
+	check-docker-runtime-base \
+	check-docker-vars \
+	check-push-docker-sites \
+	push-docker \
+	push-docker-cn \
+	push-docker-us \
+	list-docker \
+	list-docker-local \
+	list-docker-cn \
+	list-docker-us \
 	service-build-plugin \
 	service-build-debian \
 	service-build-once
@@ -524,6 +536,292 @@ endef
 
 ##----------------------------------------------------------------------------##
 ## Docker Image Handling ##
+
+check-docker-vars: check-docker-runtime-base
+
+docker:
+	@if [ -z "$(strip $(DOCKER_IMAGE_BUILD_SPECS))" ]; then \
+		echo "ERROR: DOCKER_IMAGE_BUILD_SPECS is empty."; \
+		exit 1; \
+	fi
+	@for spec in $(DOCKER_IMAGE_BUILD_SPECS); do \
+		image=$${spec%%:*}; \
+		dockerfile=$${spec#*:}; \
+		$(MAKE) -s .docker-build-image IMAGE=$$image DOCKERFILE=$$dockerfile; \
+	done
+
+.docker-build-image:
+	$(call func_build_docker,$(IMAGE),$(VERSION_BUILD),$(DOCKERFILE),$(DEP_DOCKER_BUILD_ARGS))
+
+# Build and push to registries. Publishing requires explicit approval.
+push-docker: check-push-docker-sites
+	@for site in $(DOCKER_REGISTRY_SITES); do \
+		$(MAKE) -s .push-docker-site SITE=$$site; \
+	done
+
+check-push-docker-sites:
+	$(call func_check_release_mode)
+	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
+		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
+		exit 1; \
+	fi
+	@for site in $(DOCKER_REGISTRY_SITES); do \
+		$(MAKE) -s .check-docker-registry-site SITE=$$site; \
+	done
+	@echo "Docker publish site preflight passed: $(DOCKER_REGISTRY_SITES)"
+	@echo ""
+
+.check-docker-registry-site:
+	@if [ -z "$(DOCKER_REGISTRY_$(SITE))" ] || [ -z "$(DOCKER_REGISTRY_$(SITE)_USER)" ]; then \
+		echo "ERROR: Docker registry $(SITE) is not fully configured."; \
+		echo "Required: DOCKER_REGISTRY_$(SITE) and DOCKER_REGISTRY_$(SITE)_USER."; \
+		exit 1; \
+	fi
+	@if ! cat ~/.docker/config.json 2>/dev/null | grep -q "$(DOCKER_REGISTRY_$(SITE))"; then \
+		echo "ERROR: Docker registry $(SITE) is not logged in: $(DOCKER_REGISTRY_$(SITE))"; \
+		exit 1; \
+	fi
+
+push-docker-cn:
+	@$(MAKE) -s .push-docker-site SITE=CN
+
+push-docker-us:
+	@$(MAKE) -s .push-docker-site SITE=US
+
+push-docker-%:
+	@$(MAKE) -s .push-docker-site SITE=$(call uppercase,$*)
+
+docker-push-%:
+	@echo "Target '$@' is deprecated."
+	@echo "Use 'make push-docker-cn', 'make push-docker-us', or 'make push-docker'."
+	@exit 1
+
+list-docker:
+	@$(MAKE) -s .list-docker-local
+	@for site in $(DOCKER_REGISTRY_SITES); do \
+		$(MAKE) -s .list-docker-site SITE=$$site; \
+	done
+
+list-docker-local:
+	@$(MAKE) -s .list-docker-local
+
+list-docker-cn:
+	@$(MAKE) -s .list-docker-local
+	@$(MAKE) -s .list-docker-site SITE=CN
+
+list-docker-us:
+	@$(MAKE) -s .list-docker-local
+	@$(MAKE) -s .list-docker-site SITE=US
+
+list-docker-%:
+	@$(MAKE) -s .list-docker-site SITE=$(call uppercase,$*)
+
+docker-list:
+	@echo "Target '$@' is deprecated."
+	@echo "Use 'make list-docker-cn', 'make list-docker-us', or 'make list-docker'."
+	@exit 1
+
+docker-list-%:
+	@echo "Target '$@' is deprecated."
+	@echo "Use 'make list-docker-cn', 'make list-docker-us', or 'make list-docker'."
+	@exit 1
+
+.list-docker-local:
+	@echo ">> Local Docker Images"
+	@printf "  %15s : %s\n" "Services" "$(DOCKER_IMAGES)"
+	@echo ""
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "Docker daemon is not running."; \
+		echo ""; \
+	else \
+		for image in $(DOCKER_IMAGES); do \
+			printf "Image: %s\n" "$$image"; \
+			echo ""; \
+			if docker images --format '{{.Repository}}' | awk -v image="$$image" '$$1 == image { found=1 } END { exit !found }'; then \
+				printf "%-40s %-20s %-15s\n" "REPOSITORY" "TAG" "IMAGE ID"; \
+				printf "%-40s %-20s %-15s\n" "----------" "---" "--------"; \
+				docker images --format '{{.Repository}}\t{{.Tag}}\t{{.ID}}' | awk -F'\t' -v image="$$image" '$$1 == image {printf "%-40s %-20s %-15s\n", $$1, $$2, $$3}'; \
+			else \
+				echo "(no local images)"; \
+			fi; \
+			echo ""; \
+		done; \
+	fi
+
+.list-docker-site:
+	$(eval DOCKER_SITE := $(call uppercase,$(SITE)))
+	$(eval REGISTRY := $(DOCKER_REGISTRY_$(DOCKER_SITE)))
+	$(eval REGISTRY_USER := $(DOCKER_REGISTRY_$(DOCKER_SITE)_USER))
+	@echo ">> Remote Docker Registry Images"
+	@printf "  %15s : %s\n" "Site" "$(DOCKER_SITE)"
+	@printf "  %15s : %s\n" "Registry" "$(REGISTRY)"
+	@printf "  %15s : %s\n" "Subrepo" "$(DOCKER_SUBREPO)"
+	@echo ""
+	$(call func_list_docker_images_remote)
+
+clean-docker:
+	@echo "- Cleaning older docker images for repositories: $(DOCKER_IMAGES)"
+	@echo ""
+	@for image in $(DOCKER_IMAGES); do \
+		echo "> $$image"; \
+		ids=$$(docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
+			| awk -v prefix="^$$image:" '$$1 ~ prefix { if (!seen[$$2]++) print $$2 }'); \
+		if [ -z "$$ids" ]; then \
+			echo "(none)"; \
+		else \
+			keep=$$(printf "%s\n" $$ids | head -n 1); \
+			remove=$$(printf "%s\n" $$ids | tail -n +2); \
+			echo "Kept image ID: $$keep"; \
+			if [ -n "$$remove" ]; then \
+				echo "$$remove" | xargs docker rmi -f; \
+			else \
+				echo "No older images to remove."; \
+			fi; \
+		fi; \
+		echo ""; \
+	done
+
+# Verify locally available runtime images for Docker builds.
+check-docker-runtime-base:
+	@failed=0; \
+	for image in "registry.amiasys.com/asnc:$(DEP_VERSION_ASN)" "registry.amiasys.com/asnsn:$(DEP_VERSION_ASN)"; do \
+		if docker image inspect "$$image" >/dev/null 2>&1; then \
+			printf "  %-32s : PASS\n" "$$image"; \
+		else \
+			printf "  %-32s : FAIL (missing local image)\n" "$$image"; \
+			failed=1; \
+		fi; \
+	done; \
+	if [ "$$failed" -ne 0 ]; then \
+		echo "Local Docker runtime image check failed. Build or load the runtime images locally before running this check."; \
+		exit 1; \
+	fi
+
+# Check docker registry login status for publish targets only.
+.check-login-registry-%:
+	$(eval DOMAIN := $(call uppercase,$*))
+	@if ! cat ~/.docker/config.json | grep -q "${DOCKER_REGISTRY_$(DOMAIN)}"; then \
+		echo "Please login docker registry \"${DOCKER_REGISTRY_$(DOMAIN)}\" at first."; \
+		exit 1; \
+	else \
+		echo "Already logged in to ${DOCKER_REGISTRY_$(DOMAIN)}."; \
+	fi
+
+.push-docker-site:
+	$(eval DOCKER_SITE := $(call uppercase,$(SITE)))
+	$(eval REGISTRY := $(DOCKER_REGISTRY_$(DOCKER_SITE)))
+	$(eval REGISTRY_USER := $(DOCKER_REGISTRY_$(DOCKER_SITE)_USER))
+	$(call func_check_release_mode)
+	@if [ -z "$(REGISTRY)" ] || [ -z "$(REGISTRY_USER)" ]; then \
+		echo "ERROR: Docker registry $(DOCKER_SITE) is not fully configured."; \
+		echo "Required: DOCKER_REGISTRY_$(DOCKER_SITE) and DOCKER_REGISTRY_$(DOCKER_SITE)_USER."; \
+		exit 1; \
+	fi
+	@$(MAKE) -s .check-login-registry-$(DOCKER_SITE)
+	@echo ">> Docker Publish Target"
+	@printf "  %15s : %s\n" "Site" "$(DOCKER_SITE)"
+	@printf "  %15s : %s\n" "Registry" "$(REGISTRY)"
+	@printf "  %15s : %s\n" "Subrepo" "$(DOCKER_SUBREPO)"
+	@printf "  %15s : %s\n" "Build Mode" "$(BUILD_MODE)"
+	@printf "  %15s : %s\n" "Version Tag" "$(VERSION_BUILD)"
+	@printf "  %15s : %s\n" "Latest Tag" "$(DOCKER_TAG_LATEST)"
+	@echo ""
+	@for image in $(DOCKER_IMAGES); do \
+		if ! docker image inspect "$$image:$(VERSION_BUILD)" >/dev/null 2>&1; then \
+			echo "ERROR: local image $$image:$(VERSION_BUILD) is missing. Run make docker after make build-plugin."; \
+			exit 1; \
+		fi; \
+	done
+	@for image in $(DOCKER_IMAGES); do \
+		$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=$(VERSION_BUILD) REGISTRY=$(REGISTRY); \
+	done
+ifeq ($(BUILD_MODE),pro)
+	@for image in $(DOCKER_IMAGES); do \
+		$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=latest REGISTRY=$(REGISTRY) SOURCE_TAG=$(VERSION_BUILD); \
+	done
+endif
+
+.push-docker-image:
+	$(call func_push_docker,$(IMAGE),$(IMAGE_TAG),$(REGISTRY),$(SOURCE_TAG))
+
+# $(1): IMAGE_NAME
+# $(2): VERSION
+# $(3): DOCKERFILE
+# $(4): BUILD_ARGS string
+define func_build_docker
+	@echo ""
+	@echo "Building docker image: $(1):$(2)"
+	@echo "Dockerfile: $(3); BUILD_ARGS: $(4)"
+	@docker buildx build \
+		--platform linux/amd64 \
+		-f $(3) \
+		$(4) \
+		-t $(1):$(2) \
+		.
+	@echo "Successfully built docker image for $(1)/$(2)"
+	@echo ""
+endef
+
+# $(1): IMAGE_NAME
+# $(2): VERSION (or latest)
+# $(3): REGISTRY
+# $(4): SOURCE_VERSION
+define func_push_docker
+	@echo ""
+	$(eval SOURCE_IMAGE_TAG := $(if $(4),$(4),$(2)))
+	@echo -n "Tagging image $(1):$(SOURCE_IMAGE_TAG) to registry: $(3)/$(DOCKER_SUBREPO)/$(1):$(2)"
+	@docker tag $(1):$(SOURCE_IMAGE_TAG) $(3)/$(DOCKER_SUBREPO)/$(1):$(2)
+	@echo " ...Done."
+	@echo "Pushing image $(1):$(2) to registry: $(3)"
+	@docker push $(3)/$(DOCKER_SUBREPO)/$(1):$(2)
+	@echo "Pushed."
+endef
+
+# Function to list remote docker images.
+define func_list_docker_images_remote
+	@if [ -z "$(REGISTRY)" ] || [ -z "$(REGISTRY_USER)" ]; then \
+		echo "ERROR: Docker registry variables are not fully configured for this site."; \
+		echo "Required: registry host and registry username/password."; \
+		exit 1; \
+	fi
+	@for image in $(DOCKER_IMAGES); do \
+		echo "Image: $$image"; \
+		echo ""; \
+		response=$$(curl -s -u "$(REGISTRY_USER)" "https://$(REGISTRY)/v2/$(DOCKER_SUBREPO)/$$image/tags/list" 2>/dev/null); \
+		if [ -z "$$response" ]; then \
+			echo "(empty response from registry)"; \
+		elif command -v jq >/dev/null 2>&1; then \
+			echo "$$response" | jq -e . >/dev/null 2>&1; \
+			if [ $$? -eq 0 ]; then \
+				count=$$(echo "$$response" | jq '.tags | length'); \
+				if [ "$$count" = "0" ] || [ "$$count" = "null" ]; then \
+					echo "(no tags found)"; \
+				else \
+					printf "%-30s\n" "TAG"; \
+					printf "%-30s\n" "---"; \
+					if [ "$(DOCKER_LIST_LIMIT)" = "0" ]; then \
+						echo "$$response" | jq -r '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[]' 2>/dev/null || echo "$$response" | jq -r '.tags[]'; \
+						echo ""; \
+						echo "Total: $$count tag(s)"; \
+					else \
+						echo "$$response" | jq -r --argjson limit "$(DOCKER_LIST_LIMIT)" '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[:$$limit] | .[]' 2>/dev/null || echo "$$response" | jq -r '.tags[]'; \
+						echo ""; \
+						echo "Showing: up to $(DOCKER_LIST_LIMIT) of $$count tag(s)"; \
+					fi; \
+					echo ""; \
+				fi; \
+			else \
+				echo "Invalid JSON response:"; \
+				echo "$$response"; \
+			fi; \
+		else \
+			echo "jq is not installed; showing raw response:"; \
+			echo ""; \
+			echo "$$response" | python3 -m json.tool 2>/dev/null || echo "$$response"; \
+		fi; \
+		echo ""; \
+	done
+endef
 
 #------------------------------------------------------------------------------#
 
