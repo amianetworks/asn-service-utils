@@ -45,6 +45,7 @@ build-all:
 	push-debian-cn \
 	push-debian-us \
 	list-debian \
+	list-debian-local \
 	list-debian-cn \
 	list-debian-us \
 	service-build-plugin \
@@ -228,15 +229,19 @@ check-push-debian-sites:
 	$(call func_push_debs)
 
 # List local Debian packages and packages of the same service in the repo.
-list-debian:
+list-debian: list-debian-local
 	@for site in $(DEBIAN_REPOS); do \
 		$(MAKE) -s .list-debian-site SITE=$$site; \
 	done
 
-list-debian-cn:
+list-debian-local:
+	$(eval S_PATH := ${DEBIAN_PATH})
+	$(call func_list_local_debs)
+
+list-debian-cn: list-debian-local
 	@$(MAKE) -s .list-debian-site SITE=CN
 
-list-debian-us:
+list-debian-us: list-debian-local
 	@$(MAKE) -s .list-debian-site SITE=US
 
 list-debian-%:
@@ -258,7 +263,7 @@ list-debian-%:
 		echo "ERROR: DEBIAN_REPO_SUBREPO_$(CHANNEL) is not configured."; \
 		exit 1; \
 	fi
-	$(call func_list_debs)
+	$(call func_list_remote_debs)
 
 
 
@@ -464,12 +469,9 @@ define func_push_debs
 	@echo ""
 endef
 
-# Function to list debian packages.
-define func_list_debs
-	$(call func_check_variable,T_HOST)
-	$(call func_check_variable,T_USER)
+# Function to list locally built Debian packages.
+define func_list_local_debs
 	$(call func_check_variable,S_PATH)
-	$(call func_check_variable,T_SUBREPO)
 	$(call func_check_variable,DEBIAN_SERVICES)
 
 	@echo "========================================"
@@ -485,6 +487,14 @@ define func_list_debs
 		echo "(none)"; \
 	fi
 	@echo ""
+endef
+
+# Function to list remote Debian repository packages.
+define func_list_remote_debs
+	$(call func_check_variable,T_HOST)
+	$(call func_check_variable,T_USER)
+	$(call func_check_variable,T_SUBREPO)
+
 	@echo "========================================"
 	@echo "🌐 Remote Repository Packages"
 	@echo "========================================"
