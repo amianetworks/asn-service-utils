@@ -18,7 +18,11 @@
 build-all:
 	@$(MAKE) build-prepare
 	@$(MAKE) build-plugin
-	@$(MAKE) build-docker
+	@if $(MAKE) -n docker >/dev/null 2>&1; then \
+		$(MAKE) docker; \
+	else \
+		echo "No docker target is defined by this service; skipping Docker image build."; \
+	fi
 
 #push-all:
 #	@$(MAKE) push-base
@@ -62,7 +66,7 @@ clean: .init_build_file
 
 check-vars: .check_vars
 
-check-version: .init_build_file
+check-version:
 	@next_build=$$(expr $(CURRENT_BUILD) + 1); \
 	echo ">> Version Check"; \
 	printf "  %15s : %s\n" "Service" "$(SERVICE)"; \
@@ -76,6 +80,18 @@ check-version: .init_build_file
 check-go-mod:
 	@failed=0; compared=0; skipped=0; \
 	root_requires=$$(mktemp); utils_requires=$$(mktemp); \
+	if [ ! -f go.mod ]; then \
+		echo ">> go.mod Conflict Check: [FAIL]"; \
+		echo "            Missing root go.mod."; \
+		rm -f "$$root_requires" "$$utils_requires"; \
+		exit 1; \
+	fi; \
+	if [ ! -f "$(SERVICE_UTILS_DIR)/go.mod" ]; then \
+		echo ">> go.mod Conflict Check: [FAIL]"; \
+		echo "            Missing $(SERVICE_UTILS_DIR)/go.mod."; \
+		rm -f "$$root_requires" "$$utils_requires"; \
+		exit 1; \
+	fi; \
 	extract_requires() { \
 		awk ' \
 			$$1 == "require" && NF >= 3 { print $$2, $$3; next } \
@@ -128,32 +144,16 @@ debs:
 
 # Push and publish Debian packages.
 debs-push-%:
-	$(eval REPO := $(call uppercase,$*))
-	$(eval S_PATH := ${DEBIAN_PATH})
-	$(eval T_HOST := ${DEB_REPO_HOST_$(REPO)})
-	$(eval T_USER := ${DEB_REPO_USER_$(REPO)})
-	$(eval T_PATH := ${DEB_REPO_PATH_$(REPO)})
-	$(eval T_SUBREPO := ${DEB_REPO_SUBREPO_$(REPO)})
-	$(eval T_SNAPSHOT := ${DEB_REPO_SUBREPO_$(REPO)}-$(shell date +%s))
-	$(eval DISTS := ${DEBIAN_DIST_STABLE})
-
-	$(eval T_T := ${T_USER}@${T_HOST})
-	@$(call func_check_version_for_repo,$(REPO),$(CURRENT_BUILD))
-	$(call func_push_debs)
+	@echo "Target '$@' is deprecated for ASN service repositories."
+	@echo "Use the service-owned publish targets, such as 'make push-debian-cn', 'make push-debian-us', or 'make push-debian'."
+	@exit 1
 
 
 # List local debs and debs of the same service in the repo.
 debs-list-%:
-	$(eval REPO := $(call uppercase,$*))
-	$(eval S_PATH := ${DEBIAN_PATH})
-	$(eval T_HOST := ${DEB_REPO_HOST_$(REPO)})
-	$(eval T_USER := ${DEB_REPO_USER_$(REPO)})
-	$(eval T_PATH := ${DEB_REPO_PATH_$(REPO)})
-	$(eval T_SUBREPO := ${DEB_REPO_SUBREPO_$(REPO)})
-	$(eval DISTS := ${DEBIAN_DIST_STABLE})
-
-	$(eval T_T := ${T_USER}@${T_HOST})
-	$(call func_list_debs)
+	@echo "Target '$@' is deprecated for ASN service repositories."
+	@echo "Use the service-owned list targets, such as 'make list-debian-cn', 'make list-debian-us', or 'make list-debian'."
+	@exit 1
 
 
 
@@ -669,7 +669,7 @@ deb-%:
 
 clean-deb-%:
 	@echo "Cleaning $*..."
-	@rm -rf $DEB_SVC_DIR
+	@rm -rf "$(DEBIAN_PATH)/$*"
 
 # Debug purpose
 show-prepare:
