@@ -822,17 +822,14 @@ prepare-service-builder-base:
 	@echo "Current working directory: ${PWD}"
 	@echo "Building $(BUILD_ENV_BASE_IMAGE):latest"
 
-	 # Clean up previously built images.
-	-docker stop $(BUILD_ENV_BASE_IMAGE)
-	-docker rm $(BUILD_ENV_BASE_IMAGE)
-	-docker rmi $(BUILD_ENV_BASE_IMAGE):latest
-
-	 # Build the base image and run 'build' once to get all go packages.
+	@# Buildx updates the tag in place; avoid pre-removal because Docker Desktop
+	@# can hang on absent container/image names.
 	@service_go_mod_hash=$$(shasum -a 256 go.mod | awk '{ print $$1 }'); \
 	DOCKER_BUILDKIT=1 docker buildx build \
+		--progress=plain \
 		--platform linux/amd64 \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
-		--secret id=sshkey,src=$(SSH_PRIVATE_KEY) \
+		--secret id=sshkey,src=$$SSH_PRIVATE_KEY \
 		--label asn.service_api=$(ASN_SERVICE_API_VERSION) \
 		--label asn.framework=$(DEP_VERSION_ASN) \
 		--label asn.service_go_mod="$$service_go_mod_hash" \
@@ -942,17 +939,19 @@ service-build-once:
 	@echo "Start building $(BUILD_ENV_IMAGE):latest"
 	@echo "Build target: $(BUILD_MAKE_TARGET)"
 
-	@# Clean up previously built images.
-	@docker rm -f $(BUILD_ENV_IMAGE) >/dev/null 2>&1 || true
-	@docker rmi $(BUILD_ENV_IMAGE):latest >/dev/null 2>&1 || true
+	@# Remove only a container that is known to exist. Docker Desktop can hang
+	@# when asked to remove an absent named container.
+	@if docker ps -a --format '{{.Names}}' | awk -v name="$(BUILD_ENV_IMAGE)" '$$0 == name { found=1 } END { exit !found }'; then \
+		docker rm -f $(BUILD_ENV_IMAGE) >/dev/null; \
+	fi
 
 #	@docker buildx build --platform linux/amd64 --build-arg MAKE_TARGET=$(MAKE_TARGETS)") \
 #		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 
 	@# Build the service environment image.
-	@DOCKER_BUILDKIT=1 docker buildx build --platform linux/amd64 $(BUILD_ARGS) \
+	@DOCKER_BUILDKIT=1 docker buildx build --progress=plain --platform linux/amd64 $(BUILD_ARGS) \
 		--build-arg MAKE_TARGET=$(BUILD_MAKE_TARGET) \
-		--secret id=sshkey,src=$(SSH_PRIVATE_KEY) \
+		--secret id=sshkey,src=$$SSH_PRIVATE_KEY \
 		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 	@echo "Successfully built $(BUILD_ENV_IMAGE):latest."
 	@docker run -d --platform linux/amd64 --name $(BUILD_ENV_IMAGE) $(BUILD_ENV_IMAGE):latest
@@ -961,11 +960,8 @@ service-build-once:
 	@docker cp $(BUILD_ENV_IMAGE):/build ./
 
 	@# Clean up.
-	@echo -n "Stopped: "
-	@docker stop $(BUILD_ENV_IMAGE)
 	@echo -n "Removed: "
-	@docker rm $(BUILD_ENV_IMAGE)
-	@docker rmi $(BUILD_ENV_IMAGE):latest
+	@docker rm -f $(BUILD_ENV_IMAGE)
 	@echo ""
 	@echo "Successfully ran builder target $(BUILD_MAKE_TARGET), then removed $(BUILD_ENV_IMAGE):latest."
 	@echo ""
