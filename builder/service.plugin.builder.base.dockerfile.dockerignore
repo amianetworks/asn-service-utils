@@ -2,3 +2,6 @@
 .cache
 .DS_Store
 build
+workflow/runs
+workflow/tests/results
+deploy/SWAN/**/log

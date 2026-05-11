@@ -912,46 +912,9 @@ check-service-builder-base:
 	printf "  %15s : %s (expected from service-utils)\n" "ASN Version" "$$framework"; \
 	printf "  %15s : %s (expected from service go.mod).\n" "Service go.mod" "$$go_mod"
 
-# Rebuild everything from scratch.
-service-build-from-scratch:
-	@echo "Current working directory: ${PWD}"
-	@echo "Start building $(BUILD_ENV_BASE_IMAGE):latest"
-
-	 # Clean up previously built images.
-	-docker stop $(BUILD_ENV_BASE_IMAGE)
-	-docker rm $(BUILD_ENV_BASE_IMAGE)
-	-docker rmi $(BUILD_ENV_BASE_IMAGE):latest
-
-	 # Build the base image and run 'build' once.
-	@service_go_mod_hash=$$(shasum -a 256 go.mod | awk '{ print $$1 }'); \
-	DOCKER_BUILDKIT=1 docker buildx build \
-		--platform linux/amd64 \
-		-f $(BUILD_ENV_BASE_DOCKERFILE) \
-		--secret id=sshkey,src=$(SSH_PRIVATE_KEY) \
-		--label asn.service_api=$(ASN_SERVICE_API_VERSION) \
-		--label asn.framework=$(DEP_VERSION_ASN) \
-		--label asn.service_go_mod="$$service_go_mod_hash" \
-		-t $(BUILD_ENV_BASE_IMAGE):latest .
-	@echo "Successfully built $(BUILD_ENV_BASE_IMAGE):latest."
-
-	@docker run -itd --platform linux/amd64 --name $(BUILD_ENV_BASE_IMAGE) $(BUILD_ENV_BASE_IMAGE):latest
-	@mkdir -p build
-	@echo ""
-	@docker cp $(BUILD_ENV_BASE_IMAGE):/build ./
-	@echo ""
-
-	 # Clean up.
-	@echo -n "Stopped: "
-	@docker stop $(BUILD_ENV_BASE_IMAGE)
-	@echo -n "Removed: "
-	@docker rm $(BUILD_ENV_BASE_IMAGE)
-	@echo ""
-	@echo "Successfully built plugin artifacts, then removed $(BUILD_ENV_BASE_IMAGE):latest."
-	@echo "You may run \`docker images | grep asn\` to check them out. "
-	@echo ""
-	@echo "NOTE:"
-	@echo " - A base image of builder has been built, as well as the .so files."
-	@echo " - Run \`docker images | grep asn\` to list the images."
+# Rebuild the base image, then build plugin artifacts with the normal builder.
+service-build-from-scratch: prepare-service-builder-base service-build-plugin
+	@echo "Successfully rebuilt the base image and plugin artifacts from scratch."
 	@echo ""
 
 # Build the plugins.

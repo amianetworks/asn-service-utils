@@ -1,3 +1,6 @@
 .git
 .cache
 .DS_Store
+workflow/runs
+workflow/tests/results
+deploy/SWAN/**/log
