@@ -733,6 +733,7 @@ define func_build_docker
 	@echo "Building docker image: $(1):$(2)"
 	@echo "Dockerfile: $(3); BUILD_ARGS: $(4)"
 	@docker buildx build \
+		--progress=plain \
 		--platform linux/amd64 \
 		-f $(3) \
 		$(4) \
