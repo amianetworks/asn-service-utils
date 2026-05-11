@@ -205,7 +205,8 @@ check-push-debian-sites:
 
 .check-debian-repo:
 	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
-	@if [ -z "$(DEBIAN_REPO_HOST_$(DEBIAN_SITE))" ] || [ -z "$(DEBIAN_REPO_USER_$(DEBIAN_SITE))" ]; then \
+	$(eval DEBIAN_USER_SET := $(if $(strip $(DEBIAN_REPO_USER_$(DEBIAN_SITE))),yes,no))
+	@if [ -z "$(DEBIAN_REPO_HOST_$(DEBIAN_SITE))" ] || [ "$(DEBIAN_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
 		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
 		exit 1; \
@@ -216,11 +217,12 @@ check-push-debian-sites:
 	$(eval CHANNEL := $(call uppercase,$(RELEASE_CHANNEL)))
 	$(eval S_PATH := ${DEBIAN_PATH})
 	$(eval T_HOST := $(if ${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},__UNCONFIGURED__))
-	$(eval T_USER := $(if ${DEBIAN_REPO_USER_$(DEBIAN_SITE)},${DEBIAN_REPO_USER_$(DEBIAN_SITE)},__UNCONFIGURED__))
+	$(eval T_USER_VAR := DEBIAN_REPO_USER_$(DEBIAN_SITE))
+	$(eval T_USER_SET := $(if $(strip $(DEBIAN_REPO_USER_$(DEBIAN_SITE))),yes,no))
 	$(eval T_SUBREPO := $(if ${DEBIAN_REPO_SUBREPO_$(CHANNEL)},${DEBIAN_REPO_SUBREPO_$(CHANNEL)},__UNCONFIGURED__))
 	$(eval T_SNAPSHOT := ${T_SUBREPO}-$(shell date +%s))
 	$(call func_check_release_mode)
-	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ] || [ "$(T_USER)" = "__UNCONFIGURED__" ]; then \
+	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ] || [ "$(T_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
 		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
 		exit 1; \
@@ -262,9 +264,10 @@ list-debian-%:
 	$(eval CHANNEL := $(call uppercase,$(RELEASE_CHANNEL)))
 	$(eval S_PATH := ${DEBIAN_PATH})
 	$(eval T_HOST := $(if ${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},__UNCONFIGURED__))
-	$(eval T_USER := $(if ${DEBIAN_REPO_USER_$(DEBIAN_SITE)},${DEBIAN_REPO_USER_$(DEBIAN_SITE)},__UNCONFIGURED__))
+	$(eval T_USER_VAR := DEBIAN_REPO_USER_$(DEBIAN_SITE))
+	$(eval T_USER_SET := $(if $(strip $(DEBIAN_REPO_USER_$(DEBIAN_SITE))),yes,no))
 	$(eval T_SUBREPO := $(if ${DEBIAN_REPO_SUBREPO_$(CHANNEL)},${DEBIAN_REPO_SUBREPO_$(CHANNEL)},__UNCONFIGURED__))
-	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ] || [ "$(T_USER)" = "__UNCONFIGURED__" ]; then \
+	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ] || [ "$(T_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
 		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
 		exit 1; \
@@ -338,13 +341,13 @@ endef
 # Function to push debian packages.
 define func_push_debs
 	$(call func_check_variable,T_HOST)
-	$(call func_check_variable,T_USER)
+	$(call func_check_variable,T_USER_VAR)
 	$(call func_check_variable,S_PATH)
 	$(call func_check_variable,T_SUBREPO)
 	$(call func_check_variable,DEBIAN_SERVICES)
 
 	@echo "Cleaning temporary upload directory..."
-	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$(T_USER)" "$(T_HOST)/files/${T_SUBREPO}"); \
+	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Temporary directory cleaned successfully (HTTP $$http_code)"; \
 	elif [ "$$http_code" -eq 404 ]; then \
@@ -358,7 +361,7 @@ define func_push_debs
 	@echo ""
 
 	@echo "Checking for duplicate packages in repository..."
-	@response=$$(curl -k -s -X GET -u "$(T_USER)" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
+	@response=$$(curl -k -s -X GET -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
 	if [ -z "$$response" ]; then \
 		echo "Warning: could not fetch repository package list."; \
 		echo "Continuing with upload."; \
@@ -403,7 +406,7 @@ define func_push_debs
 		fi; \
 		for file in $$files; do \
 			echo -n "Uploading $$(basename $$file) to temporary directory..."; \
-			http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$(T_USER)" -F file=@$$file "$(T_HOST)/files/${T_SUBREPO}"); \
+			http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -F file=@$$file "$(T_HOST)/files/${T_SUBREPO}"); \
 			if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 				echo " done (HTTP $$http_code)"; \
 				uploaded_files="$$uploaded_files$$file "; \
@@ -423,7 +426,7 @@ define func_push_debs
 		for file in $$uploaded_files; do \
 			filename=$$(basename $$file); \
 			echo -n "   Deleting $$filename from temporary directory..."; \
-			curl -k -s -X DELETE -u "$(T_USER)" "$(T_HOST)/files/${T_SUBREPO}/$$filename" >/dev/null 2>&1; \
+			curl -k -s -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}/$$filename" >/dev/null 2>&1; \
 			echo " done"; \
 		done; \
 		echo ""; \
@@ -435,7 +438,7 @@ define func_push_debs
 	echo ""
 
 	@echo "Pushing files from temporary directory to repository..."
-	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$(T_USER)" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); \
+	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Files pushed to repository successfully (HTTP $$http_code)"; \
 	else \
@@ -451,7 +454,7 @@ define func_push_debs
 	@echo ""
 
 	@echo "Creating snapshot ${T_SNAPSHOT}..."
-	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$(T_USER)" -H "Content-Type: application/json" -d "{\"Name\": \"${T_SNAPSHOT}\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); \
+	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{\"Name\": \"${T_SNAPSHOT}\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Snapshot created successfully (HTTP $$http_code)"; \
 	else \
@@ -464,7 +467,7 @@ define func_push_debs
 	@echo ""
 
 	@echo "Publishing snapshot ${T_SNAPSHOT}..."
-	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X PUT -u "$(T_USER)" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"${T_SNAPSHOT}\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); \
+	@http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X PUT -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"${T_SNAPSHOT}\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Snapshot published successfully (HTTP $$http_code)"; \
 	else \
@@ -501,7 +504,7 @@ endef
 # Function to list remote Debian repository packages.
 define func_list_remote_debs
 	$(call func_check_variable,T_HOST)
-	$(call func_check_variable,T_USER)
+	$(call func_check_variable,T_USER_VAR)
 	$(call func_check_variable,T_SUBREPO)
 
 	@echo ">> Remote Debian Repository Packages"
@@ -509,7 +512,7 @@ define func_list_remote_debs
 	@printf "  %15s : %s\n" "Repo Host" "$(T_HOST)"
 	@printf "  %15s : %s\n" "Subrepo" "$(T_SUBREPO)"
 	@echo ""
-	@response=$$(curl -k -s -X GET -u "$(T_USER)" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
+	@response=$$(curl -k -s -X GET -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
 	if [ -z "$$response" ]; then \
 		echo "(empty response from server)"; \
 	elif command -v jq >/dev/null 2>&1; then \
@@ -568,7 +571,8 @@ check-push-docker-sites:
 	@echo ""
 
 .check-docker-registry-site:
-	@if [ -z "$(DOCKER_REGISTRY_$(SITE))" ] || [ -z "$(DOCKER_REGISTRY_$(SITE)_USER)" ]; then \
+	$(eval REGISTRY_USER_SET := $(if $(strip $(DOCKER_REGISTRY_$(SITE)_USER)),yes,no))
+	@if [ -z "$(DOCKER_REGISTRY_$(SITE))" ] || [ "$(REGISTRY_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Docker registry $(SITE) is not fully configured."; \
 		echo "Required: DOCKER_REGISTRY_$(SITE) and DOCKER_REGISTRY_$(SITE)_USER."; \
 		exit 1; \
@@ -647,7 +651,8 @@ docker-list-%:
 .list-docker-site:
 	$(eval DOCKER_SITE := $(call uppercase,$(SITE)))
 	$(eval REGISTRY := $(DOCKER_REGISTRY_$(DOCKER_SITE)))
-	$(eval REGISTRY_USER := $(DOCKER_REGISTRY_$(DOCKER_SITE)_USER))
+	$(eval REGISTRY_USER_VAR := DOCKER_REGISTRY_$(DOCKER_SITE)_USER)
+	$(eval REGISTRY_USER_SET := $(if $(strip $(DOCKER_REGISTRY_$(DOCKER_SITE)_USER)),yes,no))
 	@echo ">> Remote Docker Registry Images"
 	@printf "  %15s : %s\n" "Site" "$(DOCKER_SITE)"
 	@printf "  %15s : %s\n" "Registry" "$(REGISTRY)"
@@ -690,9 +695,10 @@ clean-docker:
 .push-docker-site:
 	$(eval DOCKER_SITE := $(call uppercase,$(SITE)))
 	$(eval REGISTRY := $(DOCKER_REGISTRY_$(DOCKER_SITE)))
-	$(eval REGISTRY_USER := $(DOCKER_REGISTRY_$(DOCKER_SITE)_USER))
+	$(eval REGISTRY_USER_VAR := DOCKER_REGISTRY_$(DOCKER_SITE)_USER)
+	$(eval REGISTRY_USER_SET := $(if $(strip $(DOCKER_REGISTRY_$(DOCKER_SITE)_USER)),yes,no))
 	$(call func_check_release_mode)
-	@if [ -z "$(REGISTRY)" ] || [ -z "$(REGISTRY_USER)" ]; then \
+	@if [ -z "$(REGISTRY)" ] || [ "$(REGISTRY_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Docker registry $(DOCKER_SITE) is not fully configured."; \
 		echo "Required: DOCKER_REGISTRY_$(DOCKER_SITE) and DOCKER_REGISTRY_$(DOCKER_SITE)_USER."; \
 		exit 1; \
@@ -760,7 +766,7 @@ endef
 
 # Function to list remote docker images.
 define func_list_docker_images_remote
-	@if [ -z "$(REGISTRY)" ] || [ -z "$(REGISTRY_USER)" ]; then \
+	@if [ -z "$(REGISTRY)" ] || [ "$(REGISTRY_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Docker registry variables are not fully configured for this site."; \
 		echo "Required: registry host and registry username/password."; \
 		exit 1; \
@@ -768,7 +774,7 @@ define func_list_docker_images_remote
 	@for image in $(DOCKER_IMAGES); do \
 		echo "Image: $$image"; \
 		echo ""; \
-		response=$$(curl -s -u "$(REGISTRY_USER)" "https://$(REGISTRY)/v2/$(DOCKER_SUBREPO)/$$image/tags/list" 2>/dev/null); \
+		response=$$(curl -s -u "$${$(REGISTRY_USER_VAR)}" "https://$(REGISTRY)/v2/$(DOCKER_SUBREPO)/$$image/tags/list" 2>/dev/null); \
 		if [ -z "$$response" ]; then \
 			echo "(empty response from registry)"; \
 		elif command -v jq >/dev/null 2>&1; then \
