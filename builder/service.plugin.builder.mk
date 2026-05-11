@@ -50,8 +50,6 @@ build-all:
 	list-debian-us \
 	docker \
 	clean-docker \
-	check-docker-runtime-base \
-	check-docker-vars \
 	check-push-docker-sites \
 	push-docker \
 	push-docker-cn \
@@ -64,20 +62,20 @@ build-all:
 	service-build-debian \
 	service-build-once
 
-# Ensure service-utils exists, then select the branch/tag matching ASN_SERVICE_API_VERSION
-# only when the current checkout is not already on the expected ref.
+# Explicitly initialize or realign service-utils. Normal build targets do not
+# refresh the submodule.
 build-init: update_service_utils
 
 # Build the required builder base image. Run this on a fresh build host or when
 # ASN_SERVICE_API_VERSION changes.
-build-prepare: build-init clean proto-gen prepare-service-builder-base
+build-prepare: clean proto-gen prepare-service-builder-base
 	@echo "Successfully built base image."
 	@echo
 
 check-prepare: check-version check-service-builder-base
 
 
-build-fresh: build-init clean proto-gen service-build-from-scratch
+build-fresh: clean proto-gen service-build-from-scratch
 	@echo "Built new base image and artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
@@ -537,8 +535,6 @@ endef
 ##----------------------------------------------------------------------------##
 ## Docker Image Handling ##
 
-check-docker-vars: check-docker-runtime-base
-
 docker:
 	@if [ -z "$(strip $(DOCKER_IMAGE_BUILD_SPECS))" ]; then \
 		echo "ERROR: DOCKER_IMAGE_BUILD_SPECS is empty."; \
@@ -680,22 +676,6 @@ clean-docker:
 		fi; \
 		echo ""; \
 	done
-
-# Verify locally available runtime images for Docker builds.
-check-docker-runtime-base:
-	@failed=0; \
-	for image in "registry.amiasys.com/asnc:$(DEP_VERSION_ASN)" "registry.amiasys.com/asnsn:$(DEP_VERSION_ASN)"; do \
-		if docker image inspect "$$image" >/dev/null 2>&1; then \
-			printf "  %-32s : PASS\n" "$$image"; \
-		else \
-			printf "  %-32s : FAIL (missing local image)\n" "$$image"; \
-			failed=1; \
-		fi; \
-	done; \
-	if [ "$$failed" -ne 0 ]; then \
-		echo "Local Docker runtime image check failed. Build or load the runtime images locally before running this check."; \
-		exit 1; \
-	fi
 
 # Check docker registry login status for publish targets only.
 .check-login-registry-%:
