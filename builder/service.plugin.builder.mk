@@ -18,6 +18,11 @@
 build-all:
 	@$(MAKE) build-prepare
 	@$(MAKE) build-plugin
+	@if $(MAKE) -n debian >/dev/null 2>&1; then \
+		$(MAKE) debian; \
+	else \
+		echo "No debian target is defined by this service; skipping Debian package build."; \
+	fi
 	@if $(MAKE) -n docker >/dev/null 2>&1; then \
 		$(MAKE) docker; \
 	else \
