@@ -247,6 +247,18 @@ services_provisioned: [ asn, swan, scarlette ]
 #    totp:
 #      # The issuer indicates the provider or service this account is associated with, URL-encoded according to RFC 3986.
 #      issuer: "Amia Networks Inc."
+#
+#  # Device-Related Configurations
+#  # If enabled == false, or a limit is set to negative, device-related configurations will be ignored (unlimited).
+#  device_limit:
+#    enabled: true # Whether to enable device limit. Default: true
+#    eviction_mode: "inactive" # none | inactive | any. None means no eviction, inactive means only inactive devices are evicted, any means any device can be evicted. Default: inactive
+#    phone: -1 # The number of login devices under this category allowed per user. Default: -1
+#    tablet: -1 # The number of login devices under this category allowed per user. Default: -1
+#    wearable: -1 # The number of login devices under this category allowed per user. Default: -1
+#    browser: -1 # The number of login devices under this category allowed per user. Default: -1
+#    mini_program: -1 # The number of login devices under this category allowed per user. Default: -1
+#    unknown: -1 # The number of login devices under this category allowed per user. Default: -1
 
 ## Authorization Configurations
 #authorization:
