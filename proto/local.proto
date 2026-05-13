@@ -7,11 +7,14 @@ option go_package = "./;proto";
 package asn_local;
 
 service Controller {
-  rpc ListServices(Empty)         returns (stream ServiceRes) {}
-  rpc StartService(ServiceReq)    returns (Empty) {}
-  rpc StopService(ServiceReq)     returns (Empty) {}
-  rpc RestartService(ServiceReq)  returns (Empty) {}
-  rpc ApplyServiceOps(Ops)        returns (OpsRes){}
+  rpc ListServices    (Empty)             returns (stream ServiceRes);
+  rpc StartService    (ServiceReq)        returns (Empty);
+  rpc StopService     (ServiceReq)        returns (Empty);
+  rpc RestartService  (ServiceReq)        returns (Empty);
+  rpc ApplyServiceOps (Ops)               returns (OpsRes);
+  rpc AddConfigOps    (ConfigOpsReq)      returns (ConfigOpsRes);
+  rpc UpdateConfigOp  (UpdateConfigOpReq) returns (ConfigOpsRes);
+  rpc DeleteConfigOps (ConfigOpsReq)      returns (ConfigOpsRes);
 }
 
 message Empty{}
@@ -34,5 +37,20 @@ message Ops {
 }
 
 message OpsRes {
+  string response = 1;
+}
+
+message ConfigOpsReq {
+  string service_name = 1;
+  repeated string config_params = 2;
+}
+
+message UpdateConfigOpReq {
+  string service_name = 1;
+  string old_param = 2;
+  string new_param = 3;
+}
+
+message ConfigOpsRes {
   string response = 1;
 }
