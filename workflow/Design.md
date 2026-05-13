@@ -7,16 +7,6 @@
 
 ---
 
-## Open Items
-
-Issues not yet resolved in the current API design. These must be decided before the affected surfaces are considered stable.
-
-| # | Area | Item | Status |
-|---|---|---|---|
-| 1 | §5.1 Config op callbacks | Whether `ASNServiceController.AddConfigOps / UpdateConfigOp / DeleteConfigOps` are invoked at all is under discussion. The alternative: drop controller-side callbacks entirely and let config op errors propagate from the node directly to `Malfunctioning`, consistent with how `Start()` errors are handled. | Under discussion |
-
----
-
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
@@ -278,9 +268,6 @@ Init(asnController)          once; not re-entrant
 Start(config)                after Init; sequential; repeatable
 
   ├─ HandleMessageFromNode() after Init; concurrent
-  ├─ AddConfigOps()          after Init; concurrent       ⚠ see Open Item #1
-  ├─ UpdateConfigOp()        after Init; concurrent       ⚠ see Open Item #1
-  ├─ DeleteConfigOps()       after Init; concurrent       ⚠ see Open Item #1
   └─ GetMetrics()            after Init; concurrent
 
 Stop()                       idempotent
@@ -338,13 +325,13 @@ sequenceDiagram
 
     C->>F: ASNController.AddConfigOps()
     F->>F: persist
+    F-->>C: OpsResponse chan
     F->>SN: ASNService.AddConfigOps()
     SN-->>F: OpsResponse
-    F-->>C: OpsResponse chan
-    F->>C: ASNServiceController.AddConfigOps() ⚠ Open Item #1
+    F->>C: (responses delivered via chan)
 ```
 
-Framework persists and dispatches to nodes **before** invoking `ASNServiceController.AddConfigOps()`.
+The framework persists config ops and returns an `OpsResponse` channel to the caller immediately. Results from each node are streamed into the channel as they arrive. There is no controller-side callback (`ASNServiceController.AddConfigOps` is not invoked); errors from nodes transition the service to `Malfunctioning` directly.
 
 ### Scoping Rules
 

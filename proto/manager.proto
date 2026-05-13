@@ -55,9 +55,9 @@ service Manager {
   rpc CreateNode                   (Node.Create)                        returns (Empty);
   rpc UpdateNode                   (Node.Update)                        returns (Empty);
   rpc DeleteNode                   (Node.Id)                            returns (Empty);
-  rpc AddNodeConfigOps             (Node.SetConfigOp)                   returns (Empty);
-  rpc UpdateNodeConfigOp           (Node.SetConfigOp)                   returns (Empty);
-  rpc RemoveNodeConfigOps          (Node.SetConfigOp)                   returns (Empty);
+  rpc AddNodeConfigOps             (Node.SetConfigOp)                   returns (Ops.Responses);
+  rpc UpdateNodeConfigOp           (Node.SetConfigOp)                   returns (Ops.Responses);
+  rpc RemoveNodeConfigOps          (Node.SetConfigOp)                   returns (Ops.Responses);
   rpc AddNodeInterface             (Node.NodeInfo.OperateInterface)     returns (Empty);
   rpc UpdateNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty);
   rpc RemoveNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty);
@@ -68,9 +68,9 @@ service Manager {
   rpc CreateNodeGroup             (NodeGroup.Create)          returns (Empty);
   rpc UpdateNodeGroup             (NodeGroup.Update)          returns (Empty);
   rpc DeleteNodeGroup             (NodeGroup.Id)              returns (Empty);
-  rpc AddNodeGroupConfigOps       (NodeGroup.SetConfigOp)     returns (Empty);
-  rpc UpdateNodeGroupConfigOp     (NodeGroup.SetConfigOp)     returns (Empty);
-  rpc RemoveNodeGroupConfigOps    (NodeGroup.SetConfigOp)     returns (Empty);
+  rpc AddNodeGroupConfigOps       (NodeGroup.SetConfigOp)     returns (Ops.Responses);
+  rpc UpdateNodeGroupConfigOp     (NodeGroup.SetConfigOp)     returns (Ops.Responses);
+  rpc RemoveNodeGroupConfigOps    (NodeGroup.SetConfigOp)     returns (Ops.Responses);
 
   // Link API
   rpc GetLinksOfNode    (Node.Id)      returns (Link.List); // All links of a network. Internal and External.
