@@ -28,6 +28,7 @@ message ServiceReq {
 message ServiceRes {
   string name = 1;
   string version = 2;
+  int32  state = 3;
 }
 
 message Ops {
