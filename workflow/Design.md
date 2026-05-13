@@ -21,6 +21,7 @@
 10. [IAM](#10-iam)
 11. [Subscription](#11-subscription)
 12. [Implementation Checklist](#12-implementation-checklist)
+13. [Standalone Node Message Relay](#13-standalone-node-message-relay)
 
 ---
 
@@ -447,3 +448,131 @@ Register platforms during `ASNServiceController.Start()`. Each `Add*()` call ret
 - [ ] `opCmd` / `opParams` schemas: defined and shared across controller and service node
 - [ ] Shared data keys and value types: agreed upon out-of-band between service teams
 - [ ] Config op payload format: versioned for rolling upgrade compatibility
+
+---
+
+## 13. Standalone Node Message Relay
+
+### Background
+
+In the SONiC architecture, slave nodes run in `Standalone` mode and have no direct connection to the ASN Controller. When a service on a slave node calls `SendMessageToController`, the framework buffers the message locally and exposes a `SubscribeMessages` streaming RPC on `local.proto` for the master node to drain.
+
+### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant S  as Slave Service
+    participant SF as Slave Framework
+    participant M  as Master Node
+    participant C  as ASN Controller
+
+    S->>SF: SendMessageToController(type, msg)
+    SF->>SF: append to msgBuf (with timestamp)
+    SF-->>S: nil (buffered)
+
+    M->>SF: SubscribeMessages() [streaming]
+    SF-->>M: MessageEvent (drained from buffer)
+    M->>C: SendMessageToController(type, msg)
+```
+
+The master subscribes once on startup and keeps the stream open. Messages are delivered in the order they were produced, with the original timestamp recorded by the slave framework at the time of the `SendMessageToController` call.
+
+### Buffer Design
+
+- **Storage**: in-memory slice (`node/server/server.go: msgBuf []pendingMessage`).
+- **Eviction** (lazy, triggered on each append):
+  1. TTL sweep: messages older than `MsgBufMaxAge` are removed from the front (the slice is chronologically ordered, so this is a linear scan that stops at the first non-expired entry).
+  2. Capacity cap: if the buffer still exceeds `MsgBufMaxSize` after the TTL sweep, the oldest entry is dropped.
+  3. Both eviction events emit a `WARN` log entry.
+- **Configuration** (under `asn.conf` → `cli`):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `msg_buf_max_size` | `10000` | Maximum number of buffered messages |
+| `msg_buf_max_age` | `600` (s) | Messages older than this are expired |
+
+### Delivery Guarantee
+
+- **No message is lost while a subscriber is connected**: a message is removed from the buffer only after `stream.Send()` returns `nil`. If the send fails or the subscriber is kicked, the in-flight message is prepended back to the buffer by a `defer`.
+- **Kick semantics**: a new `SubscribeMessages` call closes the previous subscriber's kick channel, causing it to return `codes.Aborted`. The new subscriber then starts from the current buffer head.
+- **Restart loss**: the buffer is in-memory only. Messages not yet drained when the slave node restarts are lost. This is accepted for the SONiC use case: state is authoritative in hardware/OS and can be re-synced on reconnect via config ops and service state queries.
+
+### Service Developer Guide
+
+#### Sending messages from a slave service
+
+Call `SendMessageToController` as you would in cluster mode — the API is identical. The framework transparently buffers the message when no controller connection exists:
+
+```go
+func (s *MyService) Start(config string) (<-chan error, error) {
+    // ...
+    go func() {
+        s.asnServiceNode.SendMessageToController("alert", `{"code":42,"detail":"..."}`)
+    }()
+    return runtimeErrChan, nil
+}
+```
+
+No special handling is needed for standalone vs. cluster mode. If the message cannot be sent immediately, it is buffered and delivered when the master subscribes.
+
+#### Master-side relay (subscribing to the slave stream)
+
+The master node's service implementation is responsible for connecting to each slave's `SubscribeMessages` stream and forwarding received messages to the controller. A typical implementation:
+
+```go
+// Called once per slave node after the master learns of its existence
+// (e.g., from GetSlaveNodes()).
+func (s *MyService) relaySlaveMessages(slaveGrpcUrl string) {
+    for {
+        if err := s.subscribeOnce(slaveGrpcUrl); err != nil {
+            // codes.Aborted means a newer subscriber replaced us — reconnect immediately.
+            // Any other error (network, slave restart) — back off before retry.
+            if status.Code(err) != codes.Aborted {
+                time.Sleep(5 * time.Second)
+            }
+        }
+    }
+}
+
+func (s *MyService) subscribeOnce(slaveGrpcUrl string) error {
+    conn, err := grpc.NewClient(slaveGrpcUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
+    if err != nil {
+        return err
+    }
+    defer conn.Close()
+
+    cli := proto.NewControllerClient(conn)
+    stream, err := cli.SubscribeMessages(context.Background(), &proto.Empty{})
+    if err != nil {
+        return err
+    }
+    for {
+        msg, err := stream.Recv()
+        if err != nil {
+            return err // caller decides whether to retry
+        }
+        // Forward to the controller via the master's own framework handle.
+        s.asnController.SendMessageToController(msg.ServiceName, msg.MessageType, msg.Message)
+    }
+}
+```
+
+Key points:
+- Run `relaySlaveMessages` in a goroutine per slave, started after `Init()`.
+- On `codes.Aborted` (kicked by another subscriber) reconnect immediately — no back-off.
+- On any other error reconnect after a brief delay to avoid tight loops on a dead slave.
+- `conn.Close()` is deferred inside `subscribeOnce` so the connection is cleaned up on every exit path.
+- The master must **not** forward the `timestamp` field to the controller — it is metadata for the relay layer only and carries no meaning outside the slave-to-master path.
+
+#### Buffer eviction and message loss
+
+The slave framework evicts messages automatically. Service authors should be aware:
+
+- Messages older than `msg_buf_max_age` (default 600 s) are dropped silently on the next `SendMessageToController` call. If the master has been disconnected for longer than this, older messages will already be gone by the time it reconnects.
+- When the buffer reaches `msg_buf_max_size` (default 10000), the oldest entry is dropped to make room. This protects against burst scenarios where a service sends messages faster than the master can drain them.
+- Both eviction events are logged at `WARN` level on the slave (`[SendMessage] dropped N expired messages` / `standalone message buffer full`). Monitor these in production to detect sustained disconnections or unusually high message rates.
+- Messages buffered at the time of a slave restart are lost. Design services so that critical state changes are expressed via service state (`Malfunctioning`) or config op responses rather than `SendMessageToController`.
+
+### Future Work
+
+If use cases arise where messages must survive slave restarts (e.g., audit events), a write-ahead log or embedded DB can be added under the same `msgBuf` interface without changing the relay protocol.
