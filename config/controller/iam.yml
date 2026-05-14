@@ -49,7 +49,17 @@ services_provisioned: [ asn, swan, scarlette ]
 #smtp: # SMTP email server config
 #  enabled: false # Default: false
 #  expire : 5 # in minutes, Default: 5
-#  resend_interval: 1 # in minutes, Default: 1
+#  # Resend interval uses exponential backoff based on outcome.
+#  # After success: interval = resend_success_base * resend_amp_factor^successCount, capped at resend_success_max.
+#  # After failure: interval = resend_failure_base * resend_amp_factor^failureCount, capped at resend_failure_max.
+#  # A success resets the failure count.
+#  resend_success_base: 10    # in seconds, post-success cooldown base. Default: 10
+#  resend_failure_base: 30    # in seconds, per-send/failure penalty base. Default: 30
+#  resend_amp_factor: 2       # exponential amplification factor. Default: 2
+#  resend_success_max: 120    # in seconds, cap for success-side cooldown. Default: 120
+#  resend_failure_max: 3600   # in seconds, cap for failure-side penalty. Default: 3600
+#  resend_failure_decay: 3600 # in seconds, time per failure-count level decayed when idle. 0 = no decay. Default: 3600
+#  resend_success_decay: 86400 # in seconds, time per success-count level decayed when idle. 0 = no decay. Default: 86400
 #  tls: true
 #  host: "smtp.office365.com"
 #  email: "email@amiasys.com"
@@ -58,10 +68,29 @@ services_provisioned: [ asn, swan, scarlette ]
 #  port: 587
 
 ## Phone Service
+#
+# There are three modes for displaying phone country codes:
+# - all: all countries are displayed;
+# - include: only countries in the list are displayed;
+# - exclude: all countries except those in the list are displayed.
+#
 #phone:
 #  enabled: false # Default: false
 #  expire : 5 # in minutes, Default: 5
-#  resend_interval: 1 # in minutes, Default: 1
+#  # Resend interval uses exponential backoff based on outcome.
+#  # After success: interval = resend_success_base * resend_amp_factor^successCount, capped at resend_success_max.
+#  # After failure: interval = resend_failure_base * resend_amp_factor^failureCount, capped at resend_failure_max.
+#  # A success resets the failure count.
+#  resend_success_base: 10    # in seconds, post-success cooldown base. Default: 10
+#  resend_failure_base: 30    # in seconds, per-send/failure penalty base. Default: 30
+#  resend_amp_factor: 2       # exponential amplification factor. Default: 2
+#  resend_success_max: 120    # in seconds, cap for success-side cooldown. Default: 120
+#  resend_failure_max: 3600   # in seconds, cap for failure-side penalty. Default: 3600
+#  resend_failure_decay: 3600 # in seconds, time per failure-count level decayed when idle. 0 = no decay. Default: 3600
+#  resend_success_decay: 86400 # in seconds, time per success-count level decayed when idle. 0 = no decay. Default: 86400
+#  country_code:
+#    mode: all # all | include | exclude, Default: all
+#    codes: ["86", "852", "1"] # Default: []
 #  services:
 #    86: # if multiple country codes are using the same config, use comma to separate them, i.e., 86,852,853
 #      provider: "aliyun" # "tencent" || "aliyun"
@@ -137,6 +166,32 @@ services_provisioned: [ asn, swan, scarlette ]
 #    appID1: appSecret1
 #    appID2: appSecret2
 
+# Passkey
+#
+# Passkey is used for WebAuthn registration and authentication.
+#passkey:
+#  asn:
+#    server_domains: [ "asn.amiasys.com" ] # Leave empty to disable Passkey registration / verification.
+#    display_name: "ASN" # Default: service name
+#    extra_allowed_origins: [] # By default, "https://"+server_domain is allowed for each server domain. If additional origins are needed, add them here.
+#    timeouts:
+#      login: 60 # session expiration in seconds, Default: 60
+#      registration: 60 # session expiration in seconds, Default: 60
+#  swan:
+#    server_domains: [ "swan.amiasys.com" ] # Leave empty to disable Passkey registration / verification.
+#    display_name: "SWAN" # Default: service name
+#    extra_allowed_origins: [ ] # By default, "https://"+server_domain is allowed for each server domain. If additional origins are needed, add them here.
+#    timeouts:
+#      login: 60 # session expiration in seconds, Default: 60
+#      registration: 60 # session expiration in seconds, Default: 60
+#  scarlette:
+#    server_domains: [ "scarlette.amiasys.com" ] # Leave empty to disable Passkey registration / verification.
+#    display_name: "Scarlette" # Default: service name
+#    extra_allowed_origins: [ ] # By default, "https://"+server_domain is allowed for each server domain. If additional origins are needed, add them here.
+#    timeouts:
+#      login: 60 # session expiration in seconds, Default: 60
+#      registration: 60 # session expiration in seconds, Default: 60
+
 ## LDAP Configurations
 #ldap:
 #  enabled: false # Default: false
@@ -162,12 +217,9 @@ services_provisioned: [ asn, swan, scarlette ]
 #  redis: # used only in distributed mode
 #    mode: "standard" # (standard | redlock) Default: "standard"
 #    nodes: # list of redis nodes. Only the first one is used in standard mode
-#      urls:
-#        - "localhost:6379" # Default: "localhost:6379"
-#      passwords:
-#        - "2023"
-#      dbs:
-#        - 0 # index: 0 ~ 15 (Default: 0)
+#      - url: "localhost:6379" # Default: "localhost:6379"
+#        passwords: "2023"
+#        dbs: 0 # index: 0 ~ 15 (Default: 0)
 
 ## Log Configurations
 #log:
@@ -177,7 +229,7 @@ services_provisioned: [ asn, swan, scarlette ]
 ## Account Configurations
 #account:
 #  special_key: "SpecialAccount@AmiaNetworks2025" # Used to create special accounts which skips MFA.
-#  password_algo: sha1 # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: sha256. CAUTION: more demanding algorithms like argon2id are not recommended in VMs.
+#  password_algo: sha256 # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: sha256. CAUTION: more demanding algorithms like argon2id are not recommended in VMs.
 #  rename: false # whether renaming an account's username is allowed. Default: false
 #
 #  # Username must be unique system wide, and it is the default identifier for login.
@@ -195,7 +247,7 @@ services_provisioned: [ asn, swan, scarlette ]
 #  # {m,n}: m to n (both inclusive)
 #  # If you need to customize the format, please refer to the regular expression syntax.
 #  format:
-#    name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#    name: "^[0-9a-zA-Z_.-]{2,36}$"
 #    password: "^[0-9a-zA-Z!@$._-]{6,128}$"
 #    email: "^(?:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})?$"
 #
@@ -275,28 +327,18 @@ services_provisioned: [ asn, swan, scarlette ]
 #    refresh_token:
 #      enabled: true # Support automatically obtaining access token through refresh token. Default: true
 #      expire: 600  # Refresh token expiration time in minutes. Default: 600 minutes.
-#
-#  access_control:
-#    format:
-#      role:
-#        name: "^[0-9a-zA-Z!@$._-]{6,128}$"
-#      policy:
-#        name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
-#        scope: "^[0-9a-zA-Z!@$._-/*?%&]{6,128}$"
-#        operation: "^[0-9a-zA-Z!@$._-]{6,128}$"
-#        time: "^[0-9a-zA-Z-:.]{6,128}$"
 
 ## Group Configurations
 #group:
-#  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#  name: "^[0-9a-zA-Z_.-]{2,36}$"
 
 ## Role Configurations
 #role:
-#  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#  name: "^[0-9a-zA-Z_.-]{2,36}$"
 
 ## Policy Configurations
 #policy:
-#  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#  name: "^[0-9a-zA-Z_.-]{2,36}$"
 
 ## Testing Configurations
 # Caution: This part should only be configured when testing.
