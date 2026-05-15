@@ -95,8 +95,6 @@ clean: .init_build_file
 	@rm -rf build/
 
 
-check-vars: .check_vars
-
 check-version:
 	@next_build=$$(expr $(CURRENT_BUILD) + 1); \
 	echo ">> Version Check"; \
