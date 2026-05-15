@@ -2,11 +2,11 @@ module asn.amiasys.com
 
 go 1.26
 
-replace asn.amiasys.com/asn-service-api/v26 => github.com/amianetworks/asn-service-api/v26 v26.6.3
+replace asn.amiasys.com/asn-service-api/v26 => github.com/amianetworks/asn-service-api/v26 v26.6.4
 
 require (
-	asn.amiasys.com/asn-service-api/v26 v26.6.3
-	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.6.0
+	asn.amiasys.com/asn-service-api/v26 v26.6.4
+	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.6.1
 	github.com/amianetworks/am.modules/v26 v26.5.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
