@@ -32,7 +32,7 @@ build-all:
 #push-all:
 #	@$(MAKE) push-base
 #	@$(MAKE) push-debian
-#	@$(MAKE) docker-push
+#	@$(MAKE) push-docker
 
 
 ##----------------------------------------------------------------------------##
@@ -557,121 +557,14 @@ docker:
 .docker-build-image:
 	$(call func_build_docker,$(IMAGE),$(VERSION_BUILD),$(DOCKERFILE),$(DEP_DOCKER_BUILD_ARGS))
 
-# Build and push to registries. Publishing requires explicit approval.
-push-docker: check-push-docker-sites
-	@for site in $(DOCKER_REGISTRY_SITES); do \
-		$(MAKE) -s .push-docker-site SITE=$$site; \
-	done
+DOCKER_PUSH_CHECK_TARGETS ?= .check-docker-release-mode
+DOCKER_PUSH_VERSION ?= $(VERSION_BUILD)
+DOCKER_PUSH_LATEST ?= $(if $(filter pro,$(BUILD_MODE)),yes,no)
 
-check-push-docker-sites:
+.check-docker-release-mode:
 	$(call func_check_release_mode)
-	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
-		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
-		exit 1; \
-	fi
-	@for site in $(DOCKER_REGISTRY_SITES); do \
-		$(MAKE) -s .check-docker-registry-site SITE=$$site; \
-	done
-	@echo "Docker publish site preflight passed: $(DOCKER_REGISTRY_SITES)"
-	@echo ""
 
-.check-docker-registry-site:
-	$(eval REGISTRY_USER_SET := $(if $(strip $(DOCKER_REGISTRY_$(SITE)_USER)),yes,no))
-	@if [ -z "$(DOCKER_REGISTRY_$(SITE))" ] || [ "$(REGISTRY_USER_SET)" != "yes" ]; then \
-		echo "ERROR: Docker registry $(SITE) is not fully configured."; \
-		echo "Required: DOCKER_REGISTRY_$(SITE) and DOCKER_REGISTRY_$(SITE)_USER."; \
-		exit 1; \
-	fi
-	@if ! cat ~/.docker/config.json 2>/dev/null | grep -q "$(DOCKER_REGISTRY_$(SITE))"; then \
-		echo "ERROR: Docker registry $(SITE) is not logged in: $(DOCKER_REGISTRY_$(SITE))"; \
-		exit 1; \
-	fi
-
-push-docker-cn:
-	@$(MAKE) -s .push-docker-site SITE=CN
-
-push-docker-us:
-	@$(MAKE) -s .push-docker-site SITE=US
-
-push-docker-%:
-	@$(MAKE) -s .push-docker-site SITE=$(call uppercase,$*)
-
-docker-push-%:
-	@echo "Target '$@' is deprecated."
-	@echo "Use 'make push-docker-cn', 'make push-docker-us', or 'make push-docker'."
-	@exit 1
-
-include $(SERVICE_UTILS_DIR)/builder/docker.list.mk
-
-clean-docker:
-	@echo "- Cleaning older docker images for repositories: $(DOCKER_IMAGES)"
-	@echo ""
-	@for image in $(DOCKER_IMAGES); do \
-		echo "> $$image"; \
-		ids=$$(docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
-			| awk -v prefix="^$$image:" '$$1 ~ prefix { if (!seen[$$2]++) print $$2 }'); \
-		if [ -z "$$ids" ]; then \
-			echo "(none)"; \
-		else \
-			keep=$$(printf "%s\n" $$ids | head -n 1); \
-			remove=$$(printf "%s\n" $$ids | tail -n +2); \
-			echo "Kept image ID: $$keep"; \
-			if [ -n "$$remove" ]; then \
-				echo "$$remove" | xargs docker rmi -f; \
-			else \
-				echo "No older images to remove."; \
-			fi; \
-		fi; \
-		echo ""; \
-	done
-
-# Check docker registry login status for publish targets only.
-.check-login-registry-%:
-	$(eval DOMAIN := $(call uppercase,$*))
-	@if ! cat ~/.docker/config.json | grep -q "${DOCKER_REGISTRY_$(DOMAIN)}"; then \
-		echo "Please login docker registry \"${DOCKER_REGISTRY_$(DOMAIN)}\" at first."; \
-		exit 1; \
-	else \
-		echo "Already logged in to ${DOCKER_REGISTRY_$(DOMAIN)}."; \
-	fi
-
-.push-docker-site:
-	$(eval DOCKER_SITE := $(call uppercase,$(SITE)))
-	$(eval REGISTRY := $(DOCKER_REGISTRY_$(DOCKER_SITE)))
-	$(eval REGISTRY_USER_VAR := DOCKER_REGISTRY_$(DOCKER_SITE)_USER)
-	$(eval REGISTRY_USER_SET := $(if $(strip $(DOCKER_REGISTRY_$(DOCKER_SITE)_USER)),yes,no))
-	$(call func_check_release_mode)
-	@if [ -z "$(REGISTRY)" ] || [ "$(REGISTRY_USER_SET)" != "yes" ]; then \
-		echo "ERROR: Docker registry $(DOCKER_SITE) is not fully configured."; \
-		echo "Required: DOCKER_REGISTRY_$(DOCKER_SITE) and DOCKER_REGISTRY_$(DOCKER_SITE)_USER."; \
-		exit 1; \
-	fi
-	@$(MAKE) -s .check-login-registry-$(DOCKER_SITE)
-	@echo ">> Docker Publish Target"
-	@printf "  %15s : %s\n" "Site" "$(DOCKER_SITE)"
-	@printf "  %15s : %s\n" "Registry" "$(REGISTRY)"
-	@printf "  %15s : %s\n" "Subrepo" "$(DOCKER_SUBREPO)"
-	@printf "  %15s : %s\n" "Build Mode" "$(BUILD_MODE)"
-	@printf "  %15s : %s\n" "Version Tag" "$(VERSION_BUILD)"
-	@printf "  %15s : %s\n" "Latest Tag" "$(DOCKER_TAG_LATEST)"
-	@echo ""
-	@for image in $(DOCKER_IMAGES); do \
-		if ! docker image inspect "$$image:$(VERSION_BUILD)" >/dev/null 2>&1; then \
-			echo "ERROR: local image $$image:$(VERSION_BUILD) is missing. Run make docker after make build-plugin."; \
-			exit 1; \
-		fi; \
-	done
-	@for image in $(DOCKER_IMAGES); do \
-		$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=$(VERSION_BUILD) REGISTRY=$(REGISTRY); \
-	done
-ifeq ($(BUILD_MODE),pro)
-	@for image in $(DOCKER_IMAGES); do \
-		$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=latest REGISTRY=$(REGISTRY) SOURCE_TAG=$(VERSION_BUILD); \
-	done
-endif
-
-.push-docker-image:
-	$(call func_push_docker,$(IMAGE),$(IMAGE_TAG),$(REGISTRY),$(SOURCE_TAG))
+include $(SERVICE_UTILS_DIR)/builder/docker.registry.mk
 
 # $(1): IMAGE_NAME
 # $(2): VERSION
@@ -690,21 +583,6 @@ define func_build_docker
 		.
 	@echo "Successfully built docker image for $(1)/$(2)"
 	@echo ""
-endef
-
-# $(1): IMAGE_NAME
-# $(2): VERSION (or latest)
-# $(3): REGISTRY
-# $(4): SOURCE_VERSION
-define func_push_docker
-	@echo ""
-	$(eval SOURCE_IMAGE_TAG := $(if $(4),$(4),$(2)))
-	@echo -n "Tagging image $(1):$(SOURCE_IMAGE_TAG) to registry: $(3)/$(DOCKER_SUBREPO)/$(1):$(2)"
-	@docker tag $(1):$(SOURCE_IMAGE_TAG) $(3)/$(DOCKER_SUBREPO)/$(1):$(2)
-	@echo " ...Done."
-	@echo "Pushing image $(1):$(2) to registry: $(3)"
-	@docker push $(3)/$(DOCKER_SUBREPO)/$(1):$(2)
-	@echo "Pushed."
 endef
 
 #------------------------------------------------------------------------------#
