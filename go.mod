@@ -6,7 +6,7 @@ replace asn.amiasys.com/asn-service-api/v26 => github.com/amianetworks/asn-servi
 
 require (
 	asn.amiasys.com/asn-service-api/v26 v26.6.4
-	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.6.1
+	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.6.4
 	github.com/amianetworks/am.modules/v26 v26.5.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -16,7 +16,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.44.0
 	golang.org/x/term v0.43.0
-	google.golang.org/grpc v1.81.0
+	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
