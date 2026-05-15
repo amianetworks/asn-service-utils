@@ -88,15 +88,16 @@ Control rule:
 - When `ASN_SERVICE_API_VERSION` changes, the builder base image must be rebuilt because it caches Go packages and plugin build dependencies.
 - Changing the service API version is a compatibility-sensitive change and should be treated as release work.
 
-### ASN Framework Runtime Version
+### ASN Framework Runtime And Toolchain Dependency Versions
 
 Source:
 
 - `service-utils/builder/ASN_VERSION`
 
-Variable:
+Variables:
 
 - `DEP_VERSION_ASN`
+- `DEP_VERSION_GO`
 
 Meaning:
 
@@ -104,14 +105,15 @@ Meaning:
 - It is consumed by `service.plugin.builder.mk` through `include $(BUILD_ENV_ASN_VERSION_FILE)`.
 - It is injected into Debian package control files as `@DEPENDS@`.
 - Consuming service projects may also pass `DEP_VERSION_ASN` into Docker build arguments for ASN Controller and ASN Service Node runtime images.
-- In the common Makefile flow, the consuming service includes its own config first, then includes `service.plugin.builder.mk`; `service.plugin.builder.mk` includes `service-utils/builder/ASN_VERSION` later. That later assignment becomes the effective `DEP_VERSION_ASN` under normal Makefile execution.
+- `DEP_VERSION_GO` is the Go version required for service-plugin builder images.
+- In the common Makefile flow, the consuming service includes its own config first, then includes `service.plugin.builder.mk`; `service.plugin.builder.mk` includes `service-utils/builder/ASN_VERSION` later. Those later assignments become the effective `DEP_VERSION_ASN` and `DEP_VERSION_GO` under normal Makefile execution.
 
 Control rule:
 
 - `DEP_VERSION_ASN` is not the same thing as `ASN_SERVICE_API_VERSION`.
 - These values do not have to be identical.
 - They must be treated as a compatibility pair: the selected ASN Framework/runtime version must support the selected ASN service API version.
-- `service-utils/builder/ASN_VERSION` says it is set by ASN `make set-version` only. Service plugin build or workflow work should not edit it directly unless the task is explicitly ASN Framework version maintenance.
+- `DEP_VERSION_ASN` and `DEP_VERSION_GO` are released by ASN Framework `make set-version` during P6/version maintenance. Service plugin build or workflow work should not edit them directly unless the task is explicitly ASN Framework dependency version maintenance.
 
 ### service-utils Checkout Version
 
@@ -150,13 +152,13 @@ Control rule:
 
 Sources:
 
-- The consuming service project, usually `make/config.mk`.
+- `service-utils/builder/ASN_VERSION`.
 - `service-utils/builder/service.plugin.builder.base.dockerfile`.
 - `service-utils/builder/service.plugin.builder.dockerfile`.
 
 Typical variables/files:
 
-- `BUILDER_ENV_VERSION`
+- `DEP_VERSION_GO`
 - Ubuntu base image in the builder Dockerfile.
 - Go version installed by the builder Dockerfile.
 - protobuf compiler packages installed by the builder Dockerfile.
@@ -172,6 +174,8 @@ Meaning:
 Control rule:
 
 - Toolchain versions are separate from service product version and ASN Framework/runtime version.
+- `DEP_VERSION_GO` is framework-owned and is carried through `service-utils/builder/ASN_VERSION`, just like `DEP_VERSION_ASN`.
+- Every ASN Framework P6 must verify that `DEP_VERSION_ASN` matches the framework `VERSION` and `DEP_VERSION_GO` matches the framework `GO_VERSION`; stale values mean `make set-version` has not been run for the selected release identity.
 - The builder base image is local state and should not be assumed correct only because source files are correct.
 - Rebuild the base image when `ASN_SERVICE_API_VERSION`, Go version, protobuf requirements, private module dependencies, or builder Dockerfile content changes.
 
@@ -195,17 +199,17 @@ Consuming service make/config.mk
   |     +--> service-utils checkout target v$(ASN_SERVICE_API_VERSION)
   |     +--> rebuild trigger for builder base image
   |
-  +-- early/default DEP_VERSION_ASN
-  |
   +-- BUILD_ENV_ASN_VERSION_FILE
         |
         v
 service-utils/builder/ASN_VERSION
   |
   +-- effective DEP_VERSION_ASN
+  +-- effective DEP_VERSION_GO
         |
         +--> Debian package dependency version
         +--> Docker build args for ASN runtime dependency
+        +--> service-builder Docker Go toolchain version
 ```
 
 ## Artifact Version Effects
@@ -256,9 +260,10 @@ Before build or release work, verify:
 3. `service-utils` checkout state is intentional for the selected API version.
 4. `service-utils/go.mod` uses the same intended ASN service API version, or a documented compatible exception exists.
 5. `service-utils/builder/ASN_VERSION` `DEP_VERSION_ASN` is an intended compatible ASN Framework/runtime version.
-6. Builder base image has been rebuilt after any API/toolchain/dependency change.
-7. Debian and Docker dependency versions are expected to follow `DEP_VERSION_ASN`.
-8. Service product artifacts are expected to follow `VERSION_BUILD`.
+6. `service-utils/builder/ASN_VERSION` `DEP_VERSION_GO` is the intended service-builder Go toolchain version.
+7. Builder base image has been rebuilt after any API/toolchain/dependency change.
+8. Debian and Docker dependency versions are expected to follow `DEP_VERSION_ASN`.
+9. Service product artifacts are expected to follow `VERSION_BUILD`.
 
 ## Mechanism Review
 
@@ -274,7 +279,7 @@ Good parts:
 
 Unclear or risky parts:
 
-- `DEP_VERSION_ASN` is assigned once in the consuming service config and then assigned again after `builder/ASN_VERSION` is included. The later value is effective, but this is not obvious when reading only the service config.
+- `DEP_VERSION_ASN` or `DEP_VERSION_GO` can appear in service-side config as a fallback, but the values from `builder/ASN_VERSION` are the effective framework-owned dependency contract under normal Makefile execution.
 - `update_service_utils` is hidden inside build-preparation targets and can move the submodule checkout based on `ASN_SERVICE_API_VERSION`.
 - There is no read-only target that reports all version authorities before a build.
 - `build-plugin` increments the development build number as a side effect.
@@ -291,8 +296,8 @@ Recommended improvements:
 
 - Keep `version-report` and `version-check` free of submodule-sync and build-artifact side effects.
 - Consider adding a release-specific check that validates the selected repository target against `BUILD_MODE` before publishing.
-- Rename the early/default `DEP_VERSION_ASN` in consuming service config if it is only a fallback, or remove it if the framework-owned value is always required.
-- Make build-number incrementing an explicit step for release workflows, or clearly distinguish `check-version` from `increment-build`.
+- Remove service-side defaults for `DEP_VERSION_ASN` and `DEP_VERSION_GO` when the framework-owned `builder/ASN_VERSION` file is required.
+- Make build-number incrementing an explicit step for release workflows, or clearly distinguish the `make check` gate from `increment-build`.
 - Document the approved API/utils/framework pairing in release notes before building artifacts.
 
 ## Agentic Workflow Rules
@@ -300,7 +305,7 @@ Recommended improvements:
 Agents working on ASN Service Plugin versioning should follow these rules:
 
 - Do not assume `ASN_SERVICE_API_VERSION` and `DEP_VERSION_ASN` must be equal.
-- Do not edit `service-utils/builder/ASN_VERSION` unless explicitly assigned ASN Framework/runtime version maintenance.
+- Do not edit `service-utils/builder/ASN_VERSION` unless explicitly assigned ASN Framework dependency version maintenance.
 - Do not change dependency versions without approval.
 - Do not run `update_service_utils`, `build-prepare`, Docker builds, package publishing, or networked release operations without approval.
 - Do not reproduce credentials from consuming service build configuration in workflow docs or logs.

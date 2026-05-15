@@ -24,6 +24,7 @@ ASN Services have several related but separate versions:
 | ASN Service API version | Consuming service `ASN_SERVICE_API_VERSION` and consuming service `go.mod` | Go API contract used by the service plugin. |
 | `service-utils` checkout | Consuming service submodule commit, or `update_service_utils` | Builder/config/deploy utility version paired with the API version. |
 | ASN Framework/runtime version | `builder/ASN_VERSION` `DEP_VERSION_ASN` | ASN Controller / ASN Service Node runtime dependency version. |
+| Builder Go toolchain version | `builder/ASN_VERSION` `DEP_VERSION_GO` | Go version installed in service-plugin builder images. |
 | ASN Service product version | Consuming service `VERSION`, `BUILD`, and `BUILD_MODE` | Product artifact version for that service. |
 
 The intended relationship, also documented in consuming service `make/config.mk` comments, is:
@@ -55,9 +56,10 @@ as:
 
 ```make
 DEP_VERSION_ASN=<framework-version>
+DEP_VERSION_GO=<go-version>
 ```
 
-`DEP_VERSION_ASN` is set by ASN Framework release tooling. Service plugin work should not edit `builder/ASN_VERSION` directly unless the task is explicitly ASN Framework/runtime version maintenance.
+`DEP_VERSION_ASN` and `DEP_VERSION_GO` are set by ASN Framework release tooling. Every ASN Framework P6 must verify these values match the framework `VERSION` and `GO_VERSION` before release evidence is accepted. Service plugin work should not edit `builder/ASN_VERSION` directly unless the task is explicitly ASN Framework/runtime or builder toolchain version maintenance.
 
 The consuming service product version is independent from both the API version and the framework/runtime version.
 
@@ -70,7 +72,7 @@ A typical consuming service Makefile includes files in this order:
 3. The service Makefile includes `service-utils/builder/service.plugin.builder.mk`.
 4. `service.plugin.builder.mk` includes `builder/ASN_VERSION`.
 
-Because `builder/ASN_VERSION` is included after the service config, its `DEP_VERSION_ASN` value is the effective ASN Framework/runtime dependency for builder/package/runtime dependency paths under normal Make execution.
+Because `builder/ASN_VERSION` is included after the service config, its `DEP_VERSION_ASN` and `DEP_VERSION_GO` values are the effective ASN Framework/runtime dependency and builder Go toolchain for builder/package/runtime dependency paths under normal Make execution.
 
 This is why `ASN_SERVICE_API_VERSION` and `DEP_VERSION_ASN` must not be treated as the same version. They are a compatibility pair.
 
@@ -165,7 +167,7 @@ Treat these as templates. Production deployment requires service-specific review
 ## Release Safety Rules
 
 - Do not assume `ASN_SERVICE_API_VERSION` equals `DEP_VERSION_ASN`.
-- Do not edit `builder/ASN_VERSION` from a service repo unless explicitly performing ASN Framework/runtime version maintenance.
+- Do not edit `builder/ASN_VERSION` from a service repo unless explicitly performing ASN Framework dependency version maintenance.
 - Do not run `update_service_utils` casually; it performs networked git operations and can move the submodule checkout.
 - Do not publish packages, push images, or run deployment commands without explicit approval.
-- Record the intended API, `service-utils`, framework/runtime, and service product version pairing for every release.
+- Record the intended API, `service-utils`, framework/runtime, builder Go toolchain, and service product version pairing for every release.

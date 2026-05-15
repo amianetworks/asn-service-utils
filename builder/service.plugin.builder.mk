@@ -40,6 +40,7 @@ build-all:
 ## All dependent used below targets are defined in service.plugin.build.env.mk.
 
 .PHONY: \
+	check \
 	check-version \
 	check-go-mod \
 	debian \
@@ -77,7 +78,7 @@ build-prepare: clean proto-gen prepare-service-builder-base
 	@echo "Successfully built base image."
 	@echo
 
-check-prepare: check-version check-service-builder-base
+check: check-version check-service-builder-base
 
 
 build-fresh: clean proto-gen service-build-from-scratch
@@ -85,7 +86,7 @@ build-fresh: clean proto-gen service-build-from-scratch
 	@find ./build -maxdepth 1 -print
 	@echo
 
-build-plugin: check-prepare clean increment-build proto-gen service-build-plugin
+build-plugin: check clean increment-build proto-gen service-build-plugin
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
@@ -168,7 +169,7 @@ increment-build: .increment_build
 uppercase = $(shell echo $(1) | tr a-z A-Z)
 
 # Build Debian packages from existing plugin artifacts.
-debian: check-prepare check-debian-inputs clean-debian service-build-debian
+debian: check check-debian-inputs clean-debian service-build-debian
 	@echo "Built Debian packages (DIR):"
 	@if [ -d "$(DEBIAN_PATH)" ]; then find ./$(DEBIAN_PATH) -maxdepth 1 -print; else echo "(none)"; fi
 	@echo
@@ -234,6 +235,8 @@ endef
 
 #------------------------------------------------------------------------------#
 
+# Framework-owned runtime and toolchain versions. This include intentionally
+# happens after service config so copied service projects inherit these values.
 include $(BUILD_ENV_ASN_VERSION_FILE)
 
 #------------------------------------------------------------------------------#
@@ -247,13 +250,15 @@ prepare-service-builder-base:
 	@# Buildx updates the tag in place; avoid pre-removal because Docker Desktop
 	@# can hang on absent container/image names.
 	@service_go_mod_hash=$$(shasum -a 256 go.mod | awk '{ print $$1 }'); \
-	DOCKER_BUILDKIT=1 docker buildx build \
+		DOCKER_BUILDKIT=1 docker buildx build \
 		--progress=plain \
 		--platform linux/amd64 \
+		--build-arg GO_VERSION=$(DEP_VERSION_GO) \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
 		--secret id=sshkey,src=$$SSH_PRIVATE_KEY \
 		--label asn.service_api=$(ASN_SERVICE_API_VERSION) \
 		--label asn.framework=$(DEP_VERSION_ASN) \
+		--label asn.go=$(DEP_VERSION_GO) \
 		--label asn.service_go_mod="$$service_go_mod_hash" \
 		-t $(BUILD_ENV_BASE_IMAGE):latest .
 	@echo ""
@@ -304,10 +309,12 @@ check-service-builder-base:
 	failed=0; \
 	api=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_api" }}' 2>/dev/null); \
 	framework=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.framework" }}' 2>/dev/null); \
+	go_version=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.go" }}' 2>/dev/null); \
 	go_mod=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_go_mod" }}' 2>/dev/null); \
 	expected_go_mod=$$(shasum -a 256 go.mod | awk '{ print $$1 }'); \
 	if [ "$$api" != "$(ASN_SERVICE_API_VERSION)" ]; then failed=1; fi; \
 	if [ "$$framework" != "$(DEP_VERSION_ASN)" ]; then failed=1; fi; \
+	if [ "$$go_version" != "$(DEP_VERSION_GO)" ]; then failed=1; fi; \
 	if [ "$$go_mod" != "$$expected_go_mod" ]; then failed=1; fi; \
 	if [ "$$failed" -ne 0 ]; then \
 		echo ">> Builder Version and Base Image Check: [FAIL]"; \
@@ -323,6 +330,11 @@ check-service-builder-base:
 		else \
 			printf "  %-15s : %s (expected %s from service-utils). FAIL\n" "ASN Version" "$${framework:-unknown}" "$(DEP_VERSION_ASN)"; \
 		fi; \
+		if [ "$$go_version" = "$(DEP_VERSION_GO)" ]; then \
+			printf "  %-15s : %s (expected from service-utils)\n" "Go Version" "$${go_version:-unknown}"; \
+		else \
+			printf "  %-15s : %s (expected %s from service-utils). FAIL\n" "Go Version" "$${go_version:-unknown}" "$(DEP_VERSION_GO)"; \
+		fi; \
 		if [ "$$go_mod" = "$$expected_go_mod" ]; then \
 			printf "  %-15s : %s (expected from service go.mod).\n" "Service go.mod" "$${go_mod:-unknown}"; \
 		else \
@@ -336,6 +348,7 @@ check-service-builder-base:
 	printf "  %15s : %s\n" "ID" "$${inspect_id#sha256:}"; \
 	printf "  %15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "$$api"; \
 	printf "  %15s : %s (expected from service-utils)\n" "ASN Version" "$$framework"; \
+	printf "  %15s : %s (expected from service-utils)\n" "Go Version" "$$go_version"; \
 	printf "  %15s : %s (expected from service go.mod).\n" "Service go.mod" "$$go_mod"
 
 # Rebuild the base image, then build plugin artifacts with the normal builder.

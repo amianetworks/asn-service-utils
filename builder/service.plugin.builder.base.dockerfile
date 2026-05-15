@@ -5,23 +5,27 @@
 FROM ubuntu:24.04
 
 WORKDIR /asn-service
+ARG GO_VERSION
 
 ## Install critical dependencies in one layer with noninteractive mode
-RUN apt update && \
-    apt install -y build-essential wget git ca-certificates gnupg2 protobuf-compiler && \
-    apt clean && \
-    rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y build-essential wget git ca-certificates gnupg2 protobuf-compiler
 
 ## Install dpkg-dev
-RUN apt install -y dpkg-dev && \
-    apt clean && \
-    rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y dpkg-dev
 
 # Install Go
-RUN wget -q https://go.dev/dl/go1.24.4.linux-amd64.tar.gz && \
-    tar -C /etc -xzf go1.24.4.linux-amd64.tar.gz && \
-    rm -f go1.24.4.linux-amd64.tar.gz
+RUN test -n "$GO_VERSION" && \
+    wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+    tar -C /etc -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
+    rm -f go${GO_VERSION}.linux-amd64.tar.gz
 ENV PATH="${PATH}:/etc/go/bin"
+RUN go version | grep -q "go${GO_VERSION} "
 #ENV GOPROXY="https://goproxy.io,direct"
 #ENV GOPATH=/go
 #ENV GOCACHE=${GOPATH}/.cache
@@ -40,10 +44,15 @@ COPY . .
 
 # Download all modules declared by the service so later plugin builds do not
 # depend on ad hoc network access for service-specific Go dependencies.
-RUN --mount=type=secret,id=sshkey go mod download
+RUN --mount=type=secret,id=sshkey \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    go mod download
 
 # Run build.so once to get all Go packages downloaded.
-RUN --mount=type=secret,id=sshkey make -f make/internal.mk build.so
+RUN --mount=type=secret,id=sshkey \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    make -f make/internal.mk build.so
 
 # Clean up the workdir for later builds.
 WORKDIR /
