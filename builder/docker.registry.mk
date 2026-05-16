@@ -79,6 +79,7 @@ check-push-docker-sites:
 .check-docker-registry-site:
 	$(eval DOCKER_SITE := $(call uppercase,$(SITE)))
 	$(eval REGISTRY_USER_SET := $(if $(strip $(DOCKER_REGISTRY_$(DOCKER_SITE)_USER)),yes,no))
+	$(eval REGISTRY_USER_FORMAT := $(if $(findstring :,$(DOCKER_REGISTRY_$(DOCKER_SITE)_USER)),user:password,invalid))
 	@if [ -z "$(DOCKER_REGISTRY_$(DOCKER_SITE))" ]; then \
 		echo "ERROR: Docker registry $(DOCKER_SITE) is not configured."; \
 		echo "Required: DOCKER_REGISTRY_$(DOCKER_SITE)."; \
@@ -87,6 +88,10 @@ check-push-docker-sites:
 	@if [ "$(DOCKER_REQUIRE_REGISTRY_USER)" = "yes" ] && [ "$(REGISTRY_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Docker registry $(DOCKER_SITE) is not fully configured."; \
 		echo "Required: DOCKER_REGISTRY_$(DOCKER_SITE) and DOCKER_REGISTRY_$(DOCKER_SITE)_USER."; \
+		exit 1; \
+	fi
+	@if [ "$(REGISTRY_USER_SET)" = "yes" ] && [ "$(REGISTRY_USER_FORMAT)" != "user:password" ]; then \
+		echo "ERROR: Docker registry credential for $(DOCKER_SITE) must use user:password format."; \
 		exit 1; \
 	fi
 	@if [ "$(DOCKER_REQUIRE_LOGIN_CONFIG)" = "yes" ] && ! cat ~/.docker/config.json 2>/dev/null | grep -q "$(DOCKER_REGISTRY_$(DOCKER_SITE))"; then \
@@ -227,6 +232,7 @@ docker-list-%:
 	$(eval REGISTRY := $(DOCKER_REGISTRY_$(DOCKER_SITE)))
 	$(eval REGISTRY_USER_VAR := DOCKER_REGISTRY_$(DOCKER_SITE)_USER)
 	$(eval REGISTRY_USER_SET := $(if $(strip $(DOCKER_REGISTRY_$(DOCKER_SITE)_USER)),yes,no))
+	$(eval REGISTRY_USER_FORMAT := $(if $(findstring :,$(DOCKER_REGISTRY_$(DOCKER_SITE)_USER)),user:password,invalid))
 	@echo ">> Remote Docker Registry Images"
 	@printf "  %15s : %s\n" "Site" "$(DOCKER_SITE)"
 	@printf "  %15s : %s\n" "Registry" "$(REGISTRY)"
@@ -239,6 +245,10 @@ docker-list-%:
 	elif [ "$(REGISTRY_USER_SET)" != "yes" ]; then \
 		echo "Docker registry credentials are not configured for $(DOCKER_SITE)."; \
 		echo "Set DOCKER_REGISTRY_$(DOCKER_SITE)_USER='user:password' to list remote tags."; \
+		if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
+		echo ""; \
+	elif [ "$(REGISTRY_USER_FORMAT)" != "user:password" ]; then \
+		echo "Docker registry credential for $(DOCKER_SITE) must use user:password format."; \
 		if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 		echo ""; \
 	else \

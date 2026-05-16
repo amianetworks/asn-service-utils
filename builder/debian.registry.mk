@@ -67,6 +67,7 @@ check-push-debian-sites:
 .check-debian-repo:
 	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
 	$(eval DEBIAN_USER_SET := $(if $(strip $(DEBIAN_REPO_USER_$(DEBIAN_SITE))),yes,no))
+	$(eval DEBIAN_USER_FORMAT := $(if $(findstring :,$(DEBIAN_REPO_USER_$(DEBIAN_SITE))),user:password,invalid))
 	@if [ -z "$(DEBIAN_REPO_HOST_$(DEBIAN_SITE))" ]; then \
 		echo "ERROR: Debian repo $(DEBIAN_SITE) is not configured."; \
 		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE)."; \
@@ -77,6 +78,10 @@ check-push-debian-sites:
 		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
 		exit 1; \
 	fi
+	@if [ "$(DEBIAN_USER_SET)" = "yes" ] && [ "$(DEBIAN_USER_FORMAT)" != "user:password" ]; then \
+		echo "ERROR: Debian repo credential for $(DEBIAN_SITE) must use user:password format."; \
+		exit 1; \
+	fi
 
 .push-debian-site:
 	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
@@ -84,11 +89,16 @@ check-push-debian-sites:
 	$(eval T_HOST := $(if ${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},__UNCONFIGURED__))
 	$(eval T_USER_VAR := DEBIAN_REPO_USER_$(DEBIAN_SITE))
 	$(eval T_USER_SET := $(if $(strip $(DEBIAN_REPO_USER_$(DEBIAN_SITE))),yes,no))
+	$(eval T_USER_FORMAT := $(if $(findstring :,$(DEBIAN_REPO_USER_$(DEBIAN_SITE))),user:password,invalid))
 	$(eval T_SUBREPO := $(if ${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},__UNCONFIGURED__))
 	$(eval T_SNAPSHOT := ${T_SUBREPO}-$(shell date +%s))
 	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ] || [ "$(T_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
 		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
+		exit 1; \
+	fi
+	@if [ "$(T_USER_SET)" = "yes" ] && [ "$(T_USER_FORMAT)" != "user:password" ]; then \
+		echo "ERROR: Debian repo credential for $(DEBIAN_SITE) must use user:password format."; \
 		exit 1; \
 	fi
 	@if [ "$(T_SUBREPO)" = "__UNCONFIGURED__" ]; then \
@@ -142,6 +152,7 @@ debs-list-%:
 	$(eval T_HOST := $(if ${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},__UNCONFIGURED__))
 	$(eval T_USER_VAR := DEBIAN_REPO_USER_$(DEBIAN_SITE))
 	$(eval T_USER_SET := $(if $(strip $(DEBIAN_REPO_USER_$(DEBIAN_SITE))),yes,no))
+	$(eval T_USER_FORMAT := $(if $(findstring :,$(DEBIAN_REPO_USER_$(DEBIAN_SITE))),user:password,invalid))
 	$(eval T_SUBREPO := $(if ${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},__UNCONFIGURED__))
 	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ]; then \
 		echo "Debian repo $(DEBIAN_SITE) is not configured."; \
@@ -155,12 +166,17 @@ debs-list-%:
 		if [ "$(DEBIAN_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 		echo ""; \
 	fi
+	@if [ "$(T_HOST)" != "__UNCONFIGURED__" ] && [ "$(T_USER_SET)" = "yes" ] && [ "$(T_USER_FORMAT)" != "user:password" ]; then \
+		echo "Debian repo credential for $(DEBIAN_SITE) must use user:password format."; \
+		if [ "$(DEBIAN_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
+		echo ""; \
+	fi
 	@if [ "$(T_HOST)" != "__UNCONFIGURED__" ] && [ "$(T_USER_SET)" = "yes" ] && [ "$(T_SUBREPO)" = "__UNCONFIGURED__" ]; then \
 		echo "DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL) is not configured."; \
 		if [ "$(DEBIAN_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 		echo ""; \
 	fi
-	$(if $(and $(filter-out __UNCONFIGURED__,$(T_HOST)),$(filter yes,$(T_USER_SET)),$(filter-out __UNCONFIGURED__,$(T_SUBREPO))),$(call func_list_remote_debs),@:)
+	$(if $(and $(filter-out __UNCONFIGURED__,$(T_HOST)),$(filter yes,$(T_USER_SET)),$(filter user:password,$(T_USER_FORMAT)),$(filter-out __UNCONFIGURED__,$(T_SUBREPO))),$(call func_list_remote_debs),@:)
 
 debs-clean: clean-debian
 
