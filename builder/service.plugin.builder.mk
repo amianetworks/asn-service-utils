@@ -9,7 +9,7 @@
 #BUILD_ENV_IMAGE
 #BUILD_ENV_DOCKERFILE
 #BUILD_ENV_ASN_VERSION_FILE
-#SSH_PRIVATE_KEY
+#PRIVATE_GIT_SSH_KEY_FILE
 #SERVICE_UTILS_DIR
 
 ##----------------------------------------------------------------------------##
@@ -50,10 +50,14 @@ build-all:
 	push-debian \
 	push-debian-cn \
 	push-debian-us \
+	push-debian-% \
+	debs-push-% \
 	list-debian \
 	list-debian-local \
 	list-debian-cn \
 	list-debian-us \
+	list-debian-% \
+	debs-list-% \
 	docker \
 	clean-docker \
 	check-push-docker-sites \
@@ -255,7 +259,7 @@ prepare-service-builder-base:
 		--platform linux/amd64 \
 		--build-arg GO_VERSION=$(DEP_VERSION_GO) \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
-		--secret id=sshkey,src=$$SSH_PRIVATE_KEY \
+		--secret id=sshkey,src=$$PRIVATE_GIT_SSH_KEY_FILE \
 		--label asn.service_api=$(ASN_SERVICE_API_VERSION) \
 		--label asn.framework=$(DEP_VERSION_ASN) \
 		--label asn.go=$(DEP_VERSION_GO) \
@@ -386,7 +390,7 @@ service-build-once:
 	@# Build the service environment image.
 	@DOCKER_BUILDKIT=1 docker buildx build --progress=plain --platform linux/amd64 $(BUILD_ARGS) \
 		--build-arg MAKE_TARGET=$(BUILD_MAKE_TARGET) \
-		--secret id=sshkey,src=$$SSH_PRIVATE_KEY \
+		--secret id=sshkey,src=$$PRIVATE_GIT_SSH_KEY_FILE \
 		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 	@echo "Successfully built $(BUILD_ENV_IMAGE):latest."
 	@docker run -d --platform linux/amd64 --name $(BUILD_ENV_IMAGE) $(BUILD_ENV_IMAGE):latest

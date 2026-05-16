@@ -28,17 +28,16 @@ push-docker: $(DOCKER_PUSH_CHECK_TARGETS) check-push-docker-sites
 		$(MAKE) -s .push-docker-site SITE=$$site; \
 	done
 
+# Site-specific targets are thin selectors. The aggregate target owns all
+# validation and push behavior, so site shortcuts cannot drift from it.
 push-docker-cn: $(DOCKER_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s .check-docker-registry-site SITE=CN
-	@$(MAKE) -s .push-docker-site SITE=CN
+	@$(MAKE) -s push-docker DOCKER_REGISTRY_SITES=CN
 
 push-docker-us: $(DOCKER_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s .check-docker-registry-site SITE=US
-	@$(MAKE) -s .push-docker-site SITE=US
+	@$(MAKE) -s push-docker DOCKER_REGISTRY_SITES=US
 
 push-docker-%: $(DOCKER_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s .check-docker-registry-site SITE=$(call uppercase,$*)
-	@$(MAKE) -s .push-docker-site SITE=$(call uppercase,$*)
+	@$(MAKE) -s push-docker DOCKER_REGISTRY_SITES=$(call uppercase,$*)
 
 docker-push docker-push-all docker-push-latest docker-push-latest-all:
 	@if [ "$(DOCKER_PUSH_COMPAT)" = "alias" ]; then \
@@ -164,16 +163,16 @@ clean-docker: $(DOCKER_CLEAN_DEPS)
 list-docker-local:
 	@$(MAKE) -s .list-docker-local
 
+# Site-specific list targets mirror the push selector model: they only set the
+# configured site list, while `list-docker` owns local and remote list behavior.
 list-docker-cn:
-	@$(MAKE) -s .list-docker-local
-	@$(MAKE) -s .list-docker-site SITE=CN
+	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=CN
 
 list-docker-us:
-	@$(MAKE) -s .list-docker-local
-	@$(MAKE) -s .list-docker-site SITE=US
+	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=US
 
 list-docker-%:
-	@$(MAKE) -s .list-docker-site SITE=$(call uppercase,$*)
+	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=$(call uppercase,$*)
 
 docker-list:
 	@if [ "$(DOCKER_LIST_COMPAT)" = "alias" ]; then \

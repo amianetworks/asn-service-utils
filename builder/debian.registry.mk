@@ -25,17 +25,16 @@ push-debian: $(DEBIAN_PUSH_CHECK_TARGETS) check-push-debian-sites
 		$(MAKE) -s .push-debian-site SITE=$$site; \
 	done
 
+# Site-specific targets are thin selectors. The aggregate target owns all
+# validation and push behavior, so site shortcuts cannot drift from it.
 push-debian-cn: $(DEBIAN_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s .check-debian-repo SITE=CN
-	@$(MAKE) -s .push-debian-site SITE=CN
+	@$(MAKE) -s push-debian DEBIAN_REPO_SITES=CN
 
 push-debian-us: $(DEBIAN_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s .check-debian-repo SITE=US
-	@$(MAKE) -s .push-debian-site SITE=US
+	@$(MAKE) -s push-debian DEBIAN_REPO_SITES=US
 
 push-debian-%: $(DEBIAN_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s .check-debian-repo SITE=$(call uppercase,$*)
-	@$(MAKE) -s .push-debian-site SITE=$(call uppercase,$*)
+	@$(MAKE) -s push-debian DEBIAN_REPO_SITES=$(call uppercase,$*)
 
 debs-push-%:
 	@if [ "$(DEBIAN_PUSH_COMPAT)" = "alias" ]; then \
@@ -109,14 +108,16 @@ list-debian: list-debian-local
 list-debian-local:
 	$(call func_list_local_debs)
 
-list-debian-cn: list-debian-local
-	@$(MAKE) -s .list-debian-site SITE=CN
+# Site-specific list targets mirror the push selector model: they only set the
+# configured site list, while `list-debian` owns local and remote list behavior.
+list-debian-cn:
+	@$(MAKE) -s list-debian DEBIAN_REPO_SITES=CN
 
-list-debian-us: list-debian-local
-	@$(MAKE) -s .list-debian-site SITE=US
+list-debian-us:
+	@$(MAKE) -s list-debian DEBIAN_REPO_SITES=US
 
-list-debian-%: list-debian-local
-	@$(MAKE) -s .list-debian-site SITE=$(call uppercase,$*)
+list-debian-%:
+	@$(MAKE) -s list-debian DEBIAN_REPO_SITES=$(call uppercase,$*)
 
 debs-list-%:
 	@if [ "$(DEBIAN_PUSH_COMPAT)" = "alias" ]; then \
