@@ -127,6 +127,8 @@ make version-report
 make version-check
 make build-prepare
 make build-plugin
+make check-release-config
+make release-plan
 ```
 
 Exact target names may vary by service repository.
@@ -169,5 +171,10 @@ Treat these as templates. Production deployment requires service-specific review
 - Do not assume `ASN_SERVICE_API_VERSION` equals `DEP_VERSION_ASN`.
 - Do not edit `builder/ASN_VERSION` from a service repo unless explicitly performing ASN Framework dependency version maintenance.
 - Do not run `update_service_utils` casually; it performs networked git operations and can move the submodule checkout.
+- Keep registry and Debian repository URLs in tracked config, but keep credential
+  values in ignored local files, shell environment, or CI secret injection.
+- Use `make check-release-config` and `make release-plan` to inspect release
+  destinations without printing secrets, tagging images, uploading packages, or
+  publishing repository snapshots.
 - Do not publish packages, push images, or run deployment commands without explicit approval.
 - Record the intended API, `service-utils`, framework/runtime, builder Go toolchain, and service product version pairing for every release.

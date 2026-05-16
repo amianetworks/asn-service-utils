@@ -217,6 +217,7 @@ DOCKER_PUSH_LATEST ?= $(if $(filter pro,$(BUILD_MODE)),yes,no)
 	$(call func_check_release_mode)
 
 include $(SERVICE_UTILS_DIR)/builder/docker.registry.mk
+include $(SERVICE_UTILS_DIR)/builder/release.preflight.mk
 
 # $(1): IMAGE_NAME
 # $(2): VERSION

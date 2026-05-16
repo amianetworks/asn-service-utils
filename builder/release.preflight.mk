@@ -1,0 +1,215 @@
+# Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
+
+# Shared release preflight and publish-plan targets.
+#
+# These targets intentionally do not push, upload, publish snapshots, deploy, or
+# print credentials. They validate and display the effective Docker/Debian
+# destination topology so P6/P7 operators can catch bad local setup before
+# running approval-gated publish or deployment commands.
+
+RELEASE_CONFIG_STRICT ?= no
+RELEASE_CONFIG_CHECK_DOCKER_LOGIN ?= yes
+RELEASE_PLAN_CHECK_LOCAL_IMAGES ?= yes
+
+.PHONY: \
+	check-release-config check-release-config-strict .check-release-config \
+	.check-release-docker-site .check-release-debian-site \
+	release-plan release-plan-docker release-plan-debian \
+	.release-plan-docker-site .release-plan-debian-site
+
+check-release-config:
+	@$(MAKE) -s .check-release-config RELEASE_CONFIG_STRICT=$(RELEASE_CONFIG_STRICT)
+
+check-release-config-strict:
+	@$(MAKE) -s .check-release-config RELEASE_CONFIG_STRICT=yes
+
+.check-release-config:
+	@printf "## Release Config Check\n"; \
+	printf "  %-24s : %s\n" "Strict" "$(RELEASE_CONFIG_STRICT)"; \
+	printf "  %-24s : %s\n" "Private Git key" "$(if $(strip $(PRIVATE_GIT_SSH_KEY_FILE)),$(PRIVATE_GIT_SSH_KEY_FILE),not set)"; \
+	if [ -z "$(PRIVATE_GIT_SSH_KEY_FILE)" ]; then \
+		if [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
+			echo "ERROR: PRIVATE_GIT_SSH_KEY_FILE is not set."; \
+			exit 1; \
+		fi; \
+		echo "WARN: PRIVATE_GIT_SSH_KEY_FILE is not set."; \
+	elif [ ! -r "$(PRIVATE_GIT_SSH_KEY_FILE)" ]; then \
+		if [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
+			echo "ERROR: PRIVATE_GIT_SSH_KEY_FILE does not point to a readable file."; \
+			exit 1; \
+		fi; \
+		echo "WARN: PRIVATE_GIT_SSH_KEY_FILE does not point to a readable file."; \
+	else \
+		printf "  %-24s : %s\n" "Private Git key check" "readable"; \
+	fi; \
+	echo ""
+	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
+		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
+		exit 1; \
+	fi
+	@printf "## Docker Release Destinations\n"; \
+	printf "  %-24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"
+	@for site in $(DOCKER_REGISTRY_SITES); do \
+		$(MAKE) -s .check-release-docker-site SITE=$$site RELEASE_CONFIG_STRICT=$(RELEASE_CONFIG_STRICT) || exit $$?; \
+	done
+	@if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
+		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
+		exit 1; \
+	fi
+	@printf "## Debian Release Destinations\n"; \
+	printf "  %-24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
+	printf "  %-24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"
+	@for site in $(DEBIAN_REPO_SITES); do \
+		$(MAKE) -s .check-release-debian-site SITE=$$site RELEASE_CONFIG_STRICT=$(RELEASE_CONFIG_STRICT) || exit $$?; \
+	done
+	@if [ -z "$(strip $(DEBIAN_REPO_HOST_US))$(strip $(DEBIAN_REPO_PATH_US))" ]; then \
+		printf "  %-24s : %s\n" "Debian US" "disabled until host/path are configured"; \
+		if [ -n "$(strip $(DEBIAN_REPO_USER_US))" ]; then \
+			echo "WARN: DEBIAN_REPO_USER_US is set while Debian US is disabled."; \
+		fi; \
+	fi
+	@printf "\nRelease config check completed without printing secret values.\n"
+
+.check-release-docker-site:
+	$(eval RELEASE_DOCKER_SITE := $(call uppercase,$(SITE)))
+	$(eval RELEASE_DOCKER_REGISTRY := $(DOCKER_REGISTRY_$(RELEASE_DOCKER_SITE)))
+	$(eval RELEASE_DOCKER_AUTH := $(DOCKER_REGISTRY_$(RELEASE_DOCKER_SITE)_USER))
+	$(eval RELEASE_DOCKER_AUTH_VAR := RELEASE_SECRET_AUTH_$(RELEASE_SECRET_PROFILE_$(RELEASE_DOCKER_SITE))_DOCKER)
+	$(eval RELEASE_DOCKER_AUTH_SET := $(if $(strip $(RELEASE_DOCKER_AUTH)),yes,no))
+	$(eval RELEASE_DOCKER_AUTH_FORMAT := $(if $(findstring :,$(RELEASE_DOCKER_AUTH)),user:password,invalid))
+	@printf "  %-24s : %s\n" "Docker site" "$(RELEASE_DOCKER_SITE)"; \
+	printf "  %-24s : %s\n" "Registry" "$(if $(RELEASE_DOCKER_REGISTRY),$(RELEASE_DOCKER_REGISTRY),not configured)"; \
+	printf "  %-24s : %s\n" "Credential var" "$(RELEASE_DOCKER_AUTH_VAR)"; \
+	printf "  %-24s : %s\n" "Credential set" "$(RELEASE_DOCKER_AUTH_SET)"; \
+	if [ -z "$(RELEASE_DOCKER_REGISTRY)" ]; then \
+		echo "ERROR: Docker registry $(RELEASE_DOCKER_SITE) is not configured."; \
+		exit 1; \
+	fi; \
+	if [ "$(RELEASE_DOCKER_AUTH_SET)" = "yes" ]; then \
+		printf "  %-24s : %s\n" "Credential format" "$(RELEASE_DOCKER_AUTH_FORMAT)"; \
+		if [ "$(RELEASE_DOCKER_AUTH_FORMAT)" != "user:password" ]; then \
+			echo "ERROR: Docker credential for $(RELEASE_DOCKER_SITE) must use user:password format."; \
+			exit 1; \
+		fi; \
+	elif [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
+		echo "ERROR: Docker credential for $(RELEASE_DOCKER_SITE) is not configured."; \
+		exit 1; \
+	else \
+		echo "WARN: Docker credential for $(RELEASE_DOCKER_SITE) is not configured."; \
+	fi; \
+	if [ "$(RELEASE_CONFIG_CHECK_DOCKER_LOGIN)" = "yes" ]; then \
+		if cat "$${HOME}/.docker/config.json" 2>/dev/null | grep -q "$(RELEASE_DOCKER_REGISTRY)"; then \
+			printf "  %-24s : %s\n" "Docker login" "present"; \
+		elif [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
+			echo "ERROR: Docker login for $(RELEASE_DOCKER_SITE) is missing: $(RELEASE_DOCKER_REGISTRY)."; \
+			exit 1; \
+		else \
+			echo "WARN: Docker login for $(RELEASE_DOCKER_SITE) was not found in ~/.docker/config.json."; \
+		fi; \
+	fi; \
+	echo ""
+
+.check-release-debian-site:
+	$(eval RELEASE_DEBIAN_SITE := $(call uppercase,$(SITE)))
+	$(eval RELEASE_DEBIAN_CHANNEL := $(if $(strip $(DEBIAN_RELEASE_CHANNEL)),$(call uppercase,$(DEBIAN_RELEASE_CHANNEL)),$(RELEASE_DEBIAN_SITE)))
+	$(eval RELEASE_DEBIAN_HOST := $(DEBIAN_REPO_HOST_$(RELEASE_DEBIAN_SITE)))
+	$(eval RELEASE_DEBIAN_PATH := $(DEBIAN_REPO_PATH_$(RELEASE_DEBIAN_SITE)))
+	$(eval RELEASE_DEBIAN_USER := $(DEBIAN_REPO_USER_$(RELEASE_DEBIAN_SITE)))
+	$(eval RELEASE_DEBIAN_SUBREPO := $(DEBIAN_REPO_SUBREPO_$(RELEASE_DEBIAN_CHANNEL)))
+	$(eval RELEASE_DEBIAN_AUTH_VAR := RELEASE_SECRET_AUTH_$(RELEASE_SECRET_PROFILE_$(RELEASE_DEBIAN_SITE))_DEBIAN)
+	$(eval RELEASE_DEBIAN_USER_SET := $(if $(strip $(RELEASE_DEBIAN_USER)),yes,no))
+	$(eval RELEASE_DEBIAN_AUTH_FORMAT := $(if $(findstring :,$(RELEASE_DEBIAN_USER)),user:password,invalid))
+	@printf "  %-24s : %s\n" "Debian site" "$(RELEASE_DEBIAN_SITE)"; \
+	printf "  %-24s : %s\n" "Repo host" "$(if $(RELEASE_DEBIAN_HOST),$(RELEASE_DEBIAN_HOST),not configured)"; \
+	printf "  %-24s : %s\n" "Repo path" "$(if $(RELEASE_DEBIAN_PATH),$(RELEASE_DEBIAN_PATH),not configured)"; \
+	printf "  %-24s : %s\n" "Subrepo" "$(if $(RELEASE_DEBIAN_SUBREPO),$(RELEASE_DEBIAN_SUBREPO),not configured)"; \
+	printf "  %-24s : %s\n" "Credential var" "$(RELEASE_DEBIAN_AUTH_VAR)"; \
+	printf "  %-24s : %s\n" "Credential set" "$(RELEASE_DEBIAN_USER_SET)"; \
+	if [ -z "$(RELEASE_DEBIAN_HOST)" ]; then \
+		echo "ERROR: Debian repo $(RELEASE_DEBIAN_SITE) host is not configured."; \
+		exit 1; \
+	fi; \
+	if [ -z "$(RELEASE_DEBIAN_PATH)" ]; then \
+		echo "ERROR: Debian repo $(RELEASE_DEBIAN_SITE) path is not configured."; \
+		exit 1; \
+	fi; \
+	if [ -z "$(RELEASE_DEBIAN_SUBREPO)" ]; then \
+		echo "ERROR: Debian repo subrelease $(RELEASE_DEBIAN_CHANNEL) is not configured."; \
+		exit 1; \
+	fi; \
+	if [ "$(RELEASE_DEBIAN_USER_SET)" = "yes" ]; then \
+		printf "  %-24s : %s\n" "Credential format" "$(RELEASE_DEBIAN_AUTH_FORMAT)"; \
+		if [ "$(RELEASE_DEBIAN_AUTH_FORMAT)" != "user:password" ]; then \
+			echo "ERROR: Debian credential for $(RELEASE_DEBIAN_SITE) must use user:password format."; \
+			exit 1; \
+		fi; \
+	elif [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
+		echo "ERROR: Debian credential for $(RELEASE_DEBIAN_SITE) is not configured."; \
+		exit 1; \
+	else \
+		echo "WARN: Debian credential for $(RELEASE_DEBIAN_SITE) is not configured."; \
+	fi; \
+	echo ""
+
+release-plan: release-plan-docker release-plan-debian
+
+release-plan-docker:
+	@printf "## Docker Publish Plan\n"; \
+	printf "  %-24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"; \
+	printf "  %-24s : %s\n" "Images" "$(DOCKER_IMAGES)"; \
+	printf "  %-24s : %s\n" "Version tag" "$(DOCKER_PUSH_VERSION)"; \
+	printf "  %-24s : %s\n" "Latest tag" "$(DOCKER_PUSH_LATEST)"; \
+	printf "  %-24s : %s\n" "No-upload guarantee" "no docker tag/push is executed"
+	@for site in $(DOCKER_REGISTRY_SITES); do \
+		$(MAKE) -s .release-plan-docker-site SITE=$$site; \
+	done
+
+.release-plan-docker-site:
+	$(eval RELEASE_PLAN_DOCKER_SITE := $(call uppercase,$(SITE)))
+	$(eval RELEASE_PLAN_DOCKER_REGISTRY := $(DOCKER_REGISTRY_$(RELEASE_PLAN_DOCKER_SITE)))
+	$(eval RELEASE_PLAN_DOCKER_PREFIX := $(if $(DOCKER_SUBREPO),$(RELEASE_PLAN_DOCKER_REGISTRY)/$(DOCKER_SUBREPO),$(RELEASE_PLAN_DOCKER_REGISTRY)))
+	@printf "  %-24s : %s\n" "Docker site" "$(RELEASE_PLAN_DOCKER_SITE)"; \
+	printf "  %-24s : %s\n" "Registry" "$(if $(RELEASE_PLAN_DOCKER_REGISTRY),$(RELEASE_PLAN_DOCKER_REGISTRY),not configured)"; \
+	for image in $(DOCKER_IMAGES); do \
+		printf "  %-24s : %s\n" "Would push" "$(RELEASE_PLAN_DOCKER_PREFIX)/$$image:$(DOCKER_PUSH_VERSION)"; \
+		if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
+			printf "  %-24s : %s\n" "Would push" "$(RELEASE_PLAN_DOCKER_PREFIX)/$$image:latest"; \
+		fi; \
+		if [ "$(RELEASE_PLAN_CHECK_LOCAL_IMAGES)" = "yes" ]; then \
+			if docker image inspect "$$image:$(DOCKER_PUSH_VERSION)" >/dev/null 2>&1; then \
+				printf "  %-24s : %s\n" "$$image:$(DOCKER_PUSH_VERSION)" "local image present"; \
+			else \
+				printf "  %-24s : %s\n" "$$image:$(DOCKER_PUSH_VERSION)" "local image missing"; \
+			fi; \
+		fi; \
+	done; \
+	echo ""
+
+release-plan-debian:
+	@printf "## Debian Publish Plan\n"; \
+	printf "  %-24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
+	printf "  %-24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"; \
+	printf "  %-24s : %s\n" "Package version" "$(DEBIAN_PUSH_VERSION)"; \
+	printf "  %-24s : %s\n" "No-upload guarantee" "no curl upload/publish is executed"
+	@for site in $(DEBIAN_REPO_SITES); do \
+		$(MAKE) -s .release-plan-debian-site SITE=$$site; \
+	done
+
+.release-plan-debian-site:
+	$(eval RELEASE_PLAN_DEBIAN_SITE := $(call uppercase,$(SITE)))
+	$(eval RELEASE_PLAN_DEBIAN_CHANNEL := $(if $(strip $(DEBIAN_RELEASE_CHANNEL)),$(call uppercase,$(DEBIAN_RELEASE_CHANNEL)),$(RELEASE_PLAN_DEBIAN_SITE)))
+	$(eval RELEASE_PLAN_DEBIAN_HOST := $(DEBIAN_REPO_HOST_$(RELEASE_PLAN_DEBIAN_SITE)))
+	$(eval RELEASE_PLAN_DEBIAN_PATH := $(DEBIAN_REPO_PATH_$(RELEASE_PLAN_DEBIAN_SITE)))
+	$(eval RELEASE_PLAN_DEBIAN_SUBREPO := $(DEBIAN_REPO_SUBREPO_$(RELEASE_PLAN_DEBIAN_CHANNEL)))
+	@printf "  %-24s : %s\n" "Debian site" "$(RELEASE_PLAN_DEBIAN_SITE)"; \
+	printf "  %-24s : %s\n" "Repo host" "$(if $(RELEASE_PLAN_DEBIAN_HOST),$(RELEASE_PLAN_DEBIAN_HOST),not configured)"; \
+	printf "  %-24s : %s\n" "Repo path" "$(if $(RELEASE_PLAN_DEBIAN_PATH),$(RELEASE_PLAN_DEBIAN_PATH),not configured)"; \
+	printf "  %-24s : %s\n" "Subrepo" "$(if $(RELEASE_PLAN_DEBIAN_SUBREPO),$(RELEASE_PLAN_DEBIAN_SUBREPO),not configured)"; \
+	for file in $(DEBIAN_PACKAGE_FILES); do \
+		if [ -f "$$file" ]; then \
+			printf "  %-24s : %s\n" "Would upload" "$$file"; \
+		else \
+			printf "  %-24s : %s\n" "Would upload" "$$file (missing locally)"; \
+		fi; \
+	done; \
+	echo ""
