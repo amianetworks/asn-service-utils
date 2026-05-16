@@ -16,6 +16,14 @@ DOCKER_LIST_COMPAT ?= deprecated
 DOCKER_LIST_REQUIRE_REMOTE_AUTH ?= yes
 DOCKER_SUBREPO ?=
 
+# The list/push recipes read credentials through shell variables such as
+# $${DOCKER_REGISTRY_CN_USER} so curl invocations do not contain make-expanded
+# secret values. Export the selected site variables because projects often
+# derive them from RELEASE_SECRET_* values in config.mk or ignored local.mk.
+docker_registry_uppercase = $(shell echo $(1) | tr a-z A-Z)
+DOCKER_REGISTRY_USER_EXPORTS := $(foreach site,$(DOCKER_REGISTRY_SITES),DOCKER_REGISTRY_$(call docker_registry_uppercase,$(site))_USER)
+export $(DOCKER_REGISTRY_USER_EXPORTS)
+
 .PHONY: \
 	check-push-docker-sites \
 	push-docker push-docker-cn push-docker-us push-docker-% \
@@ -242,27 +250,39 @@ docker-list-%:
 			response=$$(curl -s -u "$${$(REGISTRY_USER_VAR)}" "https://$(REGISTRY)/v2/$${repo_prefix}$$image/tags/list" 2>/dev/null); \
 			if [ -z "$$response" ]; then \
 				echo "(empty response from registry)"; \
+				if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 			elif command -v jq >/dev/null 2>&1; then \
 				if echo "$$response" | jq -e . >/dev/null 2>&1; then \
-					count=$$(echo "$$response" | jq '.tags | length'); \
-					if [ "$$count" = "0" ] || [ "$$count" = "null" ]; then \
-						echo "(no tags found)"; \
+					if echo "$$response" | jq -e '.errors? // empty' >/dev/null 2>&1; then \
+						echo "Registry error response:"; \
+						echo "$$response" | jq .; \
+						if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
+					elif ! echo "$$response" | jq -e 'has("tags")' >/dev/null 2>&1; then \
+						echo "Unexpected registry response:"; \
+						echo "$$response" | jq .; \
+						if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 					else \
-						printf "%-30s\n" "TAG"; \
-						printf "%-30s\n" "---"; \
-						if [ "$(DOCKER_LIST_LIMIT)" = "0" ]; then \
-							echo "$$response" | jq -r '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[]' 2>/dev/null || echo "$$response" | jq -r '.tags[]'; \
-							echo ""; \
-							echo "Total: $$count tag(s)"; \
+						count=$$(echo "$$response" | jq '.tags | length'); \
+						if [ "$$count" = "0" ] || [ "$$count" = "null" ]; then \
+							echo "(no tags found)"; \
 						else \
-							echo "$$response" | jq -r --argjson limit "$(DOCKER_LIST_LIMIT)" '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[:$$limit] | .[]' 2>/dev/null || echo "$$response" | jq -r '.tags[]'; \
-							echo ""; \
-							echo "Showing: up to $(DOCKER_LIST_LIMIT) of $$count tag(s)"; \
+							printf "%-30s\n" "TAG"; \
+							printf "%-30s\n" "---"; \
+							if [ "$(DOCKER_LIST_LIMIT)" = "0" ]; then \
+								echo "$$response" | jq -r '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[]' 2>/dev/null || echo "$$response" | jq -r '.tags[]'; \
+								echo ""; \
+								echo "Total: $$count tag(s)"; \
+							else \
+								echo "$$response" | jq -r --argjson limit "$(DOCKER_LIST_LIMIT)" '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[:$$limit] | .[]' 2>/dev/null || echo "$$response" | jq -r '.tags[]'; \
+								echo ""; \
+								echo "Showing: up to $(DOCKER_LIST_LIMIT) of $$count tag(s)"; \
+							fi; \
 						fi; \
 					fi; \
 				else \
 					echo "Invalid JSON response:"; \
 					echo "$$response"; \
+					if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 				fi; \
 			else \
 				echo "jq is not installed; showing raw response:"; \

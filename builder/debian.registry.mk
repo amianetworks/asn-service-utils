@@ -13,6 +13,14 @@ DEBIAN_LOCAL_PACKAGE_DIRS ?= $(DEBIAN_PACKAGE_DIR)
 DEBIAN_PACKAGE_FILES ?=
 DEBIAN_REQUIRE_REMOTE_AUTH ?= yes
 
+# The list/push recipes read credentials through shell variables such as
+# $${DEBIAN_REPO_USER_CN} so curl invocations do not contain make-expanded
+# secret values. Export the selected site variables because projects often
+# derive them from RELEASE_SECRET_* values in config.mk or ignored local.mk.
+debian_registry_uppercase = $(shell echo $(1) | tr a-z A-Z)
+DEBIAN_REPO_USER_EXPORTS := $(foreach site,$(DEBIAN_REPO_SITES),DEBIAN_REPO_USER_$(call debian_registry_uppercase,$(site)))
+export $(DEBIAN_REPO_USER_EXPORTS)
+
 func_check_variable = $(if $(value $(1)),,$(error $(1) is not set))
 
 .PHONY: \
@@ -325,8 +333,9 @@ define func_list_remote_debs
 	@response=$$(curl -k -s -X GET -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
 	if [ -z "$$response" ]; then \
 		echo "(empty response from server)"; \
+		if [ "$(DEBIAN_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 	elif command -v jq >/dev/null 2>&1; then \
-		if echo "$$response" | jq -e . >/dev/null 2>&1; then \
+		if echo "$$response" | jq -e 'type == "array"' >/dev/null 2>&1; then \
 			count=$$(echo "$$response" | jq 'length'); \
 			echo "$$response" | jq -r 'if type == "array" and length > 0 then (map(split(" ") | {pkg: .[1], ver: .[2], arch: (.[0] | ltrimstr("P")), hash: .[3], verparts: (.[2] | split(".") | map(tonumber))}) | sort_by([.pkg, .verparts]) | ["PACKAGE", "VERSION", "ARCH", "HASH"] as $$headers | ($$headers | @tsv), (["--------", "-------", "----", "----"] | @tsv), (.[] | [.pkg, .ver, .arch, .hash] | @tsv)) else "(no packages found)" end' \
 			| column -t -s $$'\t'; \
@@ -335,6 +344,7 @@ define func_list_remote_debs
 		else \
 			echo "Invalid JSON response:"; \
 			echo "$$response"; \
+			if [ "$(DEBIAN_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 		fi; \
 	else \
 		echo "jq is not installed; showing raw response:"; \
