@@ -2,7 +2,8 @@
 
 # Build base build image for ASN Service Plugins
 
-FROM asn-service-builder-base:latest
+ARG BUILD_ENV_BASE_IMAGE=asn-service-builder-base:local
+FROM ${BUILD_ENV_BASE_IMAGE}
 
 WORKDIR /asn-service
 

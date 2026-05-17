@@ -5,6 +5,8 @@
 # The following variables must be definded. (predefined in make/config.mk)
 #ASN_SERVICE_API_VERSION
 #BUILD_ENV_BASE_IMAGE
+#BUILD_ENV_BASE_IMAGE_TAG
+#BUILD_ENV_BASE_IMAGE_REF
 #BUILD_ENV_BASE_DOCKERFILE
 #BUILD_ENV_IMAGE
 #BUILD_ENV_DOCKERFILE
@@ -65,7 +67,7 @@ build-all:
 	push-docker-cn \
 	push-docker-us \
 	list-docker \
-	list-docker-local \
+	list-local-docker \
 	list-docker-cn \
 	list-docker-us \
 	service-build-plugin \
@@ -244,13 +246,16 @@ endef
 # happens after service config so copied service projects inherit these values.
 include $(BUILD_ENV_ASN_VERSION_FILE)
 
+BUILD_ENV_BASE_IMAGE_TAG ?= $(DEP_VERSION_ASN)
+BUILD_ENV_BASE_IMAGE_REF ?= $(BUILD_ENV_BASE_IMAGE):$(BUILD_ENV_BASE_IMAGE_TAG)
+
 #------------------------------------------------------------------------------#
 
 #------------------------------------------------------------------------------#
 # Prepare for base docker image to build ASN Service Plugins.
 prepare-service-builder-base:
 	@echo "Current working directory: ${PWD}"
-	@echo "Building $(BUILD_ENV_BASE_IMAGE):latest"
+	@echo "Building $(BUILD_ENV_BASE_IMAGE_REF)"
 
 	@# Buildx updates the tag in place; avoid pre-removal because Docker Desktop
 	@# can hang on absent container/image names.
@@ -265,9 +270,9 @@ prepare-service-builder-base:
 		--label asn.framework=$(DEP_VERSION_ASN) \
 		--label asn.go=$(DEP_VERSION_GO) \
 		--label asn.service_go_mod="$$service_go_mod_hash" \
-		-t $(BUILD_ENV_BASE_IMAGE):latest .
+		-t $(BUILD_ENV_BASE_IMAGE_REF) .
 	@echo ""
-	@echo "Successfully built $(BUILD_ENV_BASE_IMAGE):latest as the base image."
+	@echo "Successfully built $(BUILD_ENV_BASE_IMAGE_REF) as the base image."
 	@echo ""
 	@echo "NOTE:"
 	@echo " - MUST BE DONE everytime when service-api version changes."
@@ -280,7 +285,7 @@ prepare-service-builder-base:
 # Check the local builder base image required to build ASN Service Plugins.
 # This is a local Docker image check only; never query an online registry for it.
 check-service-builder-base:
-	@image="$(BUILD_ENV_BASE_IMAGE):latest"; \
+	@image="$(BUILD_ENV_BASE_IMAGE_REF)"; \
 	if ! docker info >/dev/null 2>&1; then \
 		echo ">> Builder Version and Base Image Check: [FAIL]"; \
 		printf "  %-15s : unavailable\n" "Docker"; \
@@ -390,6 +395,7 @@ service-build-once:
 
 	@# Build the service environment image.
 	@DOCKER_BUILDKIT=1 docker buildx build --progress=plain --platform linux/amd64 $(BUILD_ARGS) \
+		--build-arg BUILD_ENV_BASE_IMAGE=$(BUILD_ENV_BASE_IMAGE_REF) \
 		--build-arg MAKE_TARGET=$(BUILD_MAKE_TARGET) \
 		--secret id=sshkey,src=$$PRIVATE_GIT_SSH_KEY_FILE \
 		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
@@ -521,8 +527,8 @@ clean-deb-%:
 # Debug purpose
 show-prepare:
 	@echo "Current working directory: ${PWD}"
-	@echo "Starting $(BUILD_ENV_BASE_IMAGE):latest"
-	docker run --rm --platform linux/amd64 --name $(BUILD_ENV_BASE_IMAGE) $(BUILD_ENV_BASE_IMAGE):latest ls -l /
+	@echo "Starting $(BUILD_ENV_BASE_IMAGE_REF)"
+	docker run --rm --platform linux/amd64 --name $(BUILD_ENV_BASE_IMAGE) $(BUILD_ENV_BASE_IMAGE_REF) ls -l /
 
 	@echo " Ran the container once to show the artifacts."
 

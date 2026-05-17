@@ -28,7 +28,7 @@ export $(DOCKER_REGISTRY_USER_EXPORTS)
 	check-push-docker-sites \
 	push-docker push-docker-cn push-docker-us push-docker-% \
 	docker-push docker-push-% docker-push-all docker-push-latest docker-push-latest-all \
-	list-docker list-docker-local list-docker-cn list-docker-us list-docker-% \
+	list-docker list-local-docker list-docker-cn list-docker-us list-docker-% \
 	docker-list docker-list-% clean-docker
 
 push-docker: $(DOCKER_PUSH_CHECK_TARGETS) check-push-docker-sites
@@ -136,7 +136,7 @@ check-push-docker-sites:
 	@echo "Pushed."
 
 list-docker:
-	@$(MAKE) -s .list-docker-local
+	@$(MAKE) -s .list-local-docker
 	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
 		echo "No Docker registry sites configured."; \
 		echo ""; \
@@ -173,8 +173,8 @@ clean-docker: $(DOCKER_CLEAN_DEPS)
 		done; \
 	fi
 
-list-docker-local:
-	@$(MAKE) -s .list-docker-local
+list-local-docker:
+	@$(MAKE) -s .list-local-docker
 
 # Site-specific list targets mirror the push selector model: they only set the
 # configured site list, while `list-docker` owns local and remote list behavior.
@@ -185,6 +185,11 @@ list-docker-us:
 	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=US
 
 list-docker-%:
+	@if [ "$(call uppercase,$*)" = "LOCAL" ]; then \
+		echo "Target '$@' was removed."; \
+		echo "Use 'make list-local-docker' for local image listing."; \
+		exit 2; \
+	fi
 	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=$(call uppercase,$*)
 
 docker-list:
@@ -205,7 +210,7 @@ docker-list-%:
 		exit 1; \
 	fi
 
-.list-docker-local:
+.list-local-docker:
 	@echo ">> Local Docker Images"
 	@printf "  %15s : %s\n" "$(DOCKER_LIST_LOCAL_LABEL)" "$(DOCKER_IMAGES)"
 	@echo ""
