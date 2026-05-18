@@ -246,7 +246,7 @@ define func_push_debs
 			upload_success=false; \
 			break; \
 		fi; \
-		echo -n "Uploading $$(basename $$file) to temporary directory..."; \
+		printf "%s" "Uploading $$(basename $$file) to temporary directory..."; \
 		http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -F file=@$$file "$(T_HOST)/files/${T_SUBREPO}"); \
 		if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 			echo " done (HTTP $$http_code)"; \
@@ -265,7 +265,7 @@ define func_push_debs
 		echo "Upload failed. Cleaning up temporary files..."; \
 		for file in $$uploaded_files; do \
 			filename=$$(basename $$file); \
-			echo -n "   Deleting $$filename from temporary directory..."; \
+			printf "%s" "   Deleting $$filename from temporary directory..."; \
 			curl -k -s -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}/$$filename" >/dev/null 2>&1; \
 			echo " done"; \
 		done; \

@@ -232,6 +232,7 @@ define func_build_docker
 	@docker buildx build \
 		--progress=plain \
 		--platform linux/amd64 \
+		--load \
 		-f $(3) \
 		$(4) \
 		-t $(1):$(2) \
@@ -263,6 +264,7 @@ prepare-service-builder-base:
 		DOCKER_BUILDKIT=1 docker buildx build \
 		--progress=plain \
 		--platform linux/amd64 \
+		--load \
 		--build-arg GO_VERSION=$(DEP_VERSION_GO) \
 		-f $(BUILD_ENV_BASE_DOCKERFILE) \
 		--secret id=sshkey,src=$$PRIVATE_GIT_SSH_KEY_FILE \
@@ -275,7 +277,10 @@ prepare-service-builder-base:
 	@echo "Successfully built $(BUILD_ENV_BASE_IMAGE_REF) as the base image."
 	@echo ""
 	@echo "NOTE:"
+	@echo " - This base image is local build infrastructure only; do not push or share it."
+	@echo " - It warms Go modules and build cache from the service go.mod, then deletes the project workdir for later builds."
 	@echo " - MUST BE DONE everytime when service-api version changes."
+	@echo " - MUST BE DONE everytime when the service go.mod changes."
 	@echo " - Run \`docker images | grep asn\` to list the images."
 	@echo " - Run \`make build-plugin\` to build plugin artifacts."
 	@echo " - Run \`make debian\` to build Debian packages from plugin artifacts."
@@ -395,6 +400,7 @@ service-build-once:
 
 	@# Build the service environment image.
 	@DOCKER_BUILDKIT=1 docker buildx build --progress=plain --platform linux/amd64 $(BUILD_ARGS) \
+		--load \
 		--build-arg BUILD_ENV_BASE_IMAGE=$(BUILD_ENV_BASE_IMAGE_REF) \
 		--build-arg MAKE_TARGET=$(BUILD_MAKE_TARGET) \
 		--secret id=sshkey,src=$$PRIVATE_GIT_SSH_KEY_FILE \
@@ -406,7 +412,7 @@ service-build-once:
 	@docker cp $(BUILD_ENV_IMAGE):/build ./
 
 	@# Clean up.
-	@echo -n "Removed: "
+	@printf "%s" "Removed: "
 	@docker rm -f $(BUILD_ENV_IMAGE)
 	@echo ""
 	@echo "Successfully ran builder target $(BUILD_MAKE_TARGET), then removed $(BUILD_ENV_IMAGE):latest."

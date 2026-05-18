@@ -7,17 +7,21 @@ FROM ubuntu:24.04
 WORKDIR /asn-service
 ARG GO_VERSION
 
-## Install critical dependencies in one layer with noninteractive mode
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && \
-    apt-get install -y build-essential wget git ca-certificates gnupg2 protobuf-compiler
-
-## Install dpkg-dev
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && \
-    apt-get install -y dpkg-dev
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    printf 'Binary::apt::APT::Keep-Downloaded-Packages "true";\n' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,id=asn-service-builder-base-apt-cache-ubuntu24.04,target=/var/cache/apt,sharing=locked \
+    DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      dpkg-dev \
+      git \
+      gnupg2 \
+      openssh-client \
+      protobuf-compiler \
+      wget && \
+    update-ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Go
 RUN test -n "$GO_VERSION" && \
@@ -39,19 +43,15 @@ RUN git config --global --add url."git@github.com:".insteadOf "https://github.co
     echo "Host *\n  IdentityFile /run/secrets/sshkey\n  StrictHostKeyChecking no" > /root/.ssh/config && \
     chmod 600 /root/.ssh/config
 
+COPY go.* ./
+RUN --mount=type=secret,id=sshkey \
+    go mod download
+
 # Copy project files
 COPY . .
 
-# Download all modules declared by the service so later plugin builds do not
-# depend on ad hoc network access for service-specific Go dependencies.
+# Run build.so once to warm Go modules and compiler cache in the local base.
 RUN --mount=type=secret,id=sshkey \
-    --mount=type=cache,target=/root/go/pkg/mod \
-    go mod download
-
-# Run build.so once to get all Go packages downloaded.
-RUN --mount=type=secret,id=sshkey \
-    --mount=type=cache,target=/root/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
     make -f make/internal.mk build.so
 
 # Clean up the workdir for later builds.

@@ -1,6 +1,15 @@
 .git
 .cache
 .DS_Store
+build
+coverage
+dist
+out
 workflow/runs
 workflow/tests/results
 deploy/SWAN/**/log
+*.log
+*.tmp
+*.deb
+*.tar
+*.tar.gz

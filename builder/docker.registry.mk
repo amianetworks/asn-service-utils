@@ -128,7 +128,7 @@ check-push-docker-sites:
 	$(eval SOURCE_IMAGE_TAG := $(if $(SOURCE_TAG),$(SOURCE_TAG),$(IMAGE_TAG)))
 	$(eval REGISTRY_IMAGE_PREFIX := $(if $(DOCKER_SUBREPO),$(REGISTRY)/$(DOCKER_SUBREPO),$(REGISTRY)))
 	@echo ""
-	@echo -n "Tagging image $(IMAGE):$(SOURCE_IMAGE_TAG) to registry: $(REGISTRY_IMAGE_PREFIX)/$(IMAGE):$(IMAGE_TAG)"
+	@printf "%s" "Tagging image $(IMAGE):$(SOURCE_IMAGE_TAG) to registry: $(REGISTRY_IMAGE_PREFIX)/$(IMAGE):$(IMAGE_TAG)"
 	@docker tag $(IMAGE):$(SOURCE_IMAGE_TAG) $(REGISTRY_IMAGE_PREFIX)/$(IMAGE):$(IMAGE_TAG)
 	@echo " ...Done."
 	@echo "Pushing image $(IMAGE):$(IMAGE_TAG) to registry: $(REGISTRY)"
