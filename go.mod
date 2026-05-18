@@ -7,7 +7,7 @@ replace asn.amiasys.com/asn-service-api/v26 => github.com/amianetworks/asn-servi
 require (
 	asn.amiasys.com/asn-service-api/v26 v26.6.4
 	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.6.4
-	github.com/amianetworks/am.modules/v26 v26.5.0
+	github.com/amianetworks/am.modules/v26 v26.5.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/orcaman/concurrent-map/v2 v2.0.1
