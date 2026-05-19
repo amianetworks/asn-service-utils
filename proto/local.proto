@@ -6,60 +6,100 @@ option go_package = "./;proto";
 
 package asn_local;
 
-service Controller {
-  rpc ListServices        (Empty)             returns (stream ServiceRes);
-  rpc StartService        (ServiceReq)        returns (Empty);
-  rpc StopService         (ServiceReq)        returns (Empty);
-  rpc RestartService      (ServiceReq)        returns (Empty);
-  rpc ApplyServiceOps     (Ops)               returns (OpsRes);
-  rpc AddConfigOps        (ConfigOpsReq)      returns (ConfigOpsRes);
-  rpc UpdateConfigOp      (UpdateConfigOpReq) returns (ConfigOpsRes);
-  rpc DeleteConfigOps     (ConfigOpsReq)      returns (ConfigOpsRes);
-  rpc SubscribeMessages   (Empty)             returns (stream MessageEvent);
+service ServiceNode {
+  rpc Stream(stream MessageFromMaster) returns (stream MessageFromSlave);
 }
 
-message Empty{}
+message MessageFromMaster {
+  message ConfigOp {
+    string id = 1;
+    string param = 2;
+  }
 
-message ServiceReq {
-  string name = 1;
-  string version = 2;
-  string config = 3;
-}
-
-message ServiceRes {
-  string name = 1;
-  string version = 2;
-  int32  state = 3;
-}
-
-message Ops {
-  string name = 1;
-  string command = 2;
-  string params = 3;
-}
-
-message OpsRes {
-  string response = 1;
-}
-
-message ConfigOpsReq {
   string service_name = 1;
-  repeated string config_params = 2;
+  string id = 2;
+  string asn_command = 3;
+  string service_command = 4;
+  string service_params = 5;
+  repeated ConfigOp config_ops = 6;
 }
 
-message UpdateConfigOpReq {
+message MessageFromSlave {
+  enum Type {
+    TypeNodeInfo = 0;
+    TypeUpdateServiceState = 1;
+    TypeSendMessage = 2;
+    TypeReplyNotification = 3;
+  }
+
+  SnRegistrationRequest node_info = 1;
+  UpdateServiceStateRequest service_state = 2;
+  SendMessageRequest message = 3;
+  ReplyNotificationRequest reply = 4;
+}
+
+message SnRegistrationRequest {
+  message NodeInfo {
+    repeated Interface interfaces = 1;
+    Ipmi ipmi = 2;
+    Management management = 3;
+    Info info = 4;
+    Param param = 5;
+
+    message Ipmi {
+      string ip = 1;
+      string username = 2;
+      string key = 3;
+    }
+
+    message Management {
+      string hostname = 1;
+      string ip = 2;
+    }
+
+    message Info {
+      string vendor = 1;
+      string model = 2;
+      string serial_number = 3;
+    }
+
+    message Param {
+      int64 cpu = 1;
+      int64 memory = 2;
+      int64 disk = 3;
+    }
+
+    message Interface {
+      string name = 1;
+      string ip = 2;
+      repeated string tags = 3;
+    }
+  }
+
+  string version = 1;
+  string node_name = 2;
+  string type = 3;
+  NodeInfo info = 4;
+
+  map<string, string> services = 5;
+}
+
+message UpdateServiceStateRequest {
   string service_name = 1;
-  string old_param = 2;
-  string new_param = 3;
+  int64 state = 2;
+  bool timeout = 3;
+  string err = 4;
 }
 
-message ConfigOpsRes {
-  string response = 1;
-}
-
-message MessageEvent {
+message SendMessageRequest {
   string service_name = 1;
   string message_type = 2;
   string message = 3;
-  string timestamp = 4;
+}
+
+message ReplyNotificationRequest {
+  string request_id = 1;
+  string framework_err = 2;
+  string service_response = 3;
+  string service_error = 4;
 }

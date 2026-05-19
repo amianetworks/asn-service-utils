@@ -7,7 +7,7 @@ replace asn.amiasys.com/asn-service-api/v26 => github.com/amianetworks/asn-servi
 require (
 	asn.amiasys.com/asn-service-api/v26 v26.6.5
 	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.6.5
-	github.com/amianetworks/am.modules/v26 v26.5.2
+	github.com/amianetworks/am.modules/v26 v26.6.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/orcaman/concurrent-map/v2 v2.0.1
@@ -52,7 +52,7 @@ require (
 	github.com/influxdata/influxdb1-client v0.0.0-20220302092344-a9ab5670611c // indirect
 	github.com/influxdata/line-protocol v0.0.0-20210922203350-b1ad95c89adf // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.4 // indirect
