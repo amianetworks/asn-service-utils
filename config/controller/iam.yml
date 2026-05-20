@@ -305,11 +305,13 @@ services_provisioned: [ asn, swan, scarlette ]
 #  device_limit:
 #    enabled: true # Whether to enable device limit. Default: true
 #    eviction_mode: "inactive" # none | inactive | any. None means no eviction, inactive means only inactive devices are evicted, any means any device can be evicted. Default: inactive
+#    total: -1 # The total number of login devices allowed per user. Default: -1
 #    phone: -1 # The number of login devices under this category allowed per user. Default: -1
 #    tablet: -1 # The number of login devices under this category allowed per user. Default: -1
 #    wearable: -1 # The number of login devices under this category allowed per user. Default: -1
 #    browser: -1 # The number of login devices under this category allowed per user. Default: -1
 #    mini_program: -1 # The number of login devices under this category allowed per user. Default: -1
+#    pc: -1 # The number of login devices under this category allowed per user. Default: -1
 #    unknown: -1 # The number of login devices under this category allowed per user. Default: -1
 
 ## Authorization Configurations
