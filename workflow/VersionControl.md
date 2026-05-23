@@ -280,10 +280,10 @@ Good parts:
 Unclear or risky parts:
 
 - `DEP_VERSION_ASN` or `DEP_VERSION_GO` can appear in service-side config as a fallback, but the values from `builder/ASN_VERSION` are the effective framework-owned dependency contract under normal Makefile execution.
-- `update_service_utils` is hidden inside build-preparation targets and can move the submodule checkout based on `ASN_SERVICE_API_VERSION`.
+- `update_service_utils` runs through the explicit `make init` lifecycle target and can move the submodule checkout based on `ASN_SERVICE_API_VERSION`.
 - There is no read-only target that reports all version authorities before a build.
 - `build-plugin` increments the development build number as a side effect.
-- `build-prepare` combines cleanup, protobuf generation, submodule update, and Docker builder image work.
+- `prepare` combines cleanup, protobuf generation, and Docker builder image work after `init` has aligned `service-utils`.
 - The service API version must be kept in both service config and root `go.mod`, but there is no explicit consistency check.
 - The utility submodule's `go.mod` can look like a control point even though it is only the utility module's own dependency reference.
 
@@ -307,7 +307,7 @@ Agents working on ASN Service Plugin versioning should follow these rules:
 - Do not assume `ASN_SERVICE_API_VERSION` and `DEP_VERSION_ASN` must be equal.
 - Do not edit `service-utils/builder/ASN_VERSION` unless explicitly assigned ASN Framework dependency version maintenance.
 - Do not change dependency versions without approval.
-- Do not run `update_service_utils`, `build-prepare`, Docker builds, package publishing, or networked release operations without approval.
+- Do not run `update_service_utils`, `make init`, `make prepare`, Docker builds, package publishing, or networked release operations without approval.
 - Do not reproduce credentials from consuming service build configuration in workflow docs or logs.
 - When reporting a version issue, classify it as one of:
   - service product/build version issue,

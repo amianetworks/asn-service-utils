@@ -125,15 +125,18 @@ Common high-level targets exposed by consuming services include:
 ```bash
 make version-report
 make version-check
-make build-prepare
+make init
+make prepare
 make build-plugin
+make build-debian
+make build-docker
 make check-release-config
 make release-plan
 ```
 
 Exact target names may vary by service repository.
 
-`version-report` and `version-check` do not sync `service-utils` or build artifacts. `build-prepare` is the approved synchronization point that can run `update_service_utils`.
+`version-report` and `version-check` do not sync `service-utils` or build artifacts. `init` is the approved synchronization point that can run `update_service_utils`; `prepare` owns local builder-base preparation before code build.
 
 ## Build Outputs
 

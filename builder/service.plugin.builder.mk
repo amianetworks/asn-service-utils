@@ -15,21 +15,11 @@
 #SERVICE_UTILS_DIR
 
 ##----------------------------------------------------------------------------##
-## *All* Targets
-# *-all targets could be used as it.
-build-all:
-	@$(MAKE) build-prepare
-	@$(MAKE) build-plugin
-	@if $(MAKE) -n debian >/dev/null 2>&1; then \
-		$(MAKE) debian; \
-	else \
-		echo "No debian target is defined by this service; skipping Debian package build."; \
-	fi
-	@if $(MAKE) -n docker >/dev/null 2>&1; then \
-		$(MAKE) docker; \
-	else \
-		echo "No docker target is defined by this service; skipping Docker image build."; \
-	fi
+## Lifecycle targets.
+##
+## Services should expose these names directly. `build-all` is the only legacy
+## spelling kept, and it is a plain alias for `build`.
+build-all: build
 
 #push-all:
 #	@$(MAKE) push-base
@@ -42,10 +32,14 @@ build-all:
 ## All dependent used below targets are defined in service.plugin.build.env.mk.
 
 .PHONY: \
+	init \
+	prepare \
+	build \
+	build-all \
 	check \
 	check-version \
 	check-go-mod \
-	debian \
+	build-debian \
 	clean-debian \
 	check-debian-inputs \
 	check-push-debian-sites \
@@ -60,7 +54,7 @@ build-all:
 	list-debian-us \
 	list-debian-% \
 	debs-list-% \
-	docker \
+	build-docker \
 	clean-docker \
 	check-push-docker-sites \
 	push-docker \
@@ -72,20 +66,25 @@ build-all:
 	list-docker-us \
 	service-build-plugin \
 	service-build-debian \
-	service-build-once
+	service-build-once \
+	build-init \
+	build-prepare \
+	debian \
+	docker
 
 # Explicitly initialize or realign service-utils. Normal build targets do not
 # refresh the submodule.
-build-init: update_service_utils
+init: update_service_utils
 
 # Build the required builder base image. Run this on a fresh build host or when
 # ASN_SERVICE_API_VERSION changes.
-build-prepare: clean proto-gen prepare-service-builder-base
+prepare: clean proto-gen prepare-service-builder-base
 	@echo "Successfully built base image."
 	@echo
 
 check: check-version check-service-builder-base
 
+build: prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian build-docker
 
 build-fresh: clean proto-gen service-build-from-scratch
 	@echo "Built new base image and artifacts (DIR):"
@@ -175,7 +174,7 @@ increment-build: .increment_build
 uppercase = $(shell echo $(1) | tr a-z A-Z)
 
 # Build Debian packages from existing plugin artifacts.
-debian: check check-debian-inputs clean-debian service-build-debian
+build-debian: check check-debian-inputs clean-debian service-build-debian
 	@echo "Built Debian packages (DIR):"
 	@if [ -d "$(DEBIAN_PATH)" ]; then find ./$(DEBIAN_PATH) -maxdepth 1 -print; else echo "(none)"; fi
 	@echo
@@ -197,7 +196,7 @@ include $(SERVICE_UTILS_DIR)/builder/debian.registry.mk
 ##----------------------------------------------------------------------------##
 ## Docker Image Handling ##
 
-docker:
+build-docker:
 	@if [ -z "$(strip $(DOCKER_IMAGE_BUILD_SPECS))" ]; then \
 		echo "ERROR: DOCKER_IMAGE_BUILD_SPECS is empty."; \
 		exit 1; \
@@ -283,7 +282,7 @@ prepare-service-builder-base:
 	@echo " - MUST BE DONE everytime when the service go.mod changes."
 	@echo " - Run \`docker images | grep asn\` to list the images."
 	@echo " - Run \`make build-plugin\` to build plugin artifacts."
-	@echo " - Run \`make debian\` to build Debian packages from plugin artifacts."
+	@echo " - Run \`make build-debian\` to build Debian packages from plugin artifacts."
 	@echo " - Run \`make build-docker\` to build standalone docker images, for non-plugin setup."
 	@echo ""
 
@@ -301,7 +300,7 @@ check-service-builder-base:
 	if [ -z "$$image_id" ]; then \
 		echo ">> Builder Version and Base Image Check: [FAIL]"; \
 		printf "  %-15s : %s (missing)\n" "Base Image" "$$image"; \
-		echo "Local builder base image check failed: run make build-prepare before make build-plugin."; \
+		echo "Local builder base image check failed: run make prepare before make build-plugin."; \
 		exit 1; \
 	fi; \
 	inspect_err=$$(mktemp); \
@@ -311,7 +310,7 @@ check-service-builder-base:
 		echo ">> Builder Version and Base Image Check: [FAIL]"; \
 		if grep -qi "No such image" "$$inspect_err"; then \
 			printf "  %-15s : %s (listed, unusable)\n" "Base Image" "$$image"; \
-			echo "Local builder base image check failed: stale Docker image ID; run make build-prepare."; \
+			echo "Local builder base image check failed: stale Docker image ID; run make prepare."; \
 		else \
 			printf "  %-15s : %s (inspect failed)\n" "Base Image" "$$image"; \
 			echo "Local builder base image check failed: docker image inspect failed."; \
@@ -355,7 +354,7 @@ check-service-builder-base:
 		else \
 			printf "  %-15s : %s (expected %s from service go.mod). FAIL\n" "Service go.mod" "$${go_mod:-missing}" "$$expected_go_mod"; \
 		fi; \
-		echo "Local builder base image check failed. Run build-prepare."; \
+		echo "Local builder base image check failed. Run make prepare."; \
 		exit 1; \
 	fi; \
 	echo ">> Builder Version and Base Image Check: [PASS]"; \
@@ -374,7 +373,7 @@ service-build-from-scratch: prepare-service-builder-base service-build-plugin
 # Build the plugins.
 # Note: Actual targets are built inside a container, so check out make/internal.mk for more details.
 # - Target 'build.plugin' is executed to build .so and CLI artifacts.
-# - Target 'build.deb' is executed by 'make debian' to build .deb files.
+# - Target 'build.deb' is executed by 'make build-debian' to build .deb files.
 # - No Docker images built here. Separate targets, build.docker*, are available.
 service-build-plugin:
 	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.plugin
@@ -446,9 +445,20 @@ check-deb-%:
 		fi; \
 	done; \
 	if [ "$$missing" -ne 0 ]; then \
-		echo "Build plugin artifacts before running make debian."; \
+		echo "Build plugin artifacts before running make build-debian."; \
 		exit 1; \
 	fi
+
+build-init build-prepare debian docker:
+	@case "$@" in \
+		build-init) replacement="init" ;; \
+		build-prepare) replacement="prepare" ;; \
+		debian) replacement="build-debian" ;; \
+		docker) replacement="build-docker" ;; \
+	esac; \
+	echo "ERROR: make $@ has been removed."; \
+	echo "Use 'make $$replacement'."; \
+	exit 2
 
 ###
 # Generic deb packaging rule: deb-<service>

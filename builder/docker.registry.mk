@@ -111,7 +111,7 @@ check-push-docker-sites:
 	@echo ""
 	@for image in $(DOCKER_IMAGES); do \
 		if ! docker image inspect "$$image:$(DOCKER_PUSH_VERSION)" >/dev/null 2>&1; then \
-			echo "ERROR: local image $$image:$(DOCKER_PUSH_VERSION) is missing. Run make docker first."; \
+			echo "ERROR: local image $$image:$(DOCKER_PUSH_VERSION) is missing. Run make build-docker first."; \
 			exit 1; \
 		fi; \
 	done
