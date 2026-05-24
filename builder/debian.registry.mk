@@ -3,7 +3,6 @@
 # Shared Debian repository targets for ASN framework and services.
 
 DEBIAN_PUSH_CHECK_TARGETS ?=
-DEBIAN_PUSH_COMPAT ?= deprecated
 DEBIAN_PUSH_VERSION ?= $(VERSION_BUILD)
 DEBIAN_REPO_SITES ?= $(DEBIAN_REPOS)
 DEBIAN_RELEASE_CHANNEL ?= $(RELEASE_CHANNEL)
@@ -25,8 +24,7 @@ func_check_variable = $(if $(value $(1)),,$(error $(1) is not set))
 
 .PHONY: \
 	push-debian push-debian-cn push-debian-us push-debian-% check-push-debian-sites \
-	list-debian list-debian-local list-debian-cn list-debian-us list-debian-% \
-	debs-push-% debs-list-% debs-clean
+	list-debian list-debian-local list-debian-cn list-debian-us list-debian-%
 
 push-debian: $(DEBIAN_PUSH_CHECK_TARGETS) check-push-debian-sites
 	@for site in $(DEBIAN_REPO_SITES); do \
@@ -43,15 +41,6 @@ push-debian-us: $(DEBIAN_PUSH_CHECK_TARGETS)
 
 push-debian-%: $(DEBIAN_PUSH_CHECK_TARGETS)
 	@$(MAKE) -s push-debian DEBIAN_REPO_SITES=$(call uppercase,$*)
-
-debs-push-%:
-	@if [ "$(DEBIAN_PUSH_COMPAT)" = "alias" ]; then \
-		$(MAKE) -s push-debian-$*; \
-	else \
-		echo "Target '$@' is deprecated."; \
-		echo "Use $(DEBIAN_TARGET_HINT)."; \
-		exit 1; \
-	fi
 
 check-push-debian-sites:
 	@if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
@@ -137,15 +126,6 @@ list-debian-us:
 list-debian-%:
 	@$(MAKE) -s list-debian DEBIAN_REPO_SITES=$(call uppercase,$*)
 
-debs-list-%:
-	@if [ "$(DEBIAN_PUSH_COMPAT)" = "alias" ]; then \
-		$(MAKE) -s list-debian-$*; \
-	else \
-		echo "Target '$@' is deprecated."; \
-		echo "Use $(subst push-debian,list-debian,$(DEBIAN_TARGET_HINT))."; \
-		exit 1; \
-	fi
-
 .list-debian-site:
 	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
 	$(eval DEBIAN_CHANNEL := $(if $(strip $(DEBIAN_RELEASE_CHANNEL)),$(call uppercase,$(DEBIAN_RELEASE_CHANNEL)),$(DEBIAN_SITE)))
@@ -177,8 +157,6 @@ debs-list-%:
 		echo ""; \
 	fi
 	$(if $(and $(filter-out __UNCONFIGURED__,$(T_HOST)),$(filter yes,$(T_USER_SET)),$(filter user:password,$(T_USER_FORMAT)),$(filter-out __UNCONFIGURED__,$(T_SUBREPO))),$(call func_list_remote_debs),@:)
-
-debs-clean: clean-debian
 
 define func_push_debs
 	$(call func_check_variable,T_HOST)

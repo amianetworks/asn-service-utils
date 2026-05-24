@@ -5,14 +5,12 @@
 DOCKER_PUSH_CHECK_TARGETS ?=
 DOCKER_PUSH_VERSION ?= $(VERSION_BUILD)
 DOCKER_PUSH_LATEST ?= no
-DOCKER_PUSH_COMPAT ?= deprecated
 DOCKER_REQUIRE_REGISTRY_USER ?= yes
 DOCKER_REQUIRE_LOGIN_CONFIG ?= yes
 DOCKER_CLEAN_DEPS ?=
 DOCKER_CLEAN_UNTAGGED ?= no
 DOCKER_LIST_LIMIT ?= 20
 DOCKER_LIST_LOCAL_LABEL ?= Services
-DOCKER_LIST_COMPAT ?= deprecated
 DOCKER_LIST_REQUIRE_REMOTE_AUTH ?= yes
 DOCKER_SUBREPO ?=
 
@@ -27,9 +25,8 @@ export $(DOCKER_REGISTRY_USER_EXPORTS)
 .PHONY: \
 	check-push-docker-sites \
 	push-docker push-docker-cn push-docker-us push-docker-% \
-	docker-push docker-push-% docker-push-all docker-push-latest docker-push-latest-all \
-	list-docker list-local-docker list-docker-cn list-docker-us list-docker-% \
-	docker-list docker-list-% clean-docker
+	list-docker list-docker-local list-docker-cn list-docker-us list-docker-% \
+	clean-docker
 
 push-docker: $(DOCKER_PUSH_CHECK_TARGETS) check-push-docker-sites
 	@for site in $(DOCKER_REGISTRY_SITES); do \
@@ -46,24 +43,6 @@ push-docker-us: $(DOCKER_PUSH_CHECK_TARGETS)
 
 push-docker-%: $(DOCKER_PUSH_CHECK_TARGETS)
 	@$(MAKE) -s push-docker DOCKER_REGISTRY_SITES=$(call uppercase,$*)
-
-docker-push docker-push-all docker-push-latest docker-push-latest-all:
-	@if [ "$(DOCKER_PUSH_COMPAT)" = "alias" ]; then \
-		$(MAKE) -s push-docker; \
-	else \
-		echo "Target '$@' is deprecated."; \
-		echo "Use 'make push-docker-cn', 'make push-docker-us', or 'make push-docker'."; \
-		exit 1; \
-	fi
-
-docker-push-%:
-	@if [ "$(DOCKER_PUSH_COMPAT)" = "alias" ]; then \
-		$(MAKE) -s push-docker-$*; \
-	else \
-		echo "Target '$@' is deprecated."; \
-		echo "Use 'make push-docker-cn', 'make push-docker-us', or 'make push-docker'."; \
-		exit 1; \
-	fi
 
 check-push-docker-sites:
 	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
@@ -136,7 +115,7 @@ check-push-docker-sites:
 	@echo "Pushed."
 
 list-docker:
-	@$(MAKE) -s .list-local-docker
+	@$(MAKE) -s .list-docker-local
 	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
 		echo "No Docker registry sites configured."; \
 		echo ""; \
@@ -173,8 +152,8 @@ clean-docker: $(DOCKER_CLEAN_DEPS)
 		done; \
 	fi
 
-list-local-docker:
-	@$(MAKE) -s .list-local-docker
+list-docker-local:
+	@$(MAKE) -s .list-docker-local
 
 # Site-specific list targets mirror the push selector model: they only set the
 # configured site list, while `list-docker` owns local and remote list behavior.
@@ -185,32 +164,9 @@ list-docker-us:
 	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=US
 
 list-docker-%:
-	@if [ "$(call uppercase,$*)" = "LOCAL" ]; then \
-		echo "Target '$@' was removed."; \
-		echo "Use 'make list-local-docker' for local image listing."; \
-		exit 2; \
-	fi
 	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=$(call uppercase,$*)
 
-docker-list:
-	@if [ "$(DOCKER_LIST_COMPAT)" = "alias" ]; then \
-		$(MAKE) -s list-docker; \
-	else \
-		echo "Target '$@' is deprecated."; \
-		echo "Use 'make list-docker-cn', 'make list-docker-us', or 'make list-docker'."; \
-		exit 1; \
-	fi
-
-docker-list-%:
-	@if [ "$(DOCKER_LIST_COMPAT)" = "alias" ]; then \
-		$(MAKE) -s list-docker-$*; \
-	else \
-		echo "Target '$@' is deprecated."; \
-		echo "Use 'make list-docker-cn', 'make list-docker-us', or 'make list-docker'."; \
-		exit 1; \
-	fi
-
-.list-local-docker:
+.list-docker-local:
 	@echo ">> Local Docker Images"
 	@printf "  %15s : %s\n" "$(DOCKER_LIST_LOCAL_LABEL)" "$(DOCKER_IMAGES)"
 	@echo ""

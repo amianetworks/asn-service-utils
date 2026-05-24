@@ -47,13 +47,11 @@ build-all: build
 	push-debian-cn \
 	push-debian-us \
 	push-debian-% \
-	debs-push-% \
 	list-debian \
 	list-debian-local \
 	list-debian-cn \
 	list-debian-us \
 	list-debian-% \
-	debs-list-% \
 	build-docker \
 	clean-docker \
 	check-push-docker-sites \
@@ -61,7 +59,7 @@ build-all: build
 	push-docker-cn \
 	push-docker-us \
 	list-docker \
-	list-local-docker \
+	list-docker-local \
 	list-docker-cn \
 	list-docker-us \
 	service-build-plugin \
