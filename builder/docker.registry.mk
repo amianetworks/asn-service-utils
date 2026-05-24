@@ -126,9 +126,10 @@ list-docker:
 	fi
 
 clean-docker: $(DOCKER_CLEAN_DEPS)
+	@echo "Removing untagged Docker images..."; \
+	docker image prune -f
 	@if [ "$(DOCKER_CLEAN_UNTAGGED)" = "yes" ]; then \
-		echo "Removing untagged Docker images..."; \
-		docker image prune -f; \
+		echo "DOCKER_CLEAN_UNTAGGED=yes; skipped older tagged image cleanup."; \
 	else \
 		echo "- Cleaning older docker images for repositories: $(DOCKER_IMAGES)"; \
 		echo ""; \
