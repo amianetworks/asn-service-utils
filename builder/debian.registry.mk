@@ -172,8 +172,27 @@ define func_push_debs
 	fi; \
 	if [ -z "$$package_files" ]; then \
 		echo "ERROR: no Debian package files found."; \
+		echo "Run make build-debian before $(DEBIAN_TARGET_HINT)."; \
 		exit 1; \
 	fi; \
+	echo "- Locally built .deb files"; \
+	echo ""; \
+	missing_files=false; \
+	for file in $$package_files; do \
+		if [ ! -f "$$file" ]; then \
+			echo "Package file not found: $$file"; \
+			missing_files=true; \
+		else \
+			printf "  %s\n" "$$file"; \
+		fi; \
+	done; \
+	if [ "$$missing_files" = "true" ]; then \
+		echo ""; \
+		echo "ERROR: Debian package file check failed before any remote repository mutation."; \
+		echo "Run make build-debian before $(DEBIAN_TARGET_HINT)."; \
+		exit 1; \
+	fi; \
+	echo ""; \
 	echo "Cleaning temporary upload directory..."; \
 	http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
@@ -213,17 +232,9 @@ define func_push_debs
 			echo "No duplicate packages found."; \
 		fi; \
 	fi; \
-	echo ""; \
-	echo "- Locally built .deb files"; \
-	echo ""; \
 	upload_success=true; \
 	uploaded_files=""; \
 	for file in $$package_files; do \
-		if [ ! -f "$$file" ]; then \
-			echo "Package file not found: $$file"; \
-			upload_success=false; \
-			break; \
-		fi; \
 		printf "%s" "Uploading $$(basename $$file) to temporary directory..."; \
 		http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -F file=@$$file "$(T_HOST)/files/${T_SUBREPO}"); \
 		if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
