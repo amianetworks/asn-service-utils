@@ -21,12 +21,6 @@
 ## spelling kept, and it is a plain alias for `build`.
 build-all: build
 
-#push-all:
-#	@$(MAKE) push-base
-#	@$(MAKE) push-debian
-#	@$(MAKE) push-docker
-
-
 ##----------------------------------------------------------------------------##
 ## Main targets ##
 ## All dependent used below targets are defined in service.plugin.build.env.mk.
