@@ -59,6 +59,8 @@ build-all: build
 	service-build-plugin \
 	service-build-debian \
 	service-build-once \
+	service-build-once-docker-run \
+	service-build-once-docker-build \
 	build-init \
 	build-prepare \
 	debian \
@@ -269,7 +271,8 @@ prepare-service-builder-base:
 	@echo ""
 	@echo "NOTE:"
 	@echo " - This base image is local build infrastructure only; do not push or share it."
-	@echo " - It warms Go modules and build cache from the service go.mod, then deletes the project workdir for later builds."
+	@echo " - It installs the toolchain and downloads Go modules from the service go.mod."
+	@echo " - Service source is not copied into the base image; build targets run later from the mounted workspace."
 	@echo " - MUST BE DONE everytime when service-api version changes."
 	@echo " - MUST BE DONE everytime when the service go.mod changes."
 	@echo " - Run \`docker images | grep asn\` to list the images."
@@ -374,8 +377,58 @@ service-build-debian:
 	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.deb
 
 BUILD_MAKE_TARGET ?= build.targets
+# Builder execution mode:
+# - docker-run is the default fast path. It runs the requested internal make
+#   target inside the prepared builder base image with the service workspace
+#   bind-mounted as the artifact boundary.
+# - docker-build keeps the older Dockerfile RUN + docker cp behavior as a
+#   temporary migration fallback for services or hosts that cannot use bind
+#   mounts with the local Docker daemon.
+SERVICE_BUILD_EXECUTION_MODE ?= docker-run
+SERVICE_BUILD_DOCKER_PLATFORM ?= linux/amd64
+SERVICE_BUILD_WORKDIR ?= /asn-service
+SERVICE_BUILD_SECRET_TARGET ?= /run/secrets/sshkey
+SERVICE_BUILD_DOCKER_RUN_ARGS ?=
 
 service-build-once:
+	@case "$(SERVICE_BUILD_EXECUTION_MODE)" in \
+		docker-run) \
+			$(MAKE) --no-print-directory service-build-once-docker-run BUILD_MAKE_TARGET="$(BUILD_MAKE_TARGET)" ;; \
+		docker-build) \
+			$(MAKE) --no-print-directory service-build-once-docker-build BUILD_MAKE_TARGET="$(BUILD_MAKE_TARGET)" ;; \
+		*) \
+			echo "ERROR: SERVICE_BUILD_EXECUTION_MODE must be docker-run or docker-build, got '$(SERVICE_BUILD_EXECUTION_MODE)'."; \
+			exit 2 ;; \
+	esac
+
+service-build-once-docker-run:
+	@echo "Current working directory: ${PWD}"
+	@echo "Start building with $(BUILD_ENV_BASE_IMAGE_REF)"
+	@echo "Build target: $(BUILD_MAKE_TARGET)"
+
+	@# Remove only a container that is known to exist. Docker Desktop can hang
+	@# when asked to remove an absent named container.
+	@if docker ps -a --format '{{.Names}}' | awk -v name="$(BUILD_ENV_IMAGE)" '$$0 == name { found=1 } END { exit !found }'; then \
+		docker rm -f $(BUILD_ENV_IMAGE) >/dev/null; \
+	fi
+
+	@mkdir -p build
+	@docker run --rm --platform $(SERVICE_BUILD_DOCKER_PLATFORM) --name $(BUILD_ENV_IMAGE) \
+		$(SERVICE_BUILD_DOCKER_RUN_ARGS) \
+		--mount type=bind,source="$(CURDIR)",target=$(SERVICE_BUILD_WORKDIR) \
+		--mount type=bind,source="$$PRIVATE_GIT_SSH_KEY_FILE",target=$(SERVICE_BUILD_SECRET_TARGET),readonly \
+		--workdir $(SERVICE_BUILD_WORKDIR) \
+		$(BUILD_ENV_BASE_IMAGE_REF) \
+		make -f make/internal.mk $(BUILD_MAKE_TARGET)
+	@echo ""
+	@echo "Successfully ran builder target $(BUILD_MAKE_TARGET) in $(BUILD_ENV_BASE_IMAGE_REF)."
+	@echo ""
+	@echo "NOTE:"
+	@echo " - If the ASN Service API has updated, make sure the base image has been rebuilt."
+	@echo " - Run 'make check' if you need to verify the prepared base image labels before building."
+	@echo ""
+
+service-build-once-docker-build:
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building $(BUILD_ENV_IMAGE):latest"
 	@echo "Build target: $(BUILD_MAKE_TARGET)"
@@ -386,18 +439,15 @@ service-build-once:
 		docker rm -f $(BUILD_ENV_IMAGE) >/dev/null; \
 	fi
 
-#	@docker buildx build --platform linux/amd64 --build-arg MAKE_TARGET=$(MAKE_TARGETS)") \
-#		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
-
-	@# Build the service environment image.
-	@DOCKER_BUILDKIT=1 docker buildx build --progress=plain --platform linux/amd64 $(BUILD_ARGS) \
+	@# Build the service environment image and run the target in a Dockerfile RUN step.
+	@DOCKER_BUILDKIT=1 docker buildx build --progress=plain --platform $(SERVICE_BUILD_DOCKER_PLATFORM) $(BUILD_ARGS) \
 		--load \
 		--build-arg BUILD_ENV_BASE_IMAGE=$(BUILD_ENV_BASE_IMAGE_REF) \
 		--build-arg MAKE_TARGET=$(BUILD_MAKE_TARGET) \
 		--secret id=sshkey,src=$$PRIVATE_GIT_SSH_KEY_FILE \
 		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 	@echo "Successfully built $(BUILD_ENV_IMAGE):latest."
-	@docker run -d --platform linux/amd64 --name $(BUILD_ENV_IMAGE) $(BUILD_ENV_IMAGE):latest
+	@docker run -d --platform $(SERVICE_BUILD_DOCKER_PLATFORM) --name $(BUILD_ENV_IMAGE) $(BUILD_ENV_IMAGE):latest
 	@echo ""
 	@mkdir -p build
 	@docker cp $(BUILD_ENV_IMAGE):/build ./
@@ -409,8 +459,9 @@ service-build-once:
 	@echo "Successfully ran builder target $(BUILD_MAKE_TARGET), then removed $(BUILD_ENV_IMAGE):latest."
 	@echo ""
 	@echo "NOTE:"
+	@echo " - docker-build execution is kept for migration fallback; docker-run is the default executor."
 	@echo " - If the ASN Service API has updated, make sure the base image has been rebuilt."
-	@echo " - TODO: version check could be done to avoid mismatch of versions."
+	@echo " - Run 'make check' if you need to verify the prepared base image labels before building."
 	@echo ""
 
 

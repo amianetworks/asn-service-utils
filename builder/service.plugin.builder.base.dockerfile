@@ -47,14 +47,8 @@ COPY go.* ./
 RUN --mount=type=secret,id=sshkey \
     go mod download
 
-# Copy project files
-COPY . .
-
-# Run build.so once to warm Go modules and compiler cache in the local base.
-RUN --mount=type=secret,id=sshkey \
-    make -f make/internal.mk build.so
-
-# Clean up the workdir for later builds.
+# Keep the base image source-free. Build targets run later with the service
+# checkout bind-mounted by service-build-once-docker-run.
 WORKDIR /
 RUN rm -rf /asn-service
 

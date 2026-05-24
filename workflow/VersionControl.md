@@ -168,7 +168,9 @@ Typical variables/files:
 Meaning:
 
 - The builder base image is the cached dependency/toolchain layer.
-- The service builder image builds service artifacts from the current project source.
+- The builder base image downloads module dependencies from `go.*`, but it must not copy the consuming service source tree or run service compile targets.
+- The default service target executor runs build targets inside the builder base image with the consuming service workspace bind-mounted as the artifact boundary.
+- The service builder image path still exists as a migration fallback for projects that temporarily require Dockerfile `RUN` execution and `docker cp` output collection.
 - The builder base image must be refreshed when service API or toolchain dependency expectations change.
 
 Control rule:
@@ -178,6 +180,7 @@ Control rule:
 - Every ASN Framework P6 must verify that `DEP_VERSION_ASN` matches the framework `VERSION` and `DEP_VERSION_GO` matches the framework `GO_VERSION`; stale values mean `make set-version` has not been run for the selected release identity.
 - The builder base image is local state and should not be assumed correct only because source files are correct.
 - Rebuild the base image when `ASN_SERVICE_API_VERSION`, Go version, protobuf requirements, private module dependencies, or builder Dockerfile content changes.
+- See `BuilderExecutionMigration.md` before changing `SERVICE_BUILD_EXECUTION_MODE` or migrating a consuming service from the old Dockerfile target executor.
 
 ## Build-Time Version Flow
 

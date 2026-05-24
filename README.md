@@ -138,6 +138,8 @@ Exact target names may vary by service repository.
 
 `version-report` and `version-check` do not sync `service-utils` or build artifacts. `init` is the approved synchronization point that can run `update_service_utils`; `prepare` owns local builder-base preparation before code build.
 
+`service-build-once` defaults to the shared `docker-run` executor: it runs the requested internal target inside the prepared builder base image with the service checkout bind-mounted as the artifact boundary. The older Dockerfile execution path is still available temporarily with `SERVICE_BUILD_EXECUTION_MODE=docker-build`. For adoption steps, configuration knobs, risks, and rollback guidance, see `workflow/BuilderExecutionMigration.md`.
+
 ## Build Outputs
 
 A plugin build normally produces artifacts similar to:
