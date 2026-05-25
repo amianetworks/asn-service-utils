@@ -31,7 +31,9 @@ build-all: build
 	build \
 	build-all \
 	check \
+	check-build \
 	check-version \
+	require-build-manifest \
 	check-go-mod \
 	build-debian \
 	clean-debian \
@@ -58,9 +60,13 @@ build-all: build
 	list-docker-us \
 	service-build-plugin \
 	service-build-debian \
+	prepare-service-builder-base \
+	check-service-builder-base \
 	service-build-once \
 	service-build-once-docker-run \
 	service-build-once-docker-build \
+	.require-version-build-var \
+	build-fresh \
 	build-init \
 	build-prepare \
 	debian \
@@ -70,41 +76,83 @@ build-all: build
 # refresh the submodule.
 init: update_service_utils
 
+# Build identity and manifest mutation make these lifecycle targets serial.
+.NOTPARALLEL: build build-plugin build-fresh build-debian build-docker stage-docs
+
 # Build the required builder base image. Run this on a fresh build host or when
-# ASN_SERVICE_API_VERSION changes.
-prepare: clean proto-gen prepare-service-builder-base
+# builder/toolchain/dependency inputs change.
+prepare: prepare-service-builder-base
 	@echo "Successfully built base image."
 	@echo
 
-check: check-version check-service-builder-base
+check: check-build check-service-builder-base
 
 build: prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian build-docker
 
-build-fresh: clean proto-gen service-build-from-scratch
-	@echo "Built new base image and artifacts (DIR):"
+build-fresh: clean prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian build-docker
+	@echo "Built fresh artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
 
-build-plugin: check clean increment-build proto-gen service-build-plugin
+build-plugin: check proto-gen
+	@set -e; \
+	version_build="$$(bash make/build_manifest.sh reserve-plugin-version \
+		--version "$(VERSION)" \
+		--mode "$(BUILD_MODE)" \
+		--build "$(BUILD)" \
+		--dev-start "$(BUILD_NUM_DEV)" \
+		--dev-file "$(DEV_BUILD_FILE)" \
+		--manifest "$(BUILD_MANIFEST_FILE)")"; \
+	echo ">> Build Plugin Version"; \
+	printf "  %15s : %s\n" "Version" "$$version_build"; \
+	make --no-print-directory service-build-plugin VERSION_BUILD="$$version_build"; \
+	if service_utils_ref="$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD 2>&1)"; then \
+		:; \
+	else \
+		echo "WARN: could not resolve service-utils git ref: $$service_utils_ref" >&2; \
+		service_utils_ref="unknown"; \
+	fi; \
+	bash make/build_manifest.sh commit-plugin \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--mode "$(BUILD_MODE)" \
+		--version "$(VERSION)" \
+		--build "$(BUILD)" \
+		--dev-start "$(BUILD_NUM_DEV)" \
+		--dev-file "$(DEV_BUILD_FILE)" \
+		--version-build "$$version_build" \
+		--manager-build-dir "$(BUILD_SVC_C_DIR)" \
+		--servicenode-build-dir "$(BUILD_SVC_SN_DIR)" \
+		--client-build-dir "$(BUILD_SVC_CLIENTS_DIR)" \
+		--docs-dir "$(CURDIR)/build/docs" \
+		--debian-dir "$(DEBIAN_PATH)" \
+		--debian-services "$(DEBIAN_SERVICES)" \
+		--docker-images "$(DOCKER_IMAGES)" \
+		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
+		--dep-version-asn "$(DEP_VERSION_ASN)" \
+		--service-utils-ref "$$service_utils_ref"
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
 
 # Any artifacts should be under build/. Cleaning is simple.
-clean: .init_build_file
+clean:
 	@rm -rf build/
 
 
-check-version:
-	@next_build=$$(expr $(CURRENT_BUILD) + 1); \
-	echo ">> Version Check"; \
-	printf "  %15s : %s\n" "Service" "$(SERVICE)"; \
-	printf "  %15s : %s\n" "ASN Service API" "$(ASN_SERVICE_API_VERSION)"; \
-	printf "  %15s : %s\n" "Build Mode" "$(BUILD_MODE)"; \
-	printf "  %15s : %s\n" "Current Version" "$(VERSION_BUILD)"; \
-	printf "  %15s : $(VERSION).%s\n" "Next Version" "$$next_build"
+check-build:
+	@bash make/build_manifest.sh check-build \
+		--service "$(SERVICE)" \
+		--version "$(VERSION)" \
+		--mode "$(BUILD_MODE)" \
+		--build "$(BUILD)" \
+		--dev-start "$(BUILD_NUM_DEV)" \
+		--dev-file "$(DEV_BUILD_FILE)" \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)"
 	@echo ""
 	@$(MAKE) --no-print-directory check-go-mod
+
+check-version: check-build
 
 check-go-mod:
 	@failed=0; compared=0; skipped=0; \
@@ -156,19 +204,67 @@ check-go-mod:
 	printf "  %15s : %s ignored\n" "Utils-only Mods" "$$skipped"
 	@echo ""
 
-set-version: check-version
+set-version: check-build
 	@echo "Modify config.mk to update the version and build."
 	@echo "NOTE: Only CI/CD or maintainer should change the version with caution."
 
-increment-build: .increment_build
+increment-build:
+	@echo "ERROR: make increment-build has been removed."
+	@echo "build-plugin now commits $(DEV_BUILD_FILE) only after plugin artifacts build successfully."
+	@exit 2
 
 ##----------------------------------------------------------------------------##
 ## Debian Package handling ##
 
 uppercase = $(shell echo $(1) | tr a-z A-Z)
 
+require-build-manifest:
+	@version_build="$$(bash make/build_manifest.sh require-lane \
+		--lane plugin \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--mode "$(BUILD_MODE)" \
+		--version "$(VERSION)" \
+		--build "$(BUILD)" \
+		--manager-build-dir "$(BUILD_SVC_C_DIR)" \
+		--servicenode-build-dir "$(BUILD_SVC_SN_DIR)" \
+		--client-build-dir "$(BUILD_SVC_CLIENTS_DIR)" \
+		--docs-dir "$(CURDIR)/build/docs" \
+		--debian-dir "$(DEBIAN_PATH)" \
+		--debian-services "$(DEBIAN_SERVICES)" \
+		--docker-images "$(DOCKER_IMAGES)")"; \
+	: "$$version_build"
+
 # Build Debian packages from existing plugin artifacts.
-build-debian: check check-debian-inputs clean-debian service-build-debian
+build-debian: require-build-manifest check stage-docs check-debian-inputs clean-debian
+	@set -e; \
+	version_build="$$(bash make/build_manifest.sh require-lane \
+		--lane docs \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--mode "$(BUILD_MODE)" \
+		--version "$(VERSION)" \
+		--build "$(BUILD)" \
+		--manager-build-dir "$(BUILD_SVC_C_DIR)" \
+		--servicenode-build-dir "$(BUILD_SVC_SN_DIR)" \
+		--client-build-dir "$(BUILD_SVC_CLIENTS_DIR)" \
+		--docs-dir "$(CURDIR)/build/docs" \
+		--debian-dir "$(DEBIAN_PATH)" \
+		--debian-services "$(DEBIAN_SERVICES)" \
+		--docker-images "$(DOCKER_IMAGES)")"; \
+	make --no-print-directory service-build-debian VERSION_BUILD="$$version_build"; \
+	bash make/build_manifest.sh commit-lane \
+		--lane debian \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--mode "$(BUILD_MODE)" \
+		--version "$(VERSION)" \
+		--build "$(BUILD)" \
+		--version-build "$$version_build" \
+		--manager-build-dir "$(BUILD_SVC_C_DIR)" \
+		--servicenode-build-dir "$(BUILD_SVC_SN_DIR)" \
+		--client-build-dir "$(BUILD_SVC_CLIENTS_DIR)" \
+		--docs-dir "$(CURDIR)/build/docs" \
+		--debian-dir "$(DEBIAN_PATH)" \
+		--debian-services "$(DEBIAN_SERVICES)" \
+		--docker-images "$(DOCKER_IMAGES)"
 	@echo "Built Debian packages (DIR):"
 	@if [ -d "$(DEBIAN_PATH)" ]; then find ./$(DEBIAN_PATH) -maxdepth 1 -print; else echo "(none)"; fi
 	@echo
@@ -190,18 +286,46 @@ include $(SERVICE_UTILS_DIR)/builder/debian.registry.mk
 ##----------------------------------------------------------------------------##
 ## Docker Image Handling ##
 
-build-docker:
+build-docker: require-build-manifest check-docker-inputs
 	@if [ -z "$(strip $(DOCKER_IMAGE_BUILD_SPECS))" ]; then \
 		echo "ERROR: DOCKER_IMAGE_BUILD_SPECS is empty."; \
 		exit 1; \
 	fi
-	@for spec in $(DOCKER_IMAGE_BUILD_SPECS); do \
+	@set -e; \
+	version_build="$$(bash make/build_manifest.sh require-lane \
+		--lane debian \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--mode "$(BUILD_MODE)" \
+		--version "$(VERSION)" \
+		--build "$(BUILD)" \
+		--manager-build-dir "$(BUILD_SVC_C_DIR)" \
+		--servicenode-build-dir "$(BUILD_SVC_SN_DIR)" \
+		--client-build-dir "$(BUILD_SVC_CLIENTS_DIR)" \
+		--docs-dir "$(CURDIR)/build/docs" \
+		--debian-dir "$(DEBIAN_PATH)" \
+		--debian-services "$(DEBIAN_SERVICES)" \
+		--docker-images "$(DOCKER_IMAGES)")"; \
+	for spec in $(DOCKER_IMAGE_BUILD_SPECS); do \
 		image=$${spec%%:*}; \
 		dockerfile=$${spec#*:}; \
-		$(MAKE) -s .docker-build-image IMAGE=$$image DOCKERFILE=$$dockerfile; \
-	done
+		make -s .docker-build-image IMAGE=$$image DOCKERFILE=$$dockerfile VERSION_BUILD="$$version_build"; \
+	done; \
+	bash make/build_manifest.sh commit-lane \
+		--lane docker \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--mode "$(BUILD_MODE)" \
+		--version "$(VERSION)" \
+		--build "$(BUILD)" \
+		--version-build "$$version_build" \
+		--manager-build-dir "$(BUILD_SVC_C_DIR)" \
+		--servicenode-build-dir "$(BUILD_SVC_SN_DIR)" \
+		--client-build-dir "$(BUILD_SVC_CLIENTS_DIR)" \
+		--docs-dir "$(CURDIR)/build/docs" \
+		--debian-dir "$(DEBIAN_PATH)" \
+		--debian-services "$(DEBIAN_SERVICES)" \
+		--docker-images "$(DOCKER_IMAGES)"
 
-.docker-build-image:
+.docker-build-image: .require-version-build-var
 	$(call func_build_docker,$(IMAGE),$(VERSION_BUILD),$(DOCKERFILE),$(DEP_DOCKER_BUILD_ARGS))
 
 DOCKER_PUSH_CHECK_TARGETS ?= .check-docker-release-mode
@@ -242,6 +366,9 @@ include $(BUILD_ENV_ASN_VERSION_FILE)
 
 BUILD_ENV_BASE_IMAGE_TAG ?= $(DEP_VERSION_ASN)
 BUILD_ENV_BASE_IMAGE_REF ?= $(BUILD_ENV_BASE_IMAGE):$(BUILD_ENV_BASE_IMAGE_TAG)
+SERVICE_GO_CACHE_PACKAGES ?= ./...
+SERVICE_BUILDER_GOCACHE ?= $(CURDIR)/.cache/service-builder/go-build
+SERVICE_BUILDER_INPUT_FILES ?= go.mod go.sum $(BUILD_ENV_BASE_DOCKERFILE) $(BUILD_ENV_MAKEFILE) $(BUILD_ENV_ASN_VERSION_FILE)
 
 #------------------------------------------------------------------------------#
 
@@ -254,6 +381,22 @@ prepare-service-builder-base:
 	@# Buildx updates the tag in place; avoid pre-removal because Docker Desktop
 	@# can hang on absent container/image names.
 	@service_go_mod_hash=$$(shasum -a 256 go.mod | awk '{ print $$1 }'); \
+		builder_input_hash=$$( \
+			{ \
+				printf 'ASN_SERVICE_API_VERSION=%s\n' "$(ASN_SERVICE_API_VERSION)"; \
+				printf 'DEP_VERSION_ASN=%s\n' "$(DEP_VERSION_ASN)"; \
+				printf 'DEP_VERSION_GO=%s\n' "$(DEP_VERSION_GO)"; \
+				printf 'SERVICE_GO_CACHE_PACKAGES=%s\n' "$(SERVICE_GO_CACHE_PACKAGES)"; \
+				for file in $(SERVICE_BUILDER_INPUT_FILES); do \
+					if [ -f "$$file" ]; then \
+						printf 'file:%s\n' "$$file"; \
+						shasum -a 256 "$$file"; \
+					else \
+						printf 'missing:%s\n' "$$file"; \
+					fi; \
+				done; \
+			} | shasum -a 256 | awk '{ print $$1 }' \
+		); \
 		DOCKER_BUILDKIT=1 docker buildx build \
 		--progress=plain \
 		--platform linux/amd64 \
@@ -265,16 +408,17 @@ prepare-service-builder-base:
 		--label asn.framework=$(DEP_VERSION_ASN) \
 		--label asn.go=$(DEP_VERSION_GO) \
 		--label asn.service_go_mod="$$service_go_mod_hash" \
+		--label asn.builder_inputs="$$builder_input_hash" \
 		-t $(BUILD_ENV_BASE_IMAGE_REF) .
 	@echo ""
 	@echo "Successfully built $(BUILD_ENV_BASE_IMAGE_REF) as the base image."
 	@echo ""
 	@echo "NOTE:"
 	@echo " - This base image is local build infrastructure only; do not push or share it."
-	@echo " - It installs the toolchain and downloads Go modules from the service go.mod."
+	@echo " - It installs the toolchain and downloads Go modules from the service go.mod/go.sum."
 	@echo " - Service source is not copied into the base image; build targets run later from the mounted workspace."
 	@echo " - MUST BE DONE everytime when service-api version changes."
-	@echo " - MUST BE DONE everytime when the service go.mod changes."
+	@echo " - MUST BE DONE everytime when the service go.mod/go.sum or builder inputs change."
 	@echo " - Run \`docker images | grep asn\` to list the images."
 	@echo " - Run \`make build-plugin\` to build plugin artifacts."
 	@echo " - Run \`make build-debian\` to build Debian packages from plugin artifacts."
@@ -285,10 +429,11 @@ prepare-service-builder-base:
 # This is a local Docker image check only; never query an online registry for it.
 check-service-builder-base:
 	@image="$(BUILD_ENV_BASE_IMAGE_REF)"; \
-	if ! docker info >/dev/null 2>&1; then \
+	if ! docker_info=$$(docker info 2>&1); then \
 		echo ">> Builder Version and Base Image Check: [FAIL]"; \
 		printf "  %-15s : unavailable\n" "Docker"; \
 		echo "Local builder base image check failed: Docker daemon is not reachable."; \
+		printf '%s\n' "$$docker_info" | sed -n '1,10p' | sed 's/^/  Docker Error             /'; \
 		exit 1; \
 	fi; \
 	image_id=$$(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' | awk -v image="$$image" '$$1 == image { print $$2; exit }'); \
@@ -316,15 +461,33 @@ check-service-builder-base:
 	fi; \
 	rm -f "$$inspect_err"; \
 	failed=0; \
-	api=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_api" }}' 2>/dev/null); \
-	framework=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.framework" }}' 2>/dev/null); \
-	go_version=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.go" }}' 2>/dev/null); \
-	go_mod=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_go_mod" }}' 2>/dev/null); \
+	api=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_api" }}'); \
+	framework=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.framework" }}'); \
+	go_version=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.go" }}'); \
+	go_mod=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.service_go_mod" }}'); \
+	builder_inputs=$$(docker image inspect "$$image_id" --format '{{ index .Config.Labels "asn.builder_inputs" }}'); \
 	expected_go_mod=$$(shasum -a 256 go.mod | awk '{ print $$1 }'); \
+	expected_builder_inputs=$$( \
+		{ \
+			printf 'ASN_SERVICE_API_VERSION=%s\n' "$(ASN_SERVICE_API_VERSION)"; \
+			printf 'DEP_VERSION_ASN=%s\n' "$(DEP_VERSION_ASN)"; \
+			printf 'DEP_VERSION_GO=%s\n' "$(DEP_VERSION_GO)"; \
+			printf 'SERVICE_GO_CACHE_PACKAGES=%s\n' "$(SERVICE_GO_CACHE_PACKAGES)"; \
+			for file in $(SERVICE_BUILDER_INPUT_FILES); do \
+				if [ -f "$$file" ]; then \
+					printf 'file:%s\n' "$$file"; \
+					shasum -a 256 "$$file"; \
+				else \
+					printf 'missing:%s\n' "$$file"; \
+				fi; \
+			done; \
+		} | shasum -a 256 | awk '{ print $$1 }' \
+	); \
 	if [ "$$api" != "$(ASN_SERVICE_API_VERSION)" ]; then failed=1; fi; \
 	if [ "$$framework" != "$(DEP_VERSION_ASN)" ]; then failed=1; fi; \
 	if [ "$$go_version" != "$(DEP_VERSION_GO)" ]; then failed=1; fi; \
 	if [ "$$go_mod" != "$$expected_go_mod" ]; then failed=1; fi; \
+	if [ "$$builder_inputs" != "$$expected_builder_inputs" ]; then failed=1; fi; \
 	if [ "$$failed" -ne 0 ]; then \
 		echo ">> Builder Version and Base Image Check: [FAIL]"; \
 		printf "  %-15s : %s\n" "Base Image" "$$image"; \
@@ -349,7 +512,27 @@ check-service-builder-base:
 		else \
 			printf "  %-15s : %s (expected %s from service go.mod). FAIL\n" "Service go.mod" "$${go_mod:-missing}" "$$expected_go_mod"; \
 		fi; \
+		if [ "$$builder_inputs" = "$$expected_builder_inputs" ]; then \
+			printf "  %-15s : %s (expected from builder inputs).\n" "Builder Inputs" "$${builder_inputs:-unknown}"; \
+		else \
+			printf "  %-15s : %s (expected %s from builder inputs). FAIL\n" "Builder Inputs" "$${builder_inputs:-missing}" "$$expected_builder_inputs"; \
+		fi; \
 		echo "Local builder base image check failed. Run make prepare."; \
+		exit 1; \
+	fi; \
+	cache_probe=$$(docker run --rm --platform $(SERVICE_BUILD_DOCKER_PLATFORM) \
+		--mount type=bind,source="$(CURDIR)",target=$(SERVICE_BUILD_WORKDIR),readonly \
+		--workdir $(SERVICE_BUILD_WORKDIR) \
+		--env SERVICE_GO_CACHE_PACKAGES="$(SERVICE_GO_CACHE_PACKAGES)" \
+		"$$image" sh -lc 'GOPROXY=off GOSUMDB=off go list -mod=readonly -deps $$SERVICE_GO_CACHE_PACKAGES >/dev/null' 2>&1); \
+	cache_probe_status=$$?; \
+	if [ "$$cache_probe_status" -ne 0 ]; then \
+		echo ">> Builder Version and Base Image Check: [FAIL]"; \
+		printf "  %-15s : %s\n" "Base Image" "$$image"; \
+		printf "  %-15s : %s\n" "Packages" "$(SERVICE_GO_CACHE_PACKAGES)"; \
+		echo "Local builder base image check failed: warmed Go module cache does not satisfy offline package resolution."; \
+		printf '%s\n' "$$cache_probe" | sed -n '1,20p' | sed 's/^/  Go Error                 /'; \
+		echo "Run make prepare after confirming private module access."; \
 		exit 1; \
 	fi; \
 	echo ">> Builder Version and Base Image Check: [PASS]"; \
@@ -358,7 +541,9 @@ check-service-builder-base:
 	printf "  %15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "$$api"; \
 	printf "  %15s : %s (expected from service-utils)\n" "ASN Version" "$$framework"; \
 	printf "  %15s : %s (expected from service-utils)\n" "Go Version" "$$go_version"; \
-	printf "  %15s : %s (expected from service go.mod).\n" "Service go.mod" "$$go_mod"
+	printf "  %15s : %s (expected from service go.mod).\n" "Service go.mod" "$$go_mod"; \
+	printf "  %15s : %s (expected from builder inputs).\n" "Builder Inputs" "$$builder_inputs"; \
+	printf "  %15s : %s\n" "Offline Cache" "PASS"
 
 # Rebuild the base image, then build plugin artifacts with the normal builder.
 service-build-from-scratch: prepare-service-builder-base service-build-plugin
@@ -370,11 +555,18 @@ service-build-from-scratch: prepare-service-builder-base service-build-plugin
 # - Target 'build.plugin' is executed to build .so and CLI artifacts.
 # - Target 'build.deb' is executed by 'make build-debian' to build .deb files.
 # - No Docker images built here. Separate targets, build.docker*, are available.
-service-build-plugin:
+service-build-plugin: .require-version-build-var
 	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.plugin
 
-service-build-debian:
+service-build-debian: .require-version-build-var
 	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.deb
+
+.require-version-build-var:
+	@if [ -z "$(strip $(VERSION_BUILD))" ]; then \
+		echo "ERROR: VERSION_BUILD is not set for this internal build step."; \
+		echo "Use make build-plugin, make build-debian, or make build-docker so build/Manifest.yaml owns the version."; \
+		exit 2; \
+	fi
 
 BUILD_MAKE_TARGET ?= build.targets
 # Builder execution mode:
@@ -412,14 +604,27 @@ service-build-once-docker-run:
 		docker rm -f $(BUILD_ENV_IMAGE) >/dev/null; \
 	fi
 
-	@mkdir -p build
+	@mkdir -p build "$(SERVICE_BUILDER_GOCACHE)"
+	@echo "Running Docker builder container:"
+	@echo "  image:       $(BUILD_ENV_BASE_IMAGE_REF)"
+	@echo "  platform:    $(SERVICE_BUILD_DOCKER_PLATFORM)"
+	@echo "  name:        $(BUILD_ENV_IMAGE)"
+	@echo "  target:      $(BUILD_MAKE_TARGET)"
+	@echo "  version:     $(VERSION_BUILD)"
+	@echo "  workspace:   $(CURDIR) -> $(SERVICE_BUILD_WORKDIR)"
+	@echo "  go cache:    $(SERVICE_BUILDER_GOCACHE) -> /root/.cache/go-build"
+	@echo "  secret:      PRIVATE_GIT_SSH_KEY_FILE -> $(SERVICE_BUILD_SECRET_TARGET) (readonly)"
 	@docker run --rm --platform $(SERVICE_BUILD_DOCKER_PLATFORM) --name $(BUILD_ENV_IMAGE) \
 		$(SERVICE_BUILD_DOCKER_RUN_ARGS) \
 		--mount type=bind,source="$(CURDIR)",target=$(SERVICE_BUILD_WORKDIR) \
 		--mount type=bind,source="$$PRIVATE_GIT_SSH_KEY_FILE",target=$(SERVICE_BUILD_SECRET_TARGET),readonly \
+		--mount type=bind,source="$(SERVICE_BUILDER_GOCACHE)",target=/root/.cache/go-build \
+		--env BUILD_MODE="$(BUILD_MODE)" \
+		--env VERSION_BUILD="$(VERSION_BUILD)" \
+		--env GOCACHE=/root/.cache/go-build \
 		--workdir $(SERVICE_BUILD_WORKDIR) \
 		$(BUILD_ENV_BASE_IMAGE_REF) \
-		make -f make/internal.mk $(BUILD_MAKE_TARGET)
+		make -f make/internal.mk $(BUILD_MAKE_TARGET) BUILD_MODE="$(BUILD_MODE)" VERSION_BUILD="$(VERSION_BUILD)"
 	@echo ""
 	@echo "Successfully ran builder target $(BUILD_MAKE_TARGET) in $(BUILD_ENV_BASE_IMAGE_REF)."
 	@echo ""
@@ -440,9 +645,17 @@ service-build-once-docker-build:
 	fi
 
 	@# Build the service environment image and run the target in a Dockerfile RUN step.
+	@echo "Running Docker builder fallback:"
+	@echo "  docker buildx build --platform $(SERVICE_BUILD_DOCKER_PLATFORM) -f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest"
+	@echo "  base image:  $(BUILD_ENV_BASE_IMAGE_REF)"
+	@echo "  build mode:  $(BUILD_MODE)"
+	@echo "  version:     $(VERSION_BUILD)"
+	@echo "  target:      $(BUILD_MAKE_TARGET)"
 	@DOCKER_BUILDKIT=1 docker buildx build --progress=plain --platform $(SERVICE_BUILD_DOCKER_PLATFORM) $(BUILD_ARGS) \
 		--load \
 		--build-arg BUILD_ENV_BASE_IMAGE=$(BUILD_ENV_BASE_IMAGE_REF) \
+		--build-arg BUILD_MODE=$(BUILD_MODE) \
+		--build-arg VERSION_BUILD=$(VERSION_BUILD) \
 		--build-arg MAKE_TARGET=$(BUILD_MAKE_TARGET) \
 		--secret id=sshkey,src=$$PRIVATE_GIT_SSH_KEY_FILE \
 		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
@@ -492,16 +705,15 @@ check-deb-%:
 		exit 1; \
 	fi
 
+REMOVED_TARGET_REPLACEMENT_build-init := init
+REMOVED_TARGET_REPLACEMENT_build-prepare := prepare
+REMOVED_TARGET_REPLACEMENT_debian := build-debian
+REMOVED_TARGET_REPLACEMENT_docker := build-docker
+
 build-init build-prepare debian docker:
-	@case "$@" in \
-		build-init) replacement="init" ;; \
-		build-prepare) replacement="prepare" ;; \
-		debian) replacement="build-debian" ;; \
-		docker) replacement="build-docker" ;; \
-	esac; \
-	echo "ERROR: make $@ has been removed."; \
-	echo "Use 'make $$replacement'."; \
-	exit 2
+	@echo "ERROR: make $@ has been removed."
+	@echo "Use 'make $(REMOVED_TARGET_REPLACEMENT_$@)'."
+	@exit 2
 
 ###
 # Generic deb packaging rule: deb-<service>
@@ -597,7 +809,7 @@ init_service_utils:
 		echo "ERROR: SERVICE_UTILS_DIR is not set."; \
 		exit 1; \
 	fi
-	@if [ -d "$(SERVICE_UTILS_DIR)" ] && git -C "$(SERVICE_UTILS_DIR)" rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+	@if [ -d "$(SERVICE_UTILS_DIR)" ] && git_probe=$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --is-inside-work-tree 2>&1) && [ "$$git_probe" = "true" ]; then \
 		echo "service-utils is already present."; \
 	else \
 		echo "Initializing service-utils submodule."; \
@@ -611,7 +823,9 @@ update_service_utils: init_service_utils
 		exit 1; \
 	fi
 	@expected="v$(ASN_SERVICE_API_VERSION)"; \
-	current=$$(git -C "$(SERVICE_UTILS_DIR)" symbolic-ref --quiet --short HEAD 2>/dev/null || git -C "$(SERVICE_UTILS_DIR)" describe --tags --exact-match 2>/dev/null || git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD); \
+	if current=$$(git -C "$(SERVICE_UTILS_DIR)" symbolic-ref --quiet --short HEAD 2>&1); then :; \
+	elif current=$$(git -C "$(SERVICE_UTILS_DIR)" describe --tags --exact-match 2>&1); then :; \
+	else current=$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD); fi; \
 	cd $(SERVICE_UTILS_DIR) && \
 	git fetch --prune origin && \
 	if [ "$$current" = "$$expected" ]; then \

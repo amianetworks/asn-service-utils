@@ -45,7 +45,7 @@ RUN git config --global --add url."git@github.com:".insteadOf "https://github.co
 
 COPY go.* ./
 RUN --mount=type=secret,id=sshkey \
-    go mod download
+    go mod download all
 
 # Keep the base image source-free. Build targets run later with the service
 # checkout bind-mounted by service-build-once-docker-run.

@@ -98,7 +98,15 @@ check-release-config-strict:
 		echo "WARN: Docker credential for $(RELEASE_DOCKER_SITE) is not configured."; \
 	fi; \
 	if [ "$(RELEASE_CONFIG_CHECK_DOCKER_LOGIN)" = "yes" ]; then \
-		if cat "$${HOME}/.docker/config.json" 2>/dev/null | grep -q "$(RELEASE_DOCKER_REGISTRY)"; then \
+		docker_config="$${HOME}/.docker/config.json"; \
+		if [ ! -f "$$docker_config" ]; then \
+			if [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
+				echo "ERROR: Docker login config is missing: $$docker_config"; \
+				exit 1; \
+			else \
+				echo "WARN: Docker login config is missing: $$docker_config"; \
+			fi; \
+		elif grep -q "$(RELEASE_DOCKER_REGISTRY)" "$$docker_config"; then \
 			printf "  %-24s : %s\n" "Docker login" "present"; \
 		elif [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
 			echo "ERROR: Docker login for $(RELEASE_DOCKER_SITE) is missing: $(RELEASE_DOCKER_REGISTRY)."; \
@@ -176,10 +184,11 @@ plan-push-docker:
 			printf "  %-24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:latest"; \
 		fi; \
 		if [ "$(PUSH_PLAN_CHECK_LOCAL_IMAGES)" = "yes" ]; then \
-			if docker image inspect "$$image:$(DOCKER_PUSH_VERSION)" >/dev/null 2>&1; then \
+			if inspect_error=$$(docker image inspect "$$image:$(DOCKER_PUSH_VERSION)" 2>&1 >/dev/null); then \
 				printf "  %-24s : %s\n" "$$image:$(DOCKER_PUSH_VERSION)" "local image present"; \
 			else \
 				printf "  %-24s : %s\n" "$$image:$(DOCKER_PUSH_VERSION)" "local image missing"; \
+				if [ -n "$$inspect_error" ]; then printf '%s\n' "$$inspect_error" | sed 's/^/  Docker Error: /'; fi; \
 			fi; \
 		fi; \
 	done; \

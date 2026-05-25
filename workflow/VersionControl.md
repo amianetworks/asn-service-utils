@@ -44,14 +44,15 @@ Typical variables:
 - `BUILD`
 - `BUILD_MODE`
 - `BUILD_NUM_DEV`
-- `BUILD_FILE`
+- `DEV_BUILD_FILE`
+- `BUILD_MANIFEST_FILE`
 - `VERSION_BUILD`
 
 Meaning:
 
 - `VERSION` is the service product version family.
 - `BUILD` is the maintainer-controlled production build number.
-- `BUILD_MODE=dev` usually uses `.BUILD_FILE` and a development build range.
+- `BUILD_MODE=dev` usually uses an untracked DEV counter and a generated build manifest.
 - `BUILD_MODE=pro` usually uses the production `BUILD` value.
 - `VERSION_BUILD` is the final version string used by built artifacts.
 
@@ -169,6 +170,7 @@ Meaning:
 
 - The builder base image is the cached dependency/toolchain layer.
 - The builder base image downloads module dependencies from `go.*`, but it must not copy the consuming service source tree or run service compile targets.
+- The builder base image check must prove the warmed module cache can resolve the configured service package closure offline; label checks alone are not sufficient.
 - The default service target executor runs build targets inside the builder base image with the consuming service workspace bind-mounted as the artifact boundary.
 - The service builder image path still exists as a migration fallback for projects that temporarily require Dockerfile `RUN` execution and `docker cp` output collection.
 - The builder base image must be refreshed when service API or toolchain dependency expectations change.
@@ -179,7 +181,8 @@ Control rule:
 - `DEP_VERSION_GO` is framework-owned and is carried through `service-utils/builder/ASN_VERSION`, just like `DEP_VERSION_ASN`.
 - Every ASN Framework P6 must verify that `DEP_VERSION_ASN` matches the framework `VERSION` and `DEP_VERSION_GO` matches the framework `GO_VERSION`; stale values mean `make set-version` has not been run for the selected release identity.
 - The builder base image is local state and should not be assumed correct only because source files are correct.
-- Rebuild the base image when `ASN_SERVICE_API_VERSION`, Go version, protobuf requirements, private module dependencies, or builder Dockerfile content changes.
+- Rebuild the base image when `ASN_SERVICE_API_VERSION`, Go version, protobuf requirements, private module dependencies, `go.mod`/`go.sum`, the configured service package closure, or builder Dockerfile/Makefile content changes.
+- A workspace-local Go build cache may be mounted into builder runs to speed repeated compilation, but the module cache remains image-owned by default so `check-prepare` cannot be accidentally satisfied by host state.
 - See `BuilderExecutionMigration.md` before changing `SERVICE_BUILD_EXECUTION_MODE` or migrating a consuming service from the old Dockerfile target executor.
 
 ## Build-Time Version Flow

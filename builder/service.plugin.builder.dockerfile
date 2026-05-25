@@ -29,10 +29,14 @@ COPY . .
 
 # Allow MAKE_TARGET to be passed in
 ARG MAKE_TARGET=build.targets
+ARG BUILD_MODE=dev
+ARG VERSION_BUILD
+ENV BUILD_MODE=${BUILD_MODE}
+ENV VERSION_BUILD=${VERSION_BUILD}
 
 # Run make specified targets: $(MAKE_TARGETS)
 RUN --mount=type=secret,id=sshkey \
-    make -f make/internal.mk ${MAKE_TARGET}
+    make -f make/internal.mk ${MAKE_TARGET} BUILD_MODE="${BUILD_MODE}" VERSION_BUILD="${VERSION_BUILD}"
 
 # Move the build dir to /
 RUN mv build /

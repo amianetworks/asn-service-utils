@@ -165,10 +165,14 @@ define func_push_debs
 
 	@package_files="$(DEBIAN_PACKAGE_FILES)"; \
 	if [ -z "$$package_files" ]; then \
-		for svc in $(DEBIAN_SERVICES); do \
-			files=$$(ls $(DEBIAN_PACKAGE_DIR)/$${svc}_*.deb 2>/dev/null || true); \
-			if [ -n "$$files" ]; then package_files="$$package_files $$files"; fi; \
-		done; \
+		if [ -d "$(DEBIAN_PACKAGE_DIR)" ]; then \
+			for svc in $(DEBIAN_SERVICES); do \
+				files=$$(find "$(DEBIAN_PACKAGE_DIR)" -maxdepth 1 -type f -name "$${svc}_*.deb" -print | sort); \
+				if [ -n "$$files" ]; then package_files="$$package_files $$files"; fi; \
+			done; \
+		else \
+			echo "Debian package directory is missing: $(DEBIAN_PACKAGE_DIR)"; \
+		fi; \
 	fi; \
 	if [ -z "$$package_files" ]; then \
 		echo "ERROR: no Debian package files found."; \
@@ -194,28 +198,39 @@ define func_push_debs
 	fi; \
 	echo ""; \
 	echo "Cleaning temporary upload directory..."; \
-	http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}"); \
+	http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Temporary directory cleaned successfully (HTTP $$http_code)"; \
 	elif [ "$$http_code" -eq 404 ]; then \
 		echo "Temporary directory does not exist (HTTP $$http_code); it will be created."; \
 	else \
 		echo "Warning: failed to clean temporary directory (HTTP $$http_code)."; \
-		cat /tmp/curl_response.txt 2>/dev/null; \
+		if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
 		echo "Continuing with upload."; \
 	fi; \
 	rm -f /tmp/curl_response.txt; \
 	echo ""; \
 	echo "Checking for duplicate packages in repository..."; \
-	response=$$(curl -k -s -X GET -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
+	response=$$(curl -k -sS -X GET -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" "$(T_HOST)/repos/${T_SUBREPO}/packages"); \
 	if [ -z "$$response" ]; then \
 		echo "Warning: could not fetch repository package list."; \
 		echo "Continuing with upload."; \
 	else \
 		duplicate_found=false; \
+		metadata_failed=false; \
 		for file in $$package_files; do \
-			pkg_name=$$(dpkg-deb -f $$file Package 2>/dev/null); \
-			pkg_version=$$(dpkg-deb -f $$file Version 2>/dev/null); \
+			if ! pkg_name=$$(dpkg-deb -f $$file Package 2>&1); then \
+				echo "ERROR: cannot read Package metadata from $$file"; \
+				echo "$$pkg_name"; \
+				metadata_failed=true; \
+				continue; \
+			fi; \
+			if ! pkg_version=$$(dpkg-deb -f $$file Version 2>&1); then \
+				echo "ERROR: cannot read Version metadata from $$file"; \
+				echo "$$pkg_version"; \
+				metadata_failed=true; \
+				continue; \
+			fi; \
 			if [ -n "$$pkg_name" ] && [ -n "$$pkg_version" ]; then \
 				if echo "$$response" | grep -q "\"$$pkg_name\" \"$$pkg_version\""; then \
 					echo "ERROR: Package $$pkg_name version $$pkg_version already exists in repository"; \
@@ -223,7 +238,11 @@ define func_push_debs
 				fi; \
 			fi; \
 		done; \
-		if [ "$$duplicate_found" = "true" ]; then \
+		if [ "$$metadata_failed" = "true" ]; then \
+			echo ""; \
+			echo "ERROR: package metadata check failed. Aborting upload."; \
+			exit 1; \
+		elif [ "$$duplicate_found" = "true" ]; then \
 			echo ""; \
 			echo "ERROR: duplicate package(s) found in repository. Aborting upload."; \
 			echo "Please increment the version number and rebuild."; \
@@ -236,13 +255,13 @@ define func_push_debs
 	uploaded_files=""; \
 	for file in $$package_files; do \
 		printf "%s" "Uploading $$(basename $$file) to temporary directory..."; \
-		http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -F file=@$$file "$(T_HOST)/files/${T_SUBREPO}"); \
+		http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -F file=@$$file "$(T_HOST)/files/${T_SUBREPO}"); \
 		if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 			echo " done (HTTP $$http_code)"; \
 			uploaded_files="$$uploaded_files$$file "; \
 		else \
 			echo " failed (HTTP $$http_code)"; \
-			cat /tmp/curl_response.txt 2>/dev/null; \
+			if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
 			echo ""; \
 			upload_success=false; \
 			break; \
@@ -255,8 +274,12 @@ define func_push_debs
 		for file in $$uploaded_files; do \
 			filename=$$(basename $$file); \
 			printf "%s" "   Deleting $$filename from temporary directory..."; \
-			curl -k -s -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}/$$filename" >/dev/null 2>&1; \
-			echo " done"; \
+			if delete_error=$$(curl -k -sS -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}/$$filename" 2>&1 >/dev/null); then \
+				echo " done"; \
+			else \
+				echo " failed"; \
+				if [ -n "$$delete_error" ]; then echo "$$delete_error"; fi; \
+			fi; \
 		done; \
 		echo ""; \
 		echo "ERROR: Debian package upload failed. Process aborted."; \
@@ -266,12 +289,12 @@ define func_push_debs
 	echo "All files uploaded successfully to temporary directory."; \
 	echo ""; \
 	echo "Pushing files from temporary directory to repository..."; \
-	http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); \
+	http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Files pushed to repository successfully (HTTP $$http_code)"; \
 	else \
 		echo "Failed to push files to repository (HTTP $$http_code)"; \
-		cat /tmp/curl_response.txt 2>/dev/null; \
+		if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
 		echo ""; \
 		echo "WARNING: files remain in temporary directory ${T_SUBREPO}."; \
 		rm -f /tmp/curl_response.txt; \
@@ -280,24 +303,24 @@ define func_push_debs
 	rm -f /tmp/curl_response.txt; \
 	echo ""; \
 	echo "Creating snapshot ${T_SNAPSHOT}..."; \
-	http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{\"Name\": \"${T_SNAPSHOT}\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); \
+	http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{\"Name\": \"${T_SNAPSHOT}\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Snapshot created successfully (HTTP $$http_code)"; \
 	else \
 		echo "Failed to create snapshot (HTTP $$http_code)"; \
-		cat /tmp/curl_response.txt 2>/dev/null; \
+		if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
 		rm -f /tmp/curl_response.txt; \
 		exit 1; \
 	fi; \
 	rm -f /tmp/curl_response.txt; \
 	echo ""; \
 	echo "Publishing snapshot ${T_SNAPSHOT}..."; \
-	http_code=$$(curl -k -s -w "%{http_code}" -o /tmp/curl_response.txt -X PUT -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"${T_SNAPSHOT}\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); \
+	http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X PUT -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"${T_SNAPSHOT}\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Snapshot published successfully (HTTP $$http_code)"; \
 	else \
 		echo "Failed to publish snapshot (HTTP $$http_code)"; \
-		cat /tmp/curl_response.txt 2>/dev/null; \
+		if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
 		rm -f /tmp/curl_response.txt; \
 		exit 1; \
 	fi; \
@@ -314,9 +337,9 @@ define func_list_local_debs
 	@echo ""
 	@found=false; \
 	for dir in $(DEBIAN_LOCAL_PACKAGE_DIRS); do \
-		if find $$dir -maxdepth 1 -name "*.deb" -print -quit 2>/dev/null | grep -q .; then \
+		if [ -d "$$dir" ] && find "$$dir" -maxdepth 1 -name "*.deb" -print -quit | grep -q .; then \
 			found=true; \
-			find $$dir -maxdepth 1 -name "*.deb" -exec sh -c 'printf "%-50s %-15s %-10s\n" "$$(basename "{}")" "$$(ls -lh "{}" | awk "{print \$$5}")" "$$(stat -f "%Sm" -t "%Y-%m-%d" "{}")"' \; | sort; \
+			find "$$dir" -maxdepth 1 -name "*.deb" -exec sh -c 'printf "%-50s %-15s %-10s\n" "$$(basename "{}")" "$$(ls -lh "{}" | awk "{print \$$5}")" "$$(stat -f "%Sm" -t "%Y-%m-%d" "{}")"' \; | sort; \
 		fi; \
 	done; \
 	if [ "$$found" != "true" ]; then \
@@ -335,12 +358,12 @@ define func_list_remote_debs
 	@printf "  %15s : %s\n" "Repo Host" "$(T_HOST)"
 	@printf "  %15s : %s\n" "Subrepo" "$(T_SUBREPO)"
 	@echo ""
-	@response=$$(curl -k -s -X GET -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
+	@response=$$(curl -k -sS -X GET -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages"); \
 	if [ -z "$$response" ]; then \
 		echo "(empty response from server)"; \
 		if [ "$(DEBIAN_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
-	elif command -v jq >/dev/null 2>&1; then \
-		if echo "$$response" | jq -e 'type == "array"' >/dev/null 2>&1; then \
+	elif command -v jq >/dev/null; then \
+		if echo "$$response" | jq -e 'type == "array"' >/dev/null; then \
 			count=$$(echo "$$response" | jq 'length'); \
 			echo "$$response" | jq -r 'if type == "array" and length > 0 then (map(split(" ") | {pkg: .[1], ver: .[2], arch: (.[0] | ltrimstr("P")), hash: .[3], verparts: (.[2] | split(".") | map(tonumber))}) | sort_by([.pkg, .verparts]) | ["PACKAGE", "VERSION", "ARCH", "HASH"] as $$headers | ($$headers | @tsv), (["--------", "-------", "----", "----"] | @tsv), (.[] | [.pkg, .ver, .arch, .hash] | @tsv)) else "(no packages found)" end' \
 			| column -t -s $$'\t'; \
@@ -354,7 +377,7 @@ define func_list_remote_debs
 	else \
 		echo "jq is not installed; showing raw response:"; \
 		echo ""; \
-		echo "$$response" | python3 -m json.tool 2>/dev/null || echo "$$response"; \
+		echo "$$response" | python3 -m json.tool || echo "$$response"; \
 	fi
 	@echo ""
 endef

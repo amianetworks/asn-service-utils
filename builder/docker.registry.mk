@@ -73,9 +73,16 @@ check-push-docker-sites:
 		echo "ERROR: Docker registry credential for $(DOCKER_SITE) must use user:password format."; \
 		exit 1; \
 	fi
-	@if [ "$(DOCKER_REQUIRE_LOGIN_CONFIG)" = "yes" ] && ! cat ~/.docker/config.json 2>/dev/null | grep -q "$(DOCKER_REGISTRY_$(DOCKER_SITE))"; then \
-		echo "ERROR: Docker registry $(DOCKER_SITE) is not logged in: $(DOCKER_REGISTRY_$(DOCKER_SITE))"; \
-		exit 1; \
+	@if [ "$(DOCKER_REQUIRE_LOGIN_CONFIG)" = "yes" ]; then \
+		docker_config="$${HOME}/.docker/config.json"; \
+		if [ ! -f "$$docker_config" ]; then \
+			echo "ERROR: Docker login config is missing: $$docker_config"; \
+			exit 1; \
+		fi; \
+		if ! grep -q "$(DOCKER_REGISTRY_$(DOCKER_SITE))" "$$docker_config"; then \
+			echo "ERROR: Docker registry $(DOCKER_SITE) is not logged in: $(DOCKER_REGISTRY_$(DOCKER_SITE))"; \
+			exit 1; \
+		fi; \
 	fi
 
 .push-docker-site:
@@ -89,8 +96,9 @@ check-push-docker-sites:
 	@printf "  %15s : %s\n" "Latest Tag" "$(DOCKER_PUSH_LATEST)"
 	@echo ""
 	@for image in $(DOCKER_IMAGES); do \
-		if ! docker image inspect "$$image:$(DOCKER_PUSH_VERSION)" >/dev/null 2>&1; then \
+		if ! inspect_error="$$(docker image inspect "$$image:$(DOCKER_PUSH_VERSION)" 2>&1 >/dev/null)"; then \
 			echo "ERROR: local image $$image:$(DOCKER_PUSH_VERSION) is missing. Run make build-docker first."; \
+			if [ -n "$$inspect_error" ]; then echo "$$inspect_error"; fi; \
 			exit 1; \
 		fi; \
 	done
@@ -165,14 +173,17 @@ list-docker-us:
 	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=US
 
 list-docker-%:
-	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=$(call uppercase,$*)
+	@echo "ERROR: unsupported Docker list target: list-docker-$*."
+	@echo "Supported targets: list-docker, list-docker-local, list-docker-cn, list-docker-us."
+	@exit 2
 
 .list-docker-local:
 	@echo ">> Local Docker Images"
 	@printf "  %15s : %s\n" "$(DOCKER_LIST_LOCAL_LABEL)" "$(DOCKER_IMAGES)"
 	@echo ""
-	@if ! docker info >/dev/null 2>&1; then \
-		echo "Docker daemon is not running."; \
+	@if ! docker_error="$$(docker info 2>&1 >/dev/null)"; then \
+		echo "Docker daemon is not running or not reachable."; \
+		if [ -n "$$docker_error" ]; then echo "$$docker_error"; fi; \
 		echo ""; \
 	else \
 		for image in $(DOCKER_IMAGES); do \
@@ -219,17 +230,17 @@ list-docker-%:
 		for image in $(DOCKER_IMAGES); do \
 			echo "Image: $$image"; \
 			echo ""; \
-			response=$$(curl -s -u "$${$(REGISTRY_USER_VAR)}" "https://$(REGISTRY)/v2/$${repo_prefix}$$image/tags/list" 2>/dev/null); \
+			response=$$(curl -sS -u "$${$(REGISTRY_USER_VAR)}" "https://$(REGISTRY)/v2/$${repo_prefix}$$image/tags/list"); \
 			if [ -z "$$response" ]; then \
 				echo "(empty response from registry)"; \
 				if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
-			elif command -v jq >/dev/null 2>&1; then \
-				if echo "$$response" | jq -e . >/dev/null 2>&1; then \
-					if echo "$$response" | jq -e '.errors? // empty' >/dev/null 2>&1; then \
+			elif command -v jq >/dev/null; then \
+				if echo "$$response" | jq -e . >/dev/null; then \
+					if echo "$$response" | jq -e '.errors? // empty' >/dev/null; then \
 						echo "Registry error response:"; \
 						echo "$$response" | jq .; \
 						if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
-					elif ! echo "$$response" | jq -e 'has("tags")' >/dev/null 2>&1; then \
+					elif ! echo "$$response" | jq -e 'has("tags")' >/dev/null; then \
 						echo "Unexpected registry response:"; \
 						echo "$$response" | jq .; \
 						if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
@@ -241,11 +252,11 @@ list-docker-%:
 							printf "%-30s\n" "TAG"; \
 							printf "%-30s\n" "---"; \
 							if [ "$(DOCKER_LIST_LIMIT)" = "0" ]; then \
-								echo "$$response" | jq -r '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[]' 2>/dev/null || echo "$$response" | jq -r '.tags[]'; \
+								echo "$$response" | jq -r '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[]' || echo "$$response" | jq -r '.tags[]'; \
 								echo ""; \
 								echo "Total: $$count tag(s)"; \
 							else \
-								echo "$$response" | jq -r --argjson limit "$(DOCKER_LIST_LIMIT)" '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[:$$limit] | .[]' 2>/dev/null || echo "$$response" | jq -r '.tags[]'; \
+								echo "$$response" | jq -r --argjson limit "$(DOCKER_LIST_LIMIT)" '.tags | map(select(. != null)) | sort_by(split(".") | map(tonumber? // .)) | reverse | .[:$$limit] | .[]' || echo "$$response" | jq -r '.tags[]'; \
 								echo ""; \
 								echo "Showing: up to $(DOCKER_LIST_LIMIT) of $$count tag(s)"; \
 							fi; \
@@ -259,7 +270,7 @@ list-docker-%:
 			else \
 				echo "jq is not installed; showing raw response:"; \
 				echo ""; \
-				echo "$$response" | python3 -m json.tool 2>/dev/null || echo "$$response"; \
+				echo "$$response" | python3 -m json.tool || echo "$$response"; \
 			fi; \
 			echo ""; \
 		done; \
