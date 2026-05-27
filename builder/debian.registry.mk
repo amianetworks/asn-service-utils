@@ -11,6 +11,7 @@ DEBIAN_PACKAGE_DIR ?= $(DEBIAN_PATH)
 DEBIAN_LOCAL_PACKAGE_DIRS ?= $(DEBIAN_PACKAGE_DIR)
 DEBIAN_PACKAGE_FILES ?=
 DEBIAN_REQUIRE_REMOTE_AUTH ?= yes
+DEBIAN_METADATA_CMD ?= $(DEBIAN_PACKAGE_CMD) metadata
 
 # The list/push recipes read credentials through shell variables such as
 # $${DEBIAN_REPO_USER_CN} so curl invocations do not contain make-expanded
@@ -219,13 +220,13 @@ define func_push_debs
 		duplicate_found=false; \
 		metadata_failed=false; \
 		for file in $$package_files; do \
-			if ! pkg_name=$$(dpkg-deb -f $$file Package 2>&1); then \
+			if ! pkg_name=$$($(DEBIAN_METADATA_CMD) --file "$$file" --field Package 2>&1); then \
 				echo "ERROR: cannot read Package metadata from $$file"; \
 				echo "$$pkg_name"; \
 				metadata_failed=true; \
 				continue; \
 			fi; \
-			if ! pkg_version=$$(dpkg-deb -f $$file Version 2>&1); then \
+			if ! pkg_version=$$($(DEBIAN_METADATA_CMD) --file "$$file" --field Version 2>&1); then \
 				echo "ERROR: cannot read Version metadata from $$file"; \
 				echo "$$pkg_version"; \
 				metadata_failed=true; \
