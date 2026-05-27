@@ -21,19 +21,42 @@
 ## spelling kept, and it is a plain alias for `build`.
 build-all: build
 
+## `push-all` is Make-only artifact publication. Release validation and handoff
+## remain outside the generic builder and should consume the published outputs.
+push-all: push-docker push-debian
+
 ##----------------------------------------------------------------------------##
 ## Main targets ##
 ## All dependent used below targets are defined in service.plugin.build.env.mk.
 
 .PHONY: \
-	init \
+	service-utils-init \
 	prepare \
 	build \
 	build-all \
+	push-all \
 	check \
+	check-prepare \
+	check-vars \
+	check-build-vars \
+	check-push-vars \
 	check-build \
 	check-version \
+	go-test \
+	code-cleanup \
+	deps-tidy \
+	deps-update \
+	code-format \
+	code-check \
+	code-inspect \
+	proto-tools \
+	proto-tools-check \
+	proto-gen \
+	proto-gen-force \
+	stage-docs \
 	require-build-manifest \
+	.build-manifest-require-lane \
+	.build-manifest-value \
 	check-go-mod \
 	build-debian \
 	clean-debian \
@@ -65,27 +88,102 @@ build-all: build
 	service-build-once \
 	service-build-once-docker-run \
 	service-build-once-docker-build \
+	build.plugin \
+	check.deb \
+	build.deb \
 	.require-version-build-var \
+	.check_service_utils_version_file \
+	.check_vars \
+	.check_build_vars \
+	.check_push_vars \
+	.print-docker-push-var \
+	.print-debian-push-var \
+	.check-docker-push-var \
+	.check-debian-push-var \
+	.check-docker-publish-images \
+	.check-debian-publish-packages \
+	.check-docker-build-inputs \
 	build-fresh \
 	build-init \
 	build-prepare \
 	debian \
 	docker
 
-# Explicitly initialize or realign service-utils. Normal build targets do not
-# refresh the submodule.
-init: update_service_utils
+# Root Makefiles own public `init` so missing service-utils can be repaired
+# before this shared builder is included. This target owns post-bootstrap checks.
+service-utils-init: .check_service_utils_version_file check-build-vars update_service_utils
+	@$(MAKE) --no-print-directory check-build
 
 # Build identity and manifest mutation make these lifecycle targets serial.
-.NOTPARALLEL: build build-plugin build-fresh build-debian build-docker stage-docs
+.NOTPARALLEL: build build-plugin build-fresh build-debian build-docker
+
+BUILD_MANIFEST_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/build_manifest.sh
+BUILD_MANIFEST_ARGS ?=
+BUILD_MANIFEST_LANE ?=
+BUILD_MANIFEST_QUERY_FILE ?= $(BUILD_MANIFEST_FILE)
+BUILD_MANIFEST_KEY ?=
+BUILD_MANIFEST_COMMON_ARGS ?= --manifest "$(BUILD_MANIFEST_FILE)" --mode "$(BUILD_MODE)" --version "$(VERSION)" --build "$(BUILD)" --manager-build-dir "$(BUILD_SVC_C_DIR)" --servicenode-build-dir "$(BUILD_SVC_SN_DIR)" --client-build-dir "$(BUILD_SVC_CLIENTS_DIR)" --docs-dir "$(CURDIR)/build/docs" --debian-dir "$(DEBIAN_PATH)" --debian-services "$(DEBIAN_SERVICES)" --docker-images "$(DOCKER_IMAGES)" $(BUILD_MANIFEST_ARGS)
+# Build identity is shared builder state. If the caller did not pass
+# VERSION_BUILD explicitly, expose the current manifest version only when it
+# matches the selected build mode and service VERSION.
+VERSION_BUILD ?= $(shell $(BUILD_MANIFEST_CMD) active-version-build $(BUILD_MANIFEST_COMMON_ARGS))
+SERVICE_BUILD_MAKEFILE ?= Makefile
+SERVICE_BUILD_PLUGIN_TARGET ?= build.plugin
+SERVICE_BUILD_DEBIAN_TARGET ?= build.deb
+SERVICE_BUILD_CHECK_DEBIAN_TARGET ?= check.deb
+SERVICE_BUILD_CLEAN_DIRS ?=
+SERVICE_BUILD_DIRS ?= $(SERVICE_BUILD_CLEAN_DIRS)
+SERVICE_GO_BUILD_ARTIFACTS ?=
+SERVICE_GO_BUILD_TARGETS := $(addprefix .service-go-build-,$(SERVICE_GO_BUILD_ARTIFACTS))
+SERVICE_ARTIFACT_COPY_SPECS ?=
+SERVICE_DEBIAN_REQUIRED_ARTIFACTS ?=
+SERVICE_DEBIAN_PACKAGE_COPY_SPECS ?=
+SERVICE_LOCAL_MAKE_TARGETS ?=
+STAGE_DOCS_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/stage_docs.sh
+STAGE_DOCS_DIR ?= $(CURDIR)/build/docs
+STAGE_DOCS_REPORT_FILE ?=
+SERVICE_DOCS_SOURCE_KEY ?= source_commit
+SERVICE_DOCS_SERVED_KEY ?= docs_served_by_manager
+SERVICE_DOCS_RUNTIME_ROOT_KEY ?= docs_runtime_root
+SERVICE_DOCS_RUNTIME_ROOT ?= /var/www/$(SERVICE_NAME)
+SERVICE_DOCS_ROUTES ?= /docs/
+SERVICE_DOCS_INDEX_LINKS ?=
+SERVICE_DOCS_STAGE_COPY_SPECS ?=
+SERVICE_DOCS_STAGE_REQUIRED_FILES ?=
+SERVICE_DOCS_STAGE_REQUIRED_FILES_dev ?=
+SERVICE_DOCS_STAGE_REQUIRED_FILES_pro ?=
+SERVICE_DOCS_PACKAGE_CHANNEL_dev ?=
+SERVICE_DOCS_PACKAGE_CHANNEL_pro ?=
+SERVICE_DOCS_DOCKER_IMAGE_INTENT_dev ?=
+SERVICE_DOCS_DOCKER_IMAGE_INTENT_pro ?=
+SERVICE_DOCS_DOCUMENTATION_CHANNEL_dev ?=
+SERVICE_DOCS_DOCUMENTATION_CHANNEL_pro ?=
+SERVICE_DOCS_ROLLBACK_REQUIREMENT_dev ?=
+SERVICE_DOCS_ROLLBACK_REQUIREMENT_pro ?=
+
+.PHONY: $(SERVICE_GO_BUILD_TARGETS)
+
+define service_local_make_target
+.PHONY: $(1)
+$(1):
+	@if [ -z "$(strip $(SERVICE_LOCAL_MAKE_DIR_$(1)))" ]; then \
+		echo "ERROR: SERVICE_LOCAL_MAKE_DIR_$(1) is required."; \
+		exit 2; \
+	fi
+	@$$(MAKE) --no-print-directory -C "$(strip $(SERVICE_LOCAL_MAKE_DIR_$(1)))" $(if $(strip $(SERVICE_LOCAL_MAKE_GOAL_$(1))),$(strip $(SERVICE_LOCAL_MAKE_GOAL_$(1))),$(1)) $(SERVICE_LOCAL_MAKE_ARGS_$(1))
+endef
+$(foreach target,$(SERVICE_LOCAL_MAKE_TARGETS),$(eval $(call service_local_make_target,$(target))))
 
 # Build the required builder base image. Run this on a fresh build host or when
 # builder/toolchain/dependency inputs change.
-prepare: prepare-service-builder-base
+prepare: .check_service_utils_version_file prepare-service-builder-base
 	@echo "Successfully built base image."
 	@echo
 
-check: check-build check-service-builder-base
+check: check-build-vars check-prepare
+	@echo "Local project check passed."
+
+check-prepare: check-build check-service-builder-base
 
 build: prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian build-docker
 
@@ -96,13 +194,14 @@ build-fresh: clean prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian buil
 
 build-plugin: check proto-gen
 	@set -e; \
-	version_build="$$(bash make/build_manifest.sh reserve-plugin-version \
+	version_build="$$($(BUILD_MANIFEST_CMD) reserve-plugin-version \
 		--version "$(VERSION)" \
 		--mode "$(BUILD_MODE)" \
 		--build "$(BUILD)" \
 		--dev-start "$(BUILD_NUM_DEV)" \
 		--dev-file "$(DEV_BUILD_FILE)" \
-		--manifest "$(BUILD_MANIFEST_FILE)")"; \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		$(BUILD_MANIFEST_ARGS))"; \
 	echo ">> Build Plugin Version"; \
 	printf "  %15s : %s\n" "Version" "$$version_build"; \
 	make --no-print-directory service-build-plugin VERSION_BUILD="$$version_build"; \
@@ -112,7 +211,7 @@ build-plugin: check proto-gen
 		echo "WARN: could not resolve service-utils git ref: $$service_utils_ref" >&2; \
 		service_utils_ref="unknown"; \
 	fi; \
-	bash make/build_manifest.sh commit-plugin \
+	$(BUILD_MANIFEST_CMD) commit-plugin \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--mode "$(BUILD_MODE)" \
 		--version "$(VERSION)" \
@@ -129,7 +228,8 @@ build-plugin: check proto-gen
 		--docker-images "$(DOCKER_IMAGES)" \
 		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
 		--dep-version-asn "$(DEP_VERSION_ASN)" \
-		--service-utils-ref "$$service_utils_ref"
+		--service-utils-ref "$$service_utils_ref" \
+		$(BUILD_MANIFEST_ARGS)
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
@@ -138,9 +238,176 @@ build-plugin: check proto-gen
 clean:
 	@rm -rf build/
 
+##----------------------------------------------------------------------------##
+## Variable checks ##
+
+.check_vars:
+	@echo ">> Variable Inventory"; \
+	echo "Secret values are redacted. This inventory is informational; run check-build-vars or check-push-vars for failing gates."; \
+	echo ""; \
+	printf "%-44s %-11s %-7s %s\n" "Variable" "Status" "Secret" "Used by"; \
+	printf "%-44s %-11s %-7s %s\n" "--------" "------" "------" "-------"; \
+	private_key="$${PRIVATE_GIT_SSH_KEY_FILE:-}"; \
+	if [ -z "$$private_key" ]; then status="MISSING"; elif [ ! -r "$$private_key" ]; then status="UNREADABLE"; else status="SET"; fi; \
+	printf "%-44s %-11s %-7s %s\n" "PRIVATE_GIT_SSH_KEY_FILE" "$$status" "yes" "check-build-vars, make init, make check"; \
+	if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then status="MISSING"; else status="SET"; fi; \
+	printf "%-44s %-11s %-7s %s\n" "DOCKER_REGISTRY_SITES" "$$status" "no" "check-push-vars, push-docker"; \
+	if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then status="MISSING"; else status="SET"; fi; \
+	printf "%-44s %-11s %-7s %s\n" "DEBIAN_REPO_SITES" "$$status" "no" "check-push-vars, push-debian"
+	@for site in $(DOCKER_REGISTRY_SITES); do \
+		$(MAKE) -s .print-docker-push-var SITE=$$site; \
+	done
+	@for site in $(DEBIAN_REPO_SITES); do \
+		$(MAKE) -s .print-debian-push-var SITE=$$site; \
+	done
+	@echo ""; \
+	echo "Variable inventory completed without printing secret values."; \
+	echo "Run 'make check-build-vars' for the local build/init gate."; \
+	echo "Run 'make check-push-vars' for selected Docker/Debian publish credentials."
+
+.print-docker-push-var:
+	$(eval VAR_SITE := $(call uppercase,$(SITE)))
+	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
+	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DOCKER)
+	$(eval VAR_REGISTRY := $(DOCKER_REGISTRY_$(VAR_SITE)))
+	@status="SET"; [ -n "$(VAR_REGISTRY)" ] || status="MISSING"; \
+	printf "%-44s %-11s %-7s %s\n" "DOCKER_REGISTRY_$(VAR_SITE)" "$$status" "no" "push-docker-$(shell echo $(VAR_SITE) | tr A-Z a-z)"
+	@status="SET"; [ -n "$(VAR_PROFILE)" ] || status="MISSING"; \
+	printf "%-44s %-11s %-7s %s\n" "RELEASE_SECRET_PROFILE_$(VAR_SITE)" "$$status" "no" "$(VAR_AUTH_VAR)"
+	@status="SET"; \
+	effective_var="DOCKER_REGISTRY_$(VAR_SITE)_USER"; \
+	effective_value="$${!effective_var:-}"; \
+	if [ -z "$$effective_value" ]; then status="MISSING"; elif ! printf '%s' "$$effective_value" | grep -q ':'; then status="INVALID"; fi; \
+	printf "%-44s %-11s %-7s %s\n" "$(VAR_AUTH_VAR)" "$$status" "yes" "DOCKER_REGISTRY_$(VAR_SITE)_USER, push-docker-$(shell echo $(VAR_SITE) | tr A-Z a-z)"
+
+.print-debian-push-var:
+	$(eval VAR_SITE := $(call uppercase,$(SITE)))
+	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
+	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DEBIAN)
+	$(eval VAR_HOST := $(DEBIAN_REPO_HOST_$(VAR_SITE)))
+	@status="SET"; [ -n "$(VAR_HOST)" ] || status="MISSING"; \
+	printf "%-44s %-11s %-7s %s\n" "DEBIAN_REPO_HOST_$(VAR_SITE)" "$$status" "no" "push-debian-$(shell echo $(VAR_SITE) | tr A-Z a-z)"
+	@status="SET"; [ -n "$(VAR_PROFILE)" ] || status="MISSING"; \
+	printf "%-44s %-11s %-7s %s\n" "RELEASE_SECRET_PROFILE_$(VAR_SITE)" "$$status" "no" "$(VAR_AUTH_VAR)"
+	@status="SET"; \
+	effective_var="DEBIAN_REPO_USER_$(VAR_SITE)"; \
+	effective_value="$${!effective_var:-}"; \
+	if [ -z "$$effective_value" ]; then status="MISSING"; elif ! printf '%s' "$$effective_value" | grep -q ':'; then status="INVALID"; fi; \
+	printf "%-44s %-11s %-7s %s\n" "$(VAR_AUTH_VAR)" "$$status" "yes" "DEBIAN_REPO_USER_$(VAR_SITE), push-debian-$(shell echo $(VAR_SITE) | tr A-Z a-z)"
+
+.check_build_vars:
+	@failed=0; \
+	check_file_var() { \
+		name="$$1"; value="$$2"; required="$$3"; secret="$$4"; \
+		display="$$value"; \
+		if [ "$$secret" = "yes" ] && [ -n "$$value" ]; then display="<set>"; fi; \
+		if [ -z "$$value" ]; then \
+			display="<empty>"; \
+			if [ "$$required" = "yes" ]; then failed=1; fi; \
+		elif [ ! -r "$$value" ]; then \
+			display="$$display (unreadable)"; \
+			failed=1; \
+		fi; \
+		printf "  %24s : %s\n" "$$name" "$$display"; \
+	}; \
+	echo ">> Build Variable Check"; \
+	check_file_var "PRIVATE_GIT_SSH_KEY_FILE" "$${PRIVATE_GIT_SSH_KEY_FILE:-}" "yes" "yes"; \
+	if [ "$$failed" -ne 0 ]; then \
+		echo ""; \
+		echo "Build variable check failed. Set PRIVATE_GIT_SSH_KEY_FILE to a readable private Git SSH key using one of the methods below."; \
+		echo ""; \
+		echo "Private Git SSH key file"; \
+		echo "  Method 1: export it from ignored make/local.mk:"; \
+		echo "    export PRIVATE_GIT_SSH_KEY_FILE := /path/to/private_git_key"; \
+		echo "  Method 2: export it from ~/.zshrc or ~/.bashrc:"; \
+		echo "    export PRIVATE_GIT_SSH_KEY_FILE=/path/to/private_git_key"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "Build variable check passed."; \
+	echo "Run 'make check-vars' for the full redacted variable inventory."
+
+.check_push_vars:
+	@echo ">> Publish Variable Check"; \
+	echo "Secret values are redacted."; \
+	if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
+		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
+		exit 1; \
+	fi; \
+	if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
+		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
+		exit 1; \
+	fi
+	@for site in $(DOCKER_REGISTRY_SITES); do \
+		$(MAKE) -s .check-docker-push-var SITE=$$site; \
+	done
+	@for site in $(DEBIAN_REPO_SITES); do \
+		$(MAKE) -s .check-debian-push-var SITE=$$site; \
+	done
+	@echo ""; \
+	echo "Publish variable check passed without printing secret values."
+
+.check-docker-push-var:
+	$(eval VAR_SITE := $(call uppercase,$(SITE)))
+	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
+	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DOCKER)
+	$(eval VAR_REGISTRY := $(DOCKER_REGISTRY_$(VAR_SITE)))
+	@if [ -z "$(VAR_REGISTRY)" ]; then \
+		echo "ERROR: Docker registry $(VAR_SITE) is not configured."; \
+		echo "Required: DOCKER_REGISTRY_$(VAR_SITE)."; \
+		exit 1; \
+	fi
+	@effective_var="DOCKER_REGISTRY_$(VAR_SITE)_USER"; \
+	effective_value="$${!effective_var:-}"; \
+	if [ -z "$$effective_value" ]; then \
+		echo "ERROR: Docker credential for $(VAR_SITE) is not configured."; \
+		echo "Required: $(VAR_AUTH_VAR) (exported as DOCKER_REGISTRY_$(VAR_SITE)_USER)."; \
+		exit 1; \
+	fi
+	@effective_var="DOCKER_REGISTRY_$(VAR_SITE)_USER"; \
+	effective_value="$${!effective_var:-}"; \
+	if ! printf '%s' "$$effective_value" | grep -q ':'; then \
+		echo "ERROR: Docker credential for $(VAR_SITE) must use user:password format."; \
+		echo "Fix: $(VAR_AUTH_VAR)."; \
+		exit 1; \
+	fi
+	@printf "  %-24s : %s\n" "Docker $(VAR_SITE)" "credential set ($(VAR_AUTH_VAR))"
+
+.check-debian-push-var:
+	$(eval VAR_SITE := $(call uppercase,$(SITE)))
+	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
+	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DEBIAN)
+	$(eval VAR_HOST := $(DEBIAN_REPO_HOST_$(VAR_SITE)))
+	@if [ -z "$(VAR_HOST)" ]; then \
+		echo "ERROR: Debian repo $(VAR_SITE) is not configured."; \
+		echo "Required: DEBIAN_REPO_HOST_$(VAR_SITE)."; \
+		exit 1; \
+	fi
+	@effective_var="DEBIAN_REPO_USER_$(VAR_SITE)"; \
+	effective_value="$${!effective_var:-}"; \
+	if [ -z "$$effective_value" ]; then \
+		echo "ERROR: Debian credential for $(VAR_SITE) is not configured."; \
+		echo "Required: $(VAR_AUTH_VAR) (exported as DEBIAN_REPO_USER_$(VAR_SITE))."; \
+		exit 1; \
+	fi
+	@effective_var="DEBIAN_REPO_USER_$(VAR_SITE)"; \
+	effective_value="$${!effective_var:-}"; \
+	if ! printf '%s' "$$effective_value" | grep -q ':'; then \
+		echo "ERROR: Debian credential for $(VAR_SITE) must use user:password format."; \
+		echo "Fix: $(VAR_AUTH_VAR)."; \
+		exit 1; \
+	fi
+	@printf "  %-24s : %s\n" "Debian $(VAR_SITE)" "credential set ($(VAR_AUTH_VAR))"
+
+check-vars: .check_vars
+
+check-build-vars: .check_build_vars
+
+check-push-vars: .check_push_vars
+
 
 check-build:
-	@bash make/build_manifest.sh check-build \
+	@$(BUILD_MANIFEST_CMD) check-build \
 		--service "$(SERVICE)" \
 		--version "$(VERSION)" \
 		--mode "$(BUILD_MODE)" \
@@ -148,7 +415,8 @@ check-build:
 		--dev-start "$(BUILD_NUM_DEV)" \
 		--dev-file "$(DEV_BUILD_FILE)" \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
-		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)"
+		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
+		$(BUILD_MANIFEST_ARGS)
 	@echo ""
 	@$(MAKE) --no-print-directory check-go-mod
 
@@ -204,6 +472,321 @@ check-go-mod:
 	printf "  %15s : %s ignored\n" "Utils-only Mods" "$$skipped"
 	@echo ""
 
+##----------------------------------------------------------------------------##
+## Source maintenance ##
+##
+## Consuming services may override package/path/tool variables in their own
+## config, while service-utils owns the reusable Go source-maintenance recipes.
+
+GOCACHE ?= $(CURDIR)/.cache/go-build
+export GOCACHE
+GO_TEST_FLAGS ?=
+SERVICE_GO_CHECK_PACKAGES ?= ./...
+SERVICE_GO_FORMAT_PACKAGES ?= ./...
+SERVICE_GOIMPORTS_PATHS ?= .
+SERVICE_GOIMPORTS_LOCAL ?= $(PACKAGE)
+SERVICE_GOIMPORTS ?= goimports
+SERVICE_ERRCHECK ?= errcheck
+SERVICE_STATICCHECK ?= go run honnef.co/go/tools/cmd/staticcheck@v0.6.1
+SERVICE_GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+
+go-test:
+	@if [ -z "$(PKG)" ]; then \
+		echo "ERROR: set PKG=./path/to/package for targeted Go validation."; \
+		exit 2; \
+	fi
+	go test $(GO_TEST_FLAGS) $(PKG)
+
+code-cleanup: deps-tidy code-format code-check
+
+deps-tidy:
+	@echo "running [go mod tidy]"
+	@go mod tidy
+	@echo "deps-tidy completed"
+
+deps-update:
+	@echo "WARNING: deps-update performs broad dependency upgrades with go get -u."
+	@echo "Run only with explicit approval."
+	@echo "running [go mod tidy]"
+	@go mod tidy
+	@echo "running [go get -u]"
+	@go get -u
+	@echo "running [go mod tidy]"
+	@go mod tidy
+	@echo "deps-update completed"
+
+code-format:
+	@set -e; \
+	goimports_args=(); \
+	if [ -n "$(strip $(SERVICE_GOIMPORTS_LOCAL))" ]; then goimports_args=(-local "$(SERVICE_GOIMPORTS_LOCAL)"); fi; \
+	$(SERVICE_GOIMPORTS) -w "$${goimports_args[@]}" $(SERVICE_GOIMPORTS_PATHS); \
+	go fmt $(SERVICE_GO_FORMAT_PACKAGES)
+	@echo "code-format completed"
+
+code-check:
+	$(SERVICE_ERRCHECK) $(SERVICE_GO_CHECK_PACKAGES)
+	go vet $(SERVICE_GO_CHECK_PACKAGES)
+	$(SERVICE_STATICCHECK) $(SERVICE_GO_CHECK_PACKAGES)
+	$(SERVICE_GOLANGCI_LINT) run
+	@echo "code-check completed"
+
+code-inspect: code-format code-check
+	@echo "code-inspect completed"
+
+##----------------------------------------------------------------------------##
+## Protobuf generation ##
+##
+## Consuming services own PROTO_GEN_SPECS and PROTO_GEN_STATE_FILES. The shared
+## builder owns the pinned tool staging, version checks, incremental stamp, and
+## generation loop. Each PROTO_GEN_SPECS item is source-glob:generated-output-dir,
+## where the output dir is relative to PROTO_OUT.
+
+PROTOC_VERSION ?= libprotoc 34.1
+PROTOC_RELEASE_VERSION ?= $(lastword $(PROTOC_VERSION))
+PROTOC_GEN_GO_VERSION ?= v1.36.11
+PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.0
+PROTO_TOOLS_DIR ?= .cache/proto-tools
+PROTO_TOOLS_BIN := $(abspath $(PROTO_TOOLS_DIR)/bin)
+PROTOC_LOCAL := $(PROTO_TOOLS_BIN)/protoc
+PROTOC_RELEASE_DIR := $(abspath $(PROTO_TOOLS_DIR)/protoc-$(PROTOC_RELEASE_VERSION))
+PROTOC_INCLUDE := $(PROTOC_RELEASE_DIR)/include
+PROTOC_DOWNLOAD_BASE_URL ?= https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_RELEASE_VERSION)
+PROTOC_AUTO_DOWNLOAD ?= 1
+PROTO_OUT ?= .
+PROTO_GEN_ENV := PATH="$(PROTO_TOOLS_BIN):$$PATH"
+PROTO_GEN_STAMP ?= $(PROTO_TOOLS_DIR)/proto-gen.stamp
+PROTO_GEN_FORCE ?= 0
+PROTO_GEN_DEFAULT_OUT := $(abspath .)
+PROTO_GEN_SPECS ?=
+PROTO_GEN_STATE_FILES ?= $(PROTO_GEN_SPECS)
+PROTOC_DEFAULTED := $(if $(filter undefined,$(origin PROTOC)),1,0)
+PROTOC ?= $(PROTOC_LOCAL)
+
+proto-tools:
+	@set -e; \
+	mkdir -p "$(PROTO_TOOLS_BIN)"; \
+	protoc_platform() { \
+		os="$$(uname -s)"; arch="$$(uname -m)"; \
+		case "$$os/$$arch" in \
+			Darwin/arm64) echo osx-aarch_64 ;; \
+			Darwin/x86_64) echo osx-x86_64 ;; \
+			Linux/x86_64) echo linux-x86_64 ;; \
+			*) echo "ERROR: unsupported protoc platform $$os/$$arch. Install protoc $(PROTOC_VERSION) and set PROTOC=/path/to/protoc." >&2; exit 1 ;; \
+		esac; \
+	}; \
+	stage_protoc_tree() { \
+		tree="$$1"; source="$$2"; \
+		[ -x "$$tree/bin/protoc" ] || return 1; \
+		actual="$$("$$tree/bin/protoc" --version 2>&1 || true)"; \
+		[ "$$actual" = "$(PROTOC_VERSION)" ] || return 1; \
+		cp "$$tree/bin/protoc" "$(PROTOC_LOCAL)"; \
+		chmod +x "$(PROTOC_LOCAL)"; \
+		if [ -d "$$tree/include" ]; then \
+			rm -rf "$(PROTOC_INCLUDE)"; \
+			mkdir -p "$(PROTOC_RELEASE_DIR)"; \
+			cp -R "$$tree/include" "$(PROTOC_INCLUDE)"; \
+		fi; \
+		echo "protoc $(PROTOC_VERSION) staged from $$source"; \
+		return 0; \
+	}; \
+	stage_host_protoc() { \
+		host_bin="$$1"; host_prefix="$$2"; source="$$3"; \
+		[ -x "$$host_bin" ] || return 1; \
+		actual="$$("$$host_bin" --version 2>&1 || true)"; \
+		[ "$$actual" = "$(PROTOC_VERSION)" ] || return 1; \
+		printf '%s\n' '#!/bin/sh' "exec \"$$host_bin\" \"\$$@\"" > "$(PROTOC_LOCAL)"; \
+		chmod +x "$(PROTOC_LOCAL)"; \
+		if [ -n "$$host_prefix" ] && [ -d "$$host_prefix/include" ]; then \
+			rm -rf "$(PROTOC_INCLUDE)"; \
+			mkdir -p "$(PROTOC_RELEASE_DIR)"; \
+			cp -R "$$host_prefix/include" "$(PROTOC_INCLUDE)"; \
+		fi; \
+		echo "protoc $(PROTOC_VERSION) staged from $$source"; \
+		return 0; \
+	}; \
+	ensure_protoc() { \
+		if [ -x "$(PROTOC_LOCAL)" ] && [ "$$("$(PROTOC_LOCAL)" --version 2>&1 || true)" = "$(PROTOC_VERSION)" ]; then \
+			echo "protoc $(PROTOC_VERSION) already staged"; \
+			return 0; \
+		fi; \
+		host_protoc="$$(command -v protoc || true)"; \
+		if [ -n "$$host_protoc" ] && [ "$$(protoc --version 2>&1 || true)" = "$(PROTOC_VERSION)" ]; then \
+			host_prefix="$$(cd "$$(dirname "$$host_protoc")/.." && pwd -P || true)"; \
+			stage_host_protoc "$$host_protoc" "$$host_prefix" PATH; \
+			return 0; \
+		fi; \
+		if [ "$(PROTOC_AUTO_DOWNLOAD)" != "1" ]; then \
+			echo "ERROR: protoc $(PROTOC_VERSION) is not staged and PATH does not provide a matching protoc." >&2; \
+			echo "Run make proto-tools with network access, install protoc $(PROTOC_VERSION), or set PROTOC=/path/to/protoc." >&2; \
+			exit 1; \
+		fi; \
+		command -v curl >/dev/null || { echo "ERROR: curl is required to download protoc $(PROTOC_VERSION)." >&2; exit 1; }; \
+		command -v unzip >/dev/null || { echo "ERROR: unzip is required to unpack protoc $(PROTOC_VERSION)." >&2; exit 1; }; \
+		platform="$$(protoc_platform)"; \
+		cache_dir="$(PROTOC_RELEASE_DIR)/$$platform"; \
+		if stage_protoc_tree "$$cache_dir" "download cache"; then \
+			return 0; \
+		fi; \
+		archive="$$(mktemp "$${TMPDIR:-/tmp}/protoc-$(PROTOC_RELEASE_VERSION).XXXXXX.zip")"; \
+		url="$(PROTOC_DOWNLOAD_BASE_URL)/protoc-$(PROTOC_RELEASE_VERSION)-$$platform.zip"; \
+		echo "downloading protoc $(PROTOC_VERSION) from $$url"; \
+		curl -fsSL "$$url" -o "$$archive"; \
+		rm -rf "$$cache_dir"; \
+		mkdir -p "$$cache_dir"; \
+		unzip -q "$$archive" -d "$$cache_dir"; \
+		rm -f "$$archive"; \
+		stage_protoc_tree "$$cache_dir" "download"; \
+	}; \
+	ensure_tool() { \
+		name="$$1"; module="$$2"; want="$$3"; pattern="$$4"; \
+		target="$(PROTO_TOOLS_BIN)/$$name"; \
+		if [ -x "$$target" ] && "$$target" --version 2>&1 | grep -Eq "$$pattern"; then \
+			echo "$$name $$want already staged"; \
+			return 0; \
+		fi; \
+		if command -v "$$name" >/dev/null && "$$name" --version 2>&1 | grep -Eq "$$pattern"; then \
+			cp "$$(command -v "$$name")" "$$target"; \
+			chmod +x "$$target"; \
+			echo "$$name $$want staged from PATH"; \
+			return 0; \
+		fi; \
+		echo "installing $$name $$want into $(PROTO_TOOLS_BIN)"; \
+		GOBIN="$(PROTO_TOOLS_BIN)" go install "$$module@$$want"; \
+		"$$target" --version 2>&1 | grep -Eq "$$pattern"; \
+	}; \
+	if [ "$(PROTOC_DEFAULTED)" = "1" ]; then \
+		ensure_protoc; \
+	else \
+		echo "protoc override selected: $(PROTOC)"; \
+	fi; \
+	ensure_tool protoc-gen-go google.golang.org/protobuf/cmd/protoc-gen-go "$(PROTOC_GEN_GO_VERSION)" "protoc-gen-go $(PROTOC_GEN_GO_VERSION)$$"; \
+	ensure_tool protoc-gen-go-grpc google.golang.org/grpc/cmd/protoc-gen-go-grpc "$(PROTOC_GEN_GO_GRPC_VERSION)" "protoc-gen-go-grpc $(patsubst v%,%,$(PROTOC_GEN_GO_GRPC_VERSION))$$"
+
+proto-tools-check: proto-tools
+	@set -e; \
+	actual="$$($(PROTOC) --version)"; \
+	if [ "$$actual" != "$(PROTOC_VERSION)" ]; then \
+		echo "ERROR: $(PROTOC) version mismatch: got '$$actual', want '$(PROTOC_VERSION)'."; \
+		echo "Install protoc $(PROTOC_VERSION) or override PROTOC_VERSION only after regenerating and reviewing protobuf output."; \
+		exit 1; \
+	fi; \
+	$(PROTO_GEN_ENV) protoc-gen-go --version | grep -Eq "protoc-gen-go $(PROTOC_GEN_GO_VERSION)$$"; \
+	$(PROTO_GEN_ENV) protoc-gen-go-grpc --version | grep -Eq "protoc-gen-go-grpc $(patsubst v%,%,$(PROTOC_GEN_GO_GRPC_VERSION))$$"; \
+	echo "protobuf toolchain check passed"
+
+proto-gen:
+	@if [ -z "$(strip $(PROTO_GEN_SPECS))" ]; then \
+		echo "ERROR: PROTO_GEN_SPECS is empty."; \
+		exit 1; \
+	fi
+	@set -e; \
+	default_out=0; \
+	if [ "$(abspath $(PROTO_OUT))" = "$(PROTO_GEN_DEFAULT_OUT)" ]; then default_out=1; fi; \
+	proto_state_hash() { \
+		{ \
+			printf 'PROTOC_VERSION=%s\n' "$(PROTOC_VERSION)"; \
+			printf 'PROTOC_GEN_GO_VERSION=%s\n' "$(PROTOC_GEN_GO_VERSION)"; \
+			printf 'PROTOC_GEN_GO_GRPC_VERSION=%s\n' "$(PROTOC_GEN_GO_GRPC_VERSION)"; \
+			printf 'PROTO_GEN_SPECS=%s\n' "$(PROTO_GEN_SPECS)"; \
+			for file in $(PROTO_GEN_STATE_FILES); do \
+				[ -e "$$file" ] || continue; \
+				printf 'file:%s\n' "$$file"; \
+				shasum -a 256 "$$file"; \
+			done; \
+		} | shasum -a 256 | awk '{ print $$1 }'; \
+	}; \
+	if [ "$$default_out" = "1" ] && [ "$(PROTO_GEN_FORCE)" != "1" ] && [ -f "$(PROTO_GEN_STAMP)" ]; then \
+		current="$$(proto_state_hash)"; \
+		previous="$$(cat "$(PROTO_GEN_STAMP)")"; \
+		if [ "$$current" = "$$previous" ]; then \
+			echo "proto-gen skipped; generated protobuf output is current."; \
+			exit 0; \
+		fi; \
+	fi; \
+	$(MAKE) --no-print-directory proto-tools-check; \
+	mkdir -p "$(PROTO_OUT)"; \
+	for spec in $(PROTO_GEN_SPECS); do \
+		proto_sources="$${spec%%:*}"; \
+		generated_dir="$${spec#*:}"; \
+		if [ "$$proto_sources" = "$$spec" ] || [ -z "$$generated_dir" ]; then \
+			echo "ERROR: invalid PROTO_GEN_SPECS item '$$spec'; expected source-glob:generated-output-dir." >&2; \
+			exit 1; \
+		fi; \
+		include_args="-I ."; [ -d "$(PROTOC_INCLUDE)" ] && include_args="$$include_args -I $(PROTOC_INCLUDE)"; \
+		$(PROTO_GEN_ENV) $(PROTOC) $$include_args --go_out="$(PROTO_OUT)" --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:"$(PROTO_OUT)" --go-grpc_opt=paths=source_relative $$proto_sources; \
+		if [ -d "$(PROTO_OUT)/$$generated_dir" ]; then \
+			find "$(PROTO_OUT)/$$generated_dir" -name '*.pb.go' -exec gofmt -w {} +; \
+		fi; \
+	done; \
+	if [ "$$default_out" = "1" ]; then \
+		mkdir -p "$$(dirname "$(PROTO_GEN_STAMP)")"; \
+		proto_state_hash > "$(PROTO_GEN_STAMP)"; \
+	fi; \
+	echo "proto-gen completed"
+
+proto-gen-force: PROTO_GEN_FORCE=1
+proto-gen-force: proto-gen
+
+##----------------------------------------------------------------------------##
+## Service-served documentation staging.
+##
+## Services declare docs content through SERVICE_DOCS_* variables; the shared
+## target handles staging, release manifest metadata, checksums, and validation.
+stage-docs:
+	@set -e; \
+	commit_manifest="$(if $(filter undefined,$(origin STAGE_DOCS_COMMIT_MANIFEST)),yes,$(STAGE_DOCS_COMMIT_MANIFEST))"; \
+	version_build="$(STAGE_DOCS_VERSION_BUILD)"; \
+	required_files="$(SERVICE_DOCS_STAGE_REQUIRED_FILES) $(SERVICE_DOCS_STAGE_REQUIRED_FILES_$(BUILD_MODE))"; \
+	manifest_args=( \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--mode "$(BUILD_MODE)" \
+		--version "$(VERSION)" \
+		--build "$(BUILD)" \
+		--manager-build-dir "$(BUILD_SVC_C_DIR)" \
+		--servicenode-build-dir "$(BUILD_SVC_SN_DIR)" \
+		--client-build-dir "$(BUILD_SVC_CLIENTS_DIR)" \
+		--docs-dir "$(STAGE_DOCS_DIR)" \
+		--debian-dir "$(DEBIAN_PATH)" \
+		--debian-services "$(DEBIAN_SERVICES)" \
+		--docker-images "$(DOCKER_IMAGES)" \
+		$(BUILD_MANIFEST_ARGS) \
+		--docs-required-artifacts "$(STAGE_DOCS_DIR)/release/ReleaseManifest.yaml $(STAGE_DOCS_DIR)/release/DocsChecksums.tsv $(STAGE_DOCS_DIR)/index.html" \
+		--docs-version-file "$(STAGE_DOCS_DIR)/release/ReleaseManifest.yaml" \
+		--docs-version-key "$(SERVICE_DOCS_VERSION_KEY)" \
+	); \
+	if [ "$$commit_manifest" = "yes" ]; then \
+		version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane plugin "$${manifest_args[@]}")"; \
+	fi; \
+	report_args=(); \
+	version_args=(); \
+	if [ -n "$(STAGE_DOCS_REPORT_FILE)" ]; then report_args=(--report-file "$(STAGE_DOCS_REPORT_FILE)"); fi; \
+	if [ -n "$$version_build" ]; then version_args=(--version-build "$$version_build"); fi; \
+	$(STAGE_DOCS_CMD) \
+		--mode "$(BUILD_MODE)" \
+		"$${version_args[@]}" \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--stage-dir "$(STAGE_DOCS_DIR)" \
+		"$${report_args[@]}" \
+		--service-name "$(SERVICE_NAME)" \
+		--service-title "$(SERVICE)" \
+		--version-key "$(SERVICE_DOCS_VERSION_KEY)" \
+		--version-label "$(SERVICE_DOCS_VERSION_LABEL)" \
+		--source-key "$(SERVICE_DOCS_SOURCE_KEY)" \
+		--served-key "$(SERVICE_DOCS_SERVED_KEY)" \
+		--runtime-root-key "$(SERVICE_DOCS_RUNTIME_ROOT_KEY)" \
+		--runtime-root "$(SERVICE_DOCS_RUNTIME_ROOT)" \
+		--copy-specs "$(SERVICE_DOCS_STAGE_COPY_SPECS)" \
+		--index-links "$(SERVICE_DOCS_INDEX_LINKS)" \
+		--routes "$(SERVICE_DOCS_ROUTES)" \
+		--required-files "$$required_files" \
+		--package-channel "$(SERVICE_DOCS_PACKAGE_CHANNEL_$(BUILD_MODE))" \
+		--docker-image-intent "$(SERVICE_DOCS_DOCKER_IMAGE_INTENT_$(BUILD_MODE))" \
+		--documentation-channel "$(SERVICE_DOCS_DOCUMENTATION_CHANNEL_$(BUILD_MODE))" \
+		--rollback-requirement "$(SERVICE_DOCS_ROLLBACK_REQUIREMENT_$(BUILD_MODE))"; \
+	if [ "$$commit_manifest" = "yes" ]; then \
+		$(BUILD_MANIFEST_CMD) commit-lane --lane docs --version-build "$$version_build" "$${manifest_args[@]}"; \
+	fi
+
 set-version: check-build
 	@echo "Modify config.mk to update the version and build."
 	@echo "NOTE: Only CI/CD or maintainer should change the version with caution."
@@ -219,7 +802,7 @@ increment-build:
 uppercase = $(shell echo $(1) | tr a-z A-Z)
 
 require-build-manifest:
-	@version_build="$$(bash make/build_manifest.sh require-lane \
+	@version_build="$$($(BUILD_MANIFEST_CMD) require-lane \
 		--lane plugin \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--mode "$(BUILD_MODE)" \
@@ -231,13 +814,30 @@ require-build-manifest:
 		--docs-dir "$(CURDIR)/build/docs" \
 		--debian-dir "$(DEBIAN_PATH)" \
 		--debian-services "$(DEBIAN_SERVICES)" \
-		--docker-images "$(DOCKER_IMAGES)")"; \
+		--docker-images "$(DOCKER_IMAGES)" \
+		$(BUILD_MANIFEST_ARGS))"; \
 	: "$$version_build"
 
+.build-manifest-require-lane:
+	@if [ -z "$(BUILD_MANIFEST_LANE)" ]; then \
+		echo "ERROR: set BUILD_MANIFEST_LANE=plugin|docs|debian|docker."; \
+		exit 2; \
+	fi
+	@$(BUILD_MANIFEST_CMD) require-lane --lane "$(BUILD_MANIFEST_LANE)" $(BUILD_MANIFEST_COMMON_ARGS)
+
+.build-manifest-value:
+	@if [ -z "$(BUILD_MANIFEST_KEY)" ]; then \
+		echo "ERROR: set BUILD_MANIFEST_KEY=<manifest key>."; \
+		exit 2; \
+	fi
+	@$(BUILD_MANIFEST_CMD) value --manifest "$(BUILD_MANIFEST_QUERY_FILE)" --key "$(BUILD_MANIFEST_KEY)" $(BUILD_MANIFEST_ARGS)
+
+DEBIAN_BUILD_PRE_TARGETS ?=
+
 # Build Debian packages from existing plugin artifacts.
-build-debian: require-build-manifest check stage-docs check-debian-inputs clean-debian
+build-debian: require-build-manifest check $(DEBIAN_BUILD_PRE_TARGETS) check-debian-inputs clean-debian
 	@set -e; \
-	version_build="$$(bash make/build_manifest.sh require-lane \
+	version_build="$$($(BUILD_MANIFEST_CMD) require-lane \
 		--lane docs \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--mode "$(BUILD_MODE)" \
@@ -249,9 +849,10 @@ build-debian: require-build-manifest check stage-docs check-debian-inputs clean-
 		--docs-dir "$(CURDIR)/build/docs" \
 		--debian-dir "$(DEBIAN_PATH)" \
 		--debian-services "$(DEBIAN_SERVICES)" \
-		--docker-images "$(DOCKER_IMAGES)")"; \
+		--docker-images "$(DOCKER_IMAGES)" \
+		$(BUILD_MANIFEST_ARGS))"; \
 	make --no-print-directory service-build-debian VERSION_BUILD="$$version_build"; \
-	bash make/build_manifest.sh commit-lane \
+	$(BUILD_MANIFEST_CMD) commit-lane \
 		--lane debian \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--mode "$(BUILD_MODE)" \
@@ -264,7 +865,8 @@ build-debian: require-build-manifest check stage-docs check-debian-inputs clean-
 		--docs-dir "$(CURDIR)/build/docs" \
 		--debian-dir "$(DEBIAN_PATH)" \
 		--debian-services "$(DEBIAN_SERVICES)" \
-		--docker-images "$(DOCKER_IMAGES)"
+		--docker-images "$(DOCKER_IMAGES)" \
+		$(BUILD_MANIFEST_ARGS)
 	@echo "Built Debian packages (DIR):"
 	@if [ -d "$(DEBIAN_PATH)" ]; then find ./$(DEBIAN_PATH) -maxdepth 1 -print; else echo "(none)"; fi
 	@echo
@@ -273,26 +875,61 @@ clean-debian:
 	@rm -rf "$(DEBIAN_PATH)"
 
 check-debian-inputs:
-	@$(MAKE) --no-print-directory -f make/internal.mk check.deb
+	@$(MAKE) --no-print-directory -f $(SERVICE_BUILD_MAKEFILE) $(SERVICE_BUILD_CHECK_DEBIAN_TARGET)
 
-DEBIAN_PUSH_CHECK_TARGETS ?= .check-debian-release-mode
+DEBIAN_PUSH_CHECK_TARGETS ?= .check-debian-release-mode .check-debian-publish-packages
 DEBIAN_PUSH_VERSION ?= $(VERSION_BUILD)
 
 .check-debian-release-mode:
 	$(call func_check_release_mode)
+
+.check-debian-publish-packages:
+	@set -e; \
+	selected_version="$(DEBIAN_PUSH_VERSION)"; \
+	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane debian $(BUILD_MANIFEST_COMMON_ARGS))"; \
+	if [ -z "$$selected_version" ]; then \
+		selected_version="$$version_build"; \
+	elif [ "$$selected_version" != "$$version_build" ]; then \
+		echo "check_publish_inputs ERROR: selected debian version '$$selected_version' does not match manifest version '$$version_build'." >&2; \
+		echo "Manifest: $(BUILD_MANIFEST_FILE)" >&2; \
+		exit 1; \
+	fi; \
+	missing=""; latest=""; \
+	for service in $(DEBIAN_SERVICES); do \
+		file="$(DEBIAN_PACKAGE_DIR)/$${service}_$${selected_version}_amd64.deb"; \
+		if [ ! -f "$$file" ]; then \
+			missing="$${missing}$${missing:+ }$${service}_$${selected_version}_amd64.deb"; \
+			local_latest=""; \
+			if [ -d "$(DEBIAN_PACKAGE_DIR)" ]; then \
+				local_latest="$$(find "$(DEBIAN_PACKAGE_DIR)" -maxdepth 1 -type f -name "$${service}_*_amd64.deb" -print | sort -r | head -n 1)"; \
+			fi; \
+			if [ -n "$$local_latest" ]; then local_latest="$$(basename "$$local_latest")"; else local_latest="$${service}_(none)"; fi; \
+			latest="$${latest}$${latest:+ }$$local_latest"; \
+		fi; \
+	done; \
+	if [ -n "$$missing" ]; then \
+		echo ">> Debian Publish Package Check: [FAIL]"; \
+		printf "  %15s : %s (%s)\n" "Version" "$$selected_version" "from $(BUILD_MANIFEST_FILE)"; \
+		printf "  %15s : %s\n" "Missing" "$$missing"; \
+		printf "  %15s : %s\n" "Latest" "$$latest"; \
+		exit 1; \
+	fi
 
 include $(SERVICE_UTILS_DIR)/builder/debian.registry.mk
 
 ##----------------------------------------------------------------------------##
 ## Docker Image Handling ##
 
-build-docker: require-build-manifest check-docker-inputs
+DOCKER_BUILD_PRE_TARGETS ?=
+DOCKER_BUILD_INPUT_CHECK_TARGETS ?= .check-docker-build-inputs
+
+build-docker: require-build-manifest $(DOCKER_BUILD_PRE_TARGETS) $(DOCKER_BUILD_INPUT_CHECK_TARGETS)
 	@if [ -z "$(strip $(DOCKER_IMAGE_BUILD_SPECS))" ]; then \
 		echo "ERROR: DOCKER_IMAGE_BUILD_SPECS is empty."; \
 		exit 1; \
 	fi
 	@set -e; \
-	version_build="$$(bash make/build_manifest.sh require-lane \
+	version_build="$$($(BUILD_MANIFEST_CMD) require-lane \
 		--lane debian \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--mode "$(BUILD_MODE)" \
@@ -304,13 +941,14 @@ build-docker: require-build-manifest check-docker-inputs
 		--docs-dir "$(CURDIR)/build/docs" \
 		--debian-dir "$(DEBIAN_PATH)" \
 		--debian-services "$(DEBIAN_SERVICES)" \
-		--docker-images "$(DOCKER_IMAGES)")"; \
+		--docker-images "$(DOCKER_IMAGES)" \
+		$(BUILD_MANIFEST_ARGS))"; \
 	for spec in $(DOCKER_IMAGE_BUILD_SPECS); do \
 		image=$${spec%%:*}; \
 		dockerfile=$${spec#*:}; \
 		make -s .docker-build-image IMAGE=$$image DOCKERFILE=$$dockerfile VERSION_BUILD="$$version_build"; \
 	done; \
-	bash make/build_manifest.sh commit-lane \
+	$(BUILD_MANIFEST_CMD) commit-lane \
 		--lane docker \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--mode "$(BUILD_MODE)" \
@@ -323,17 +961,77 @@ build-docker: require-build-manifest check-docker-inputs
 		--docs-dir "$(CURDIR)/build/docs" \
 		--debian-dir "$(DEBIAN_PATH)" \
 		--debian-services "$(DEBIAN_SERVICES)" \
-		--docker-images "$(DOCKER_IMAGES)"
+		--docker-images "$(DOCKER_IMAGES)" \
+		$(BUILD_MANIFEST_ARGS)
 
 .docker-build-image: .require-version-build-var
 	$(call func_build_docker,$(IMAGE),$(VERSION_BUILD),$(DOCKERFILE),$(DEP_DOCKER_BUILD_ARGS))
 
-DOCKER_PUSH_CHECK_TARGETS ?= .check-docker-release-mode
+DOCKER_PUSH_CHECK_TARGETS ?= .check-docker-release-mode .check-docker-publish-images
 DOCKER_PUSH_VERSION ?= $(VERSION_BUILD)
 DOCKER_PUSH_LATEST ?= $(if $(filter pro,$(BUILD_MODE)),yes,no)
 
 .check-docker-release-mode:
 	$(call func_check_release_mode)
+
+.check-docker-build-inputs:
+	@set -e; \
+	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane debian $(BUILD_MANIFEST_COMMON_ARGS))"; \
+	missing=0; \
+	for file_template in $(SERVICE_DOCKER_REQUIRED_ARTIFACTS); do \
+		file="$${file_template//@VERSION_BUILD@/$$version_build}"; \
+		if [ ! -f "$$file" ]; then \
+			echo "Missing Docker input: $$file"; \
+			missing=1; \
+		fi; \
+	done; \
+	for glob_template in $(SERVICE_DOCKER_REQUIRED_GLOBS); do \
+		glob="$${glob_template//@VERSION_BUILD@/$$version_build}"; \
+		matches="$$(compgen -G "$$glob" || true)"; \
+		if [ -z "$$matches" ]; then \
+			echo "Missing Docker input: $$glob"; \
+			missing=1; \
+		fi; \
+	done; \
+	if [ "$$missing" = "1" ]; then \
+		echo "ERROR: Docker inputs for $$version_build are incomplete."; \
+		echo "Expected version source: $(BUILD_MANIFEST_FILE)"; \
+		echo "Run 'make build-plugin && make build-debian' first, or 'make build' for the full local build."; \
+		exit 1; \
+	fi
+
+.check-docker-publish-images:
+	@set -e; \
+	selected_version="$(DOCKER_PUSH_VERSION)"; \
+	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane docker $(BUILD_MANIFEST_COMMON_ARGS))"; \
+	if [ -z "$$selected_version" ]; then \
+		selected_version="$$version_build"; \
+	elif [ "$$selected_version" != "$$version_build" ]; then \
+		echo "check_publish_inputs ERROR: selected docker version '$$selected_version' does not match manifest version '$$version_build'." >&2; \
+		echo "Manifest: $(BUILD_MANIFEST_FILE)" >&2; \
+		exit 1; \
+	fi; \
+	missing=""; latest=""; \
+	for image in $(DOCKER_IMAGES); do \
+		ref="$$image:$$selected_version"; \
+		if ! docker image inspect "$$ref" >/dev/null 2>&1; then \
+			missing="$${missing}$${missing:+ }$$ref"; \
+			if images_output="$$(docker images --format '{{.Repository}}\t{{.Tag}}' "$$image" 2>&1)"; then \
+				local_latest="$$(printf '%s\n' "$$images_output" | awk -F '\t' '$$2 != "<none>" { print $$1 ":" $$2; exit }')"; \
+			else \
+				local_latest="$$image:(docker unavailable)"; \
+			fi; \
+			[ -n "$$local_latest" ] || local_latest="$$image:(none)"; \
+			latest="$${latest}$${latest:+ }$$local_latest"; \
+		fi; \
+	done; \
+	if [ -n "$$missing" ]; then \
+		echo ">> Docker Publish Image Check: [FAIL]"; \
+		printf "  %15s : %s (%s)\n" "Version" "$$selected_version" "from $(BUILD_MANIFEST_FILE)"; \
+		printf "  %15s : %s\n" "Missing" "$$missing"; \
+		printf "  %15s : %s\n" "Latest" "$$latest"; \
+		exit 1; \
+	fi
 
 include $(SERVICE_UTILS_DIR)/builder/docker.registry.mk
 include $(SERVICE_UTILS_DIR)/builder/release.preflight.mk
@@ -362,7 +1060,18 @@ endef
 
 # Framework-owned runtime and toolchain versions. This include intentionally
 # happens after service config so copied service projects inherit these values.
-include $(BUILD_ENV_ASN_VERSION_FILE)
+-include $(BUILD_ENV_ASN_VERSION_FILE)
+
+.check_service_utils_version_file:
+	@if [ ! -f "$(BUILD_ENV_ASN_VERSION_FILE)" ]; then \
+		echo "ERROR: service-utils version metadata is missing: $(BUILD_ENV_ASN_VERSION_FILE)."; \
+		echo "Run 'make init' to initialize or repair service-utils."; \
+		exit 1; \
+	fi
+	@if [ -z "$(DEP_VERSION_ASN)" ] || [ -z "$(DEP_VERSION_GO)" ]; then \
+		echo "ERROR: service-utils version metadata must define DEP_VERSION_ASN and DEP_VERSION_GO: $(BUILD_ENV_ASN_VERSION_FILE)."; \
+		exit 1; \
+	fi
 
 BUILD_ENV_BASE_IMAGE_TAG ?= $(DEP_VERSION_ASN)
 BUILD_ENV_BASE_IMAGE_REF ?= $(BUILD_ENV_BASE_IMAGE):$(BUILD_ENV_BASE_IMAGE_TAG)
@@ -374,7 +1083,7 @@ SERVICE_BUILDER_INPUT_FILES ?= go.mod go.sum $(BUILD_ENV_BASE_DOCKERFILE) $(BUIL
 
 #------------------------------------------------------------------------------#
 # Prepare for base docker image to build ASN Service Plugins.
-prepare-service-builder-base:
+prepare-service-builder-base: .check_service_utils_version_file
 	@echo "Current working directory: ${PWD}"
 	@echo "Building $(BUILD_ENV_BASE_IMAGE_REF)"
 
@@ -427,7 +1136,7 @@ prepare-service-builder-base:
 
 # Check the local builder base image required to build ASN Service Plugins.
 # This is a local Docker image check only; never query an online registry for it.
-check-service-builder-base:
+check-service-builder-base: .check_service_utils_version_file
 	@image="$(BUILD_ENV_BASE_IMAGE_REF)"; \
 	if ! docker_info=$$(docker info 2>&1); then \
 		echo ">> Builder Version and Base Image Check: [FAIL]"; \
@@ -545,21 +1254,121 @@ check-service-builder-base:
 	printf "  %15s : %s (expected from builder inputs).\n" "Builder Inputs" "$$builder_inputs"; \
 	printf "  %15s : %s\n" "Offline Cache" "PASS"
 
+define service_go_build_target
+.service-go-build-$(1): .require-version-build-var
+	@if [ -z "$$(strip $$(SERVICE_GO_BUILD_OUT_$(1)))" ] || [ -z "$$(strip $$(SERVICE_GO_BUILD_SRC_$(1)))" ]; then \
+		echo "ERROR: SERVICE_GO_BUILD_OUT_$(1) and SERVICE_GO_BUILD_SRC_$(1) are required."; \
+		exit 2; \
+	fi
+	@echo "Building service artifact: $(1)"
+	@$$(SERVICE_GO_BUILD_ENV_$(1)) go build $$(SERVICE_GO_BUILD_FLAGS_$(1)) -o "$$(SERVICE_GO_BUILD_OUT_$(1))" $$(SERVICE_GO_BUILD_SRC_$(1))
+endef
+$(foreach artifact,$(SERVICE_GO_BUILD_ARTIFACTS),$(eval $(call service_go_build_target,$(artifact))))
+
+build.plugin: .require-version-build-var
+	@if [ -z "$(strip $(SERVICE_GO_BUILD_ARTIFACTS))" ]; then \
+		echo "ERROR: SERVICE_GO_BUILD_ARTIFACTS is empty."; \
+		exit 2; \
+	fi
+	@if [ -n "$(strip $(SERVICE_BUILD_CLEAN_DIRS))" ]; then \
+		rm -rf $(SERVICE_BUILD_CLEAN_DIRS); \
+	fi
+	@if [ -n "$(strip $(SERVICE_BUILD_DIRS))" ]; then \
+		mkdir -p $(SERVICE_BUILD_DIRS); \
+	fi
+	@$(MAKE) --no-print-directory $(SERVICE_GO_BUILD_TARGETS)
+	@set -e; \
+	for spec in $(SERVICE_ARTIFACT_COPY_SPECS); do \
+		src_pattern="$${spec%%:*}"; \
+		dest="$${spec#*:}"; \
+		if [ "$$src_pattern" = "$$spec" ] || [ -z "$$dest" ]; then \
+			echo "ERROR: invalid SERVICE_ARTIFACT_COPY_SPECS item '$$spec'; expected source-glob:destination."; \
+			exit 2; \
+		fi; \
+		mkdir -p "$$dest"; \
+		matched=0; \
+		for src in $$src_pattern; do \
+			[ -e "$$src" ] || continue; \
+			cp -R "$$src" "$$dest"/; \
+			matched=1; \
+		done; \
+		if [ "$$matched" -ne 1 ]; then \
+			echo "ERROR: SERVICE_ARTIFACT_COPY_SPECS source matched nothing: $$src_pattern"; \
+			exit 1; \
+		fi; \
+	done
+
+check.deb:
+	@echo "Checking Debian package inputs for: $(DEBIAN_SERVICES)"
+	@set -e; \
+	for svc in $(DEBIAN_SERVICES); do \
+		echo ">>> Checking $$svc..."; \
+		$(MAKE) --no-print-directory check-deb-$$svc; \
+	done
+	@set -e; \
+	missing=0; \
+	for file in $(SERVICE_DEBIAN_REQUIRED_ARTIFACTS); do \
+		if [ ! -f "$$file" ]; then \
+			echo "Missing Debian input: $$file"; \
+			missing=1; \
+		fi; \
+	done; \
+	if [ "$$missing" -ne 0 ]; then \
+		echo "ERROR: Debian package inputs are incomplete."; \
+		exit 1; \
+	fi
+
+build.deb: .require-version-build-var
+	@rm -rf "$(DEBIAN_PATH)"
+	@$(MAKE) --no-print-directory check.deb
+	@echo "Building Debian packages for: $(DEBIAN_SERVICES)"
+	@set -e; \
+	for svc in $(DEBIAN_SERVICES); do \
+		echo ">>> Building $$svc..."; \
+		$(MAKE) --no-print-directory deb-$$svc; \
+	done
+	@set -e; \
+	for spec in $(SERVICE_DEBIAN_PACKAGE_COPY_SPECS); do \
+		package="$${spec%%:*}"; \
+		rest="$${spec#*:}"; \
+		src="$${rest%%:*}"; \
+		dest="$${rest#*:}"; \
+		if [ "$$package" = "$$spec" ] || [ "$$src" = "$$rest" ] || [ -z "$$package" ] || [ -z "$$src" ] || [ -z "$$dest" ]; then \
+			echo "ERROR: invalid SERVICE_DEBIAN_PACKAGE_COPY_SPECS item '$$spec'; expected package:source:destination."; \
+			exit 2; \
+		fi; \
+		if [ ! -e "$$src" ]; then \
+			echo "ERROR: Debian package copy source is missing: $$src"; \
+			exit 1; \
+		fi; \
+		root="$(DEBIAN_PATH)/$$package/$$dest"; \
+		echo "Staging $$src into $$package:$$dest"; \
+		rm -rf "$$root"; \
+		mkdir -p "$$root"; \
+		if [ -d "$$src" ]; then \
+			cp -R "$$src"/. "$$root"/; \
+		else \
+			cp -R "$$src" "$$root"/; \
+		fi; \
+		dpkg-deb --build "$(DEBIAN_PATH)/$$package" "$(DEBIAN_PATH)/$${package}_$(VERSION_BUILD)_amd64.deb"; \
+		echo "Repacked: $(DEBIAN_PATH)/$${package}_$(VERSION_BUILD)_amd64.deb"; \
+	done
+
 # Rebuild the base image, then build plugin artifacts with the normal builder.
 service-build-from-scratch: prepare-service-builder-base service-build-plugin
 	@echo "Successfully rebuilt the base image and plugin artifacts from scratch."
 	@echo ""
 
 # Build the plugins.
-# Note: Actual targets are built inside a container, so check out make/internal.mk for more details.
-# - Target 'build.plugin' is executed to build .so and CLI artifacts.
-# - Target 'build.deb' is executed by 'make build-debian' to build .deb files.
+# Note: Actual targets are built inside a container using $(SERVICE_BUILD_MAKEFILE).
+# - Target '$(SERVICE_BUILD_PLUGIN_TARGET)' is executed to build .so and CLI artifacts.
+# - Target '$(SERVICE_BUILD_DEBIAN_TARGET)' is executed by 'make build-debian' to build .deb files.
 # - No Docker images built here. Separate targets, build.docker*, are available.
 service-build-plugin: .require-version-build-var
-	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.plugin
+	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=$(SERVICE_BUILD_PLUGIN_TARGET)
 
 service-build-debian: .require-version-build-var
-	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.deb
+	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=$(SERVICE_BUILD_DEBIAN_TARGET)
 
 .require-version-build-var:
 	@if [ -z "$(strip $(VERSION_BUILD))" ]; then \
@@ -624,7 +1433,7 @@ service-build-once-docker-run:
 		--env GOCACHE=/root/.cache/go-build \
 		--workdir $(SERVICE_BUILD_WORKDIR) \
 		$(BUILD_ENV_BASE_IMAGE_REF) \
-		make -f make/internal.mk $(BUILD_MAKE_TARGET) BUILD_MODE="$(BUILD_MODE)" VERSION_BUILD="$(VERSION_BUILD)"
+		make -f $(SERVICE_BUILD_MAKEFILE) $(BUILD_MAKE_TARGET) BUILD_MODE="$(BUILD_MODE)" VERSION_BUILD="$(VERSION_BUILD)"
 	@echo ""
 	@echo "Successfully ran builder target $(BUILD_MAKE_TARGET) in $(BUILD_ENV_BASE_IMAGE_REF)."
 	@echo ""
@@ -657,6 +1466,7 @@ service-build-once-docker-build:
 		--build-arg BUILD_MODE=$(BUILD_MODE) \
 		--build-arg VERSION_BUILD=$(VERSION_BUILD) \
 		--build-arg MAKE_TARGET=$(BUILD_MAKE_TARGET) \
+		--build-arg SERVICE_BUILD_MAKEFILE=$(SERVICE_BUILD_MAKEFILE) \
 		--secret id=sshkey,src=$$PRIVATE_GIT_SSH_KEY_FILE \
 		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 	@echo "Successfully built $(BUILD_ENV_IMAGE):latest."

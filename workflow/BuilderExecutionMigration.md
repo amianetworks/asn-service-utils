@@ -8,7 +8,7 @@ Audience: service maintainers, release engineers, and coding agents
 
 `service-build-once` now defaults to `SERVICE_BUILD_EXECUTION_MODE=docker-run`.
 
-The old behavior built a short-lived service builder image for every requested target, copied the whole Docker build context into that image, ran `make -f make/internal.mk <target>` in a Dockerfile `RUN` step, started a container from the result, and copied `/build` back to the host.
+The old behavior built a short-lived service builder image for every requested target, copied the whole Docker build context into that image, ran a legacy internal Makefile target in a Dockerfile `RUN` step, started a container from the result, and copied `/build` back to the host.
 
 The new default runs the requested target directly in the prepared builder base image with the service workspace bind-mounted at `/asn-service`. The service `build/` directory remains the host artifact boundary, so the target can produce plugin artifacts, Debian packages, Docker inputs, or other project-owned build outputs without a per-target source-context copy.
 
@@ -31,7 +31,7 @@ The default `docker-run` path uses:
 - the prepared builder base image, `$(BUILD_ENV_BASE_IMAGE_REF)`;
 - the current service checkout mounted at `$(SERVICE_BUILD_WORKDIR)`, default `/asn-service`;
 - the private Git SSH key mounted read-only at `$(SERVICE_BUILD_SECRET_TARGET)`, default `/run/secrets/sshkey`;
-- `make -f make/internal.mk $(BUILD_MAKE_TARGET)` as the in-container command.
+- `make -f $(SERVICE_BUILD_MAKEFILE) $(BUILD_MAKE_TARGET)` as the in-container command.
 
 The prepared builder base image installs the toolchain and downloads Go modules from `go.*`. It does not copy the service source tree and does not run service compile targets such as `build.so`; that work belongs to the mounted workspace executor.
 
@@ -116,6 +116,10 @@ Use the project's workflow or release validation command when it has one.
 | `SERVICE_BUILD_EXECUTION_MODE` | `docker-run` | Select `docker-run` or temporary `docker-build` fallback. |
 | `SERVICE_BUILD_DOCKER_PLATFORM` | `linux/amd64` | Platform passed to Docker. |
 | `SERVICE_BUILD_WORKDIR` | `/asn-service` | In-container workspace mount path. |
+| `SERVICE_BUILD_MAKEFILE` | `Makefile` | Makefile used inside the mounted service checkout. |
+| `SERVICE_BUILD_PLUGIN_TARGET` | `build.plugin` | Inner target used by `make build-plugin`. |
+| `SERVICE_BUILD_DEBIAN_TARGET` | `build.deb` | Inner target used by `make build-debian`. |
+| `SERVICE_BUILD_CHECK_DEBIAN_TARGET` | `check.deb` | Inner target used by `make check-debian-inputs`. |
 | `SERVICE_BUILD_SECRET_TARGET` | `/run/secrets/sshkey` | In-container read-only private Git key path. |
 | `SERVICE_BUILD_DOCKER_RUN_ARGS` | empty | Extra `docker run` flags, such as additional mounts, env vars, proxy settings, or user mapping. |
 
@@ -163,7 +167,7 @@ Base image freshness:
 
 - Rebuild the base image after service API, framework/runtime dependency, Go toolchain, protobuf tooling, private module dependency, service `go.mod`, or builder Dockerfile changes.
 - `make check` verifies the local builder base image labels before build targets run.
-- The base image should remain source-free. If a `make prepare` log shows `COPY . .` or `make -f make/internal.mk build.so`, the consuming project is using an old `service-utils` checkout or a project-specific builder Dockerfile that still needs migration.
+- The base image should remain source-free. If a `make prepare` log shows `COPY . .` or a compile target running inside the base-image Dockerfile, the consuming project is using an old `service-utils` checkout or a project-specific builder Dockerfile that still needs migration.
 
 Packaging correctness:
 

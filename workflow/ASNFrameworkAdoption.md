@@ -18,7 +18,9 @@ service API versioning, and service product versioning.
 ## What Changed
 
 The shared builder now expects consuming services to provide a build manifest
-implementation at `make/build_manifest.sh`.
+command through `BUILD_MANIFEST_CMD`. SWAN sets this to the generic
+`bash service-utils/builder/build_manifest.sh` helper and supplies
+service-specific artifact lists from its root Make/config layer.
 
 The important behavior changes are:
 
@@ -79,7 +81,8 @@ BUILD_NUM_DEV := <first-dev-build-number>
 
 DEV_BUILD_FILE ?= .DEV_BUILD_FILE
 BUILD_MANIFEST_FILE ?= build/Manifest.yaml
-VERSION_BUILD ?= $(shell ...)
+BUILD_MANIFEST_CMD := bash service-utils/builder/build_manifest.sh
+BUILD_MANIFEST_ARGS := --schema <schema> --source-key <source-key> ...
 
 ASN_SERVICE_API_VERSION := <api-version>
 SERVICE_UTILS_DIR := service-utils
@@ -91,24 +94,29 @@ DEBIAN_PATH := build/debian
 DEBIAN_SERVICES := <package names>
 DOCKER_IMAGES := <image names>
 DOCKER_IMAGE_BUILD_SPECS := <image:dockerfile pairs>
+PROTO_GEN_SPECS := <proto-source-glob:generated-output-dir pairs>
+PROTO_GEN_STATE_FILES := <files that invalidate default proto-gen stamp>
 ```
 
-The `VERSION_BUILD` default should read the active `build/Manifest.yaml` only
-when the manifest `build_mode` matches the current `BUILD_MODE`. A stale DEV
-manifest from another `VERSION` or a PRO manifest with the wrong build number
-must not be accepted.
+The root Makefile, or the equivalent non-config Make layer, should resolve
+`VERSION_BUILD` from the active `build/Manifest.yaml` only when the manifest
+`build_mode` matches the current `BUILD_MODE`. Keep service config declarative;
+do not put shell-evaluated manifest parsing in the tracked config file. A stale
+DEV manifest from another `VERSION` or a PRO manifest with the wrong build
+number must not be accepted.
 
-### Required Scripts
+### Required Build Helpers
 
-The consuming service must provide or import service-specific equivalents of:
+The consuming service must import or provide service-specific equivalents of
+these Make-owned behaviors:
 
 ```text
-make/build_manifest.sh
-make/check_docker_inputs.sh
-make/check_publish_inputs.sh
+BUILD_MANIFEST_CMD
+private Docker input gate
+private Docker/Debian publish artifact gates
 ```
 
-`make/build_manifest.sh` must support:
+`BUILD_MANIFEST_CMD` must support:
 
 | Command | Required purpose |
 |---|---|
@@ -165,6 +173,31 @@ The old lifecycle names are compatibility errors:
 
 Package and Docker targets should consume existing manifest-owned artifacts.
 They should not silently rebuild plugin artifacts or choose a new version.
+Service repositories should declare their artifact contents in config variables
+and let the shared builder run the reusable inner targets:
+
+```make
+SERVICE_GO_BUILD_ARTIFACTS := MANAGER_PLUGIN SERVICENODE_PLUGIN
+SERVICE_GO_BUILD_OUT_MANAGER_PLUGIN := $(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so
+SERVICE_GO_BUILD_SRC_MANAGER_PLUGIN := $(SERVICE_C_SRC)/main.go
+SERVICE_ARTIFACT_COPY_SPECS := manager/config/*.conf:$(BUILD_SVC_C_DIR)
+SERVICE_DEBIAN_REQUIRED_ARTIFACTS := $(BUILD_DIR)/docs/release/ReleaseManifest.yaml
+SERVICE_DEBIAN_PACKAGE_COPY_SPECS := $(SERVICE_MANAGER_DEBIAN_PACKAGE):$(BUILD_DIR)/docs:var/www/$(SERVICE_NAME)/manager
+SERVICE_DOCS_STAGE_COPY_SPECS := docs/api:api docs/design:design
+SERVICE_DOCS_STAGE_REQUIRED_FILES := index.html release/ReleaseManifest.yaml
+SERVICE_DOCS_VERSION_KEY := <service_docs_version_key>
+SERVICE_DOCS_SOURCE_KEY := <service_source_commit_key>
+SERVICE_DOCS_RUNTIME_ROOT := /var/www/$(SERVICE_NAME)
+DEBIAN_BUILD_PRE_TARGETS ?= stage-docs
+DOCKER_BUILD_PRE_TARGETS ?= stage-docs
+```
+
+`build.plugin`, `check.deb`, `build.deb`, and `stage-docs` are shared
+service-utils functions. Do not add service-specific private Make targets or
+project-local scripts for those mechanics unless the service has a genuinely
+non-generic artifact boundary. Service-owned config should list docs content,
+required files, and metadata keys; the shared target should perform staging,
+checksums, release manifest metadata, and manifest lane updates.
 
 ## Builder Base Image Adoption
 
@@ -195,7 +228,8 @@ For executor migration details, including `SERVICE_BUILD_EXECUTION_MODE`, use
 ## Adoption Sequence
 
 1. Update the service's `service-utils` submodule to the framework-approved ref.
-2. Add the manifest scripts and service-specific Docker/publish input checks.
+2. Declare service artifact, docs, Docker, and Debian content in config
+   variables consumed by the shared builder.
 3. Replace old `.BUILD_FILE` usage with `DEV_BUILD_FILE` and
    `BUILD_MANIFEST_FILE`.
 4. Update top-level help and CI commands to use `check-build`,
