@@ -185,6 +185,7 @@ Control rule:
 - A workspace-local Go build cache may be mounted into builder runs to speed repeated compilation, but the module cache remains image-owned by default so `check-prepare` cannot be accidentally satisfied by host state.
 - See `BuilderExecutionMigration.md` before changing `SERVICE_BUILD_EXECUTION_MODE` or migrating a consuming service from the old Dockerfile target executor.
 - See `ASNFrameworkAdoption.md` before migrating an ASN Framework release or consuming service repository to the manifest-aware builder contract.
+- See `MakefileMigration.md` for the refreshed Makefile layering, variable checklist, bootstrap pattern, and service adoption sequence.
 
 ## Build-Time Version Flow
 

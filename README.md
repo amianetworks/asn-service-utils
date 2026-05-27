@@ -109,6 +109,7 @@ For version-control details, see:
 
 - `workflow/VersionControl.md`
 - `workflow/ASNFrameworkAdoption.md`
+- `workflow/MakefileMigration.md`
 
 ## Using service-utils in a Service
 
@@ -142,6 +143,8 @@ Exact target names may vary by service repository.
 `service-build-once` defaults to the shared `docker-run` executor: it runs the requested internal target inside the prepared builder base image with the service checkout bind-mounted as the artifact boundary. The older Dockerfile execution path is still available temporarily with `SERVICE_BUILD_EXECUTION_MODE=docker-build`. For adoption steps, configuration knobs, risks, and rollback guidance, see `workflow/BuilderExecutionMigration.md`.
 
 Manifest-aware build adoption is documented in `workflow/ASNFrameworkAdoption.md`.
+The step-by-step refreshed Makefile migration path for ASN Framework and
+consuming service repositories is documented in `workflow/MakefileMigration.md`.
 
 ## Build Outputs
 

@@ -8,6 +8,9 @@ Audience: service maintainers, release engineers, and coding agents
 
 `service-build-once` now defaults to `SERVICE_BUILD_EXECUTION_MODE=docker-run`.
 
+Use `MakefileMigration.md` first for the full refreshed Makefile migration
+sequence. This document covers only the target-executor change.
+
 The old behavior built a short-lived service builder image for every requested target, copied the whole Docker build context into that image, ran a legacy internal Makefile target in a Dockerfile `RUN` step, started a container from the result, and copied `/build` back to the host.
 
 The new default runs the requested target directly in the prepared builder base image with the service workspace bind-mounted at `/asn-service`. The service `build/` directory remains the host artifact boundary, so the target can produce plugin artifacts, Debian packages, Docker inputs, or other project-owned build outputs without a per-target source-context copy.

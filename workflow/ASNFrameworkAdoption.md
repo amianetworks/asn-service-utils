@@ -15,6 +15,10 @@ This guide explains how ASN Framework releases and ASN Service repositories
 should adopt those changes without mixing framework runtime versioning,
 service API versioning, and service product versioning.
 
+Use `MakefileMigration.md` as the step-by-step service repository migration
+guide. This document explains the framework/service responsibilities behind
+that migration.
+
 ## What Changed
 
 The shared builder now expects consuming services to provide a build manifest
@@ -82,10 +86,14 @@ BUILD_NUM_DEV := <first-dev-build-number>
 DEV_BUILD_FILE ?= .DEV_BUILD_FILE
 BUILD_MANIFEST_FILE ?= build/Manifest.yaml
 BUILD_MANIFEST_CMD := bash service-utils/builder/build_manifest.sh
-BUILD_MANIFEST_ARGS := --schema <schema> --source-key <source-key> ...
+BUILD_MANIFEST_SERVICE_ARGS := --schema <schema> --source-key <source-key> ...
+BUILD_MANIFEST_ARGS = $(BUILD_MANIFEST_SERVICE_ARGS)
+BUILD_MANIFEST_COMMON_EXTRA_ARGS = <docs-or-service-default-extra-args>
 
 ASN_SERVICE_API_VERSION := <api-version>
 SERVICE_UTILS_DIR := service-utils
+BUILD_ENV_MAKEFILE := $(SERVICE_UTILS_DIR)/builder/service.plugin.builder.mk
+BUILD_ENV_ASN_VERSION_FILE := $(SERVICE_UTILS_DIR)/builder/ASN_VERSION
 
 BUILD_SVC_C_DIR := build/controller
 BUILD_SVC_SN_DIR := build/servicenode
@@ -104,6 +112,10 @@ The root Makefile, or the equivalent non-config Make layer, should resolve
 do not put shell-evaluated manifest parsing in the tracked config file. A stale
 DEV manifest from another `VERSION` or a PRO manifest with the wrong build
 number must not be accepted.
+
+See `MakefileMigration.md` for the full variable checklist, root Makefile
+bootstrap pattern, removed target mapping, publish topology pattern, and
+validation sequence.
 
 ### Required Build Helpers
 
