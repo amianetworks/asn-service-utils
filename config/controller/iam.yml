@@ -43,7 +43,7 @@ services_provisioned: [ asn, swan, scarlette ]
 #  provider: "mongodb" # Supported: "mongodb" | "filedb". Default: "mongodb"
 #  url: "localhost:27017" # Default: "localhost:27017"
 #  username: "amia" # Default: "amia"
-#  password: "2022" # Default: "2022"
+#  password: "REPLACE_WITH_SECRET" # Default: generated secret
 
 ## Email Service
 #smtp: # SMTP email server config
@@ -199,7 +199,7 @@ services_provisioned: [ asn, swan, scarlette ]
 #  url: "ldap://localhost:389" # Default: "ldap://localhost:389"
 #  base_dn: "dc=amianetworks,dc=com" # Default: "dc=amianetworks,dc=com"
 #  password_cn: "cn=admin" # Default: "cn=admin"
-#  password: "2022" # Default: "2022"
+#  password: "REPLACE_WITH_SECRET" # Default: generated secret
 #  ous:
 #    account: "People"
 #    group: "Group"
@@ -228,7 +228,7 @@ services_provisioned: [ asn, swan, scarlette ]
 
 ## Account Configurations
 #account:
-#  special_key: "SpecialAccount@AmiaNetworks2025" # Used to create special accounts which skips MFA.
+#  special_key: "REPLACE_WITH_SECRET" # Used to create special accounts which skips MFA.
 #  password_algo: sha256 # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: sha256. CAUTION: more demanding algorithms like argon2id are not recommended in VMs.
 #  rename: false # whether renaming an account's username is allowed. Default: false
 #

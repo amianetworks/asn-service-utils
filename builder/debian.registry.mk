@@ -381,12 +381,15 @@ define func_push_debs
 				filename=$$(basename "$$file"); \
 				printf "%s" "   Deleting $$filename from temporary directory..."; \
 				delete_output=$$(mktemp); \
-				if curl $(DEBIAN_CURL_MUTATION_FLAGS) -sS -X DELETE --config "$$curl_config_file" "$(T_HOST)/files/${T_SUBREPO}/$$filename" > "$$delete_output" 2>&1; then \
-				echo " done"; \
-			else \
-				echo " failed"; \
-				if [ -s "$$delete_output" ]; then cat "$$delete_output"; fi; \
-			fi; \
+				delete_status=0; \
+				delete_http_code=$$(curl $(DEBIAN_CURL_MUTATION_FLAGS) -sS -w "%{http_code}" -o "$$delete_output" -X DELETE --config "$$curl_config_file" "$(T_HOST)/files/${T_SUBREPO}/$$filename" 2>>"$$delete_output") || delete_status=$$?; \
+				if [ "$$delete_status" = "0" ] && { { [ "$$delete_http_code" -ge 200 ] && [ "$$delete_http_code" -lt 300 ]; } || [ "$$delete_http_code" -eq 404 ]; }; then \
+					echo " done (HTTP $$delete_http_code)"; \
+				else \
+					echo " failed"; \
+					if [ -n "$$delete_http_code" ]; then echo "HTTP $$delete_http_code"; fi; \
+					if [ -s "$$delete_output" ]; then cat "$$delete_output"; fi; \
+				fi; \
 			rm -f "$$delete_output"; \
 		done; \
 		echo ""; \
