@@ -100,6 +100,18 @@ check-release-config-strict:
 	fi; \
 	if [ "$(RELEASE_CONFIG_CHECK_DOCKER_LOGIN)" = "yes" ]; then \
 		docker_config="$${HOME}/.docker/config.json"; \
+		docker_config_has_registry() { \
+			cfg="$$1"; \
+			registry="$$2"; \
+			if command -v jq >/dev/null 2>&1; then \
+				jq -e --arg registry "$$registry" '.auths? | type == "object" and has($$registry)' "$$cfg" >/dev/null 2>&1; \
+			elif command -v python3 >/dev/null 2>&1; then \
+				python3 -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); sys.exit(0 if sys.argv[2] in data.get("auths", {}) else 1)' "$$cfg" "$$registry"; \
+			else \
+				echo "ERROR: jq or python3 is required to validate Docker login config."; \
+				return 2; \
+			fi; \
+		}; \
 		if [ ! -f "$$docker_config" ]; then \
 			if [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
 				echo "ERROR: Docker login config is missing: $$docker_config"; \
@@ -107,7 +119,7 @@ check-release-config-strict:
 			else \
 				echo "WARN: Docker login config is missing: $$docker_config"; \
 			fi; \
-		elif grep -Fq "$(RELEASE_DOCKER_REGISTRY)" "$$docker_config"; then \
+		elif docker_config_has_registry "$$docker_config" "$(RELEASE_DOCKER_REGISTRY)"; then \
 			printf "  %-24s : %s\n" "Docker login" "present"; \
 		elif [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
 			echo "ERROR: Docker login for $(RELEASE_DOCKER_SITE) is missing: $(RELEASE_DOCKER_REGISTRY)."; \

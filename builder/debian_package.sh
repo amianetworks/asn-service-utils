@@ -143,9 +143,25 @@ cmd_build() {
         src="${pair%%:*}"
         dst="${pair#*:}"
         dst="${dst#/}"
-        echo "Processing file: $src -> $deb_svc_dir/$dst"
-        mkdir -p "$deb_svc_dir/$dst"
-        cp "$src" "$deb_svc_dir/$dst/" || { echo "Failed to copy $src"; exit 1; }
+        case "$dst" in
+            ""|"."|".."|/*|../*|*/../*|*/..)
+                echo "debian_package ERROR: unsafe Debian file destination: $dst" >&2
+                exit 2
+                ;;
+        esac
+        deb_root_abs="$(cd "$deb_svc_dir" && pwd -P)"
+        dst_parent="$deb_svc_dir/$dst"
+        mkdir -p "$dst_parent"
+        dst_parent_abs="$(cd "$dst_parent" && pwd -P)"
+        case "$dst_parent_abs/" in
+            "$deb_root_abs"/*) ;;
+            *)
+                echo "debian_package ERROR: Debian file destination escapes package root: $dst" >&2
+                exit 2
+                ;;
+        esac
+        echo "Processing file: $src -> $dst_parent_abs"
+        cp "$src" "$dst_parent_abs/" || { echo "Failed to copy $src"; exit 1; }
     done
     echo "Prepared to packing .deb."
 

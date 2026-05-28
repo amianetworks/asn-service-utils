@@ -158,7 +158,6 @@ BUILD_MANIFEST_STAGE_DOCS_ARGS ?= $(BUILD_MANIFEST_CORE_ARGS) --docs-dir "$(STAG
 VERSION_BUILD ?=
 SERVICE_BUILD_MAKEFILE ?= Makefile
 SERVICE_RECURSIVE_MAKE ?= $(MAKE)
-BUILD_PLUGIN_VERSION_FILE ?= $(BUILD_DIR)/.plugin-version
 SERVICE_BUILD_PLUGIN_TARGET ?= build.plugin
 SERVICE_BUILD_DEBIAN_TARGET ?= build.deb
 SERVICE_BUILD_CHECK_DEBIAN_TARGET ?= check.deb
@@ -260,17 +259,16 @@ build-fresh: clean prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian buil
 build-plugin: check proto-gen
 	@set -e; \
 	mkdir -p "$(BUILD_DIR)"; \
-	version_build="$$$$($(BUILD_MANIFEST_CMD) reserve-plugin-version $(BUILD_MANIFEST_RESERVE_ARGS))"; \
+	case "$$$$MAKEFLAGS" in *n*|*--just-print*|*--dry-run*|*--recon*) dry_run=1 ;; *) dry_run=0 ;; esac; \
+	if [ "$$$$dry_run" = "1" ]; then \
+		version_build="DRY-RUN-VERSION"; \
+	else \
+		version_build="$$$$($(BUILD_MANIFEST_CMD) reserve-plugin-version $(BUILD_MANIFEST_RESERVE_ARGS))"; \
+	fi; \
 	echo ">> Build Plugin Version"; \
 	printf "  %15s : %s\n" "Version" "$$$$version_build"; \
-	printf "%s\n" "$$$$version_build" > "$(BUILD_PLUGIN_VERSION_FILE)"
-	$$(MAKE) --no-print-directory .build-plugin-artifacts VERSION_BUILD="$$$$([ -f "$(BUILD_PLUGIN_VERSION_FILE)" ] && cat "$(BUILD_PLUGIN_VERSION_FILE)" || printf "%s" "DRY-RUN-VERSION")"
-	@set -e; \
-	version_build="$$$$([ -f "$(BUILD_PLUGIN_VERSION_FILE)" ] && cat "$(BUILD_PLUGIN_VERSION_FILE)")"; \
-	if [ -z "$$$$version_build" ]; then \
-		echo "ERROR: build plugin version handoff is missing: $(BUILD_PLUGIN_VERSION_FILE)"; \
-		exit 1; \
-	fi; \
+	$$(MAKE) --no-print-directory service-build-plugin VERSION_BUILD="$$$$version_build"; \
+	if [ "$$$$dry_run" = "1" ]; then exit 0; fi; \
 	if service_utils_ref="$$$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD 2>&1)"; then \
 		:; \
 	else \
@@ -280,14 +278,10 @@ build-plugin: check proto-gen
 	$$(BUILD_MANIFEST_CMD) commit-plugin \
 		$$(BUILD_MANIFEST_COMMIT_PLUGIN_ARGS) \
 		--version-build "$$$$version_build" \
-		--service-utils-ref "$$$$service_utils_ref"; \
-	rm -f "$(BUILD_PLUGIN_VERSION_FILE)"
+		--service-utils-ref "$$$$service_utils_ref"
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
-
-.build-plugin-artifacts: .require-version-build-var
-	$$(MAKE) --no-print-directory service-build-plugin VERSION_BUILD="$(VERSION_BUILD)"
 endef
 $(if $(filter yes,$(SERVICE_UTILS_OWN_BUILD_TARGETS)),$(eval $(service_utils_owned_lifecycle_targets)))
 
@@ -731,7 +725,17 @@ clean-debian:
 	path="$(DEBIAN_PATH)"; \
 	case "$$path" in \
 		""|"."|"/"|*"/.."|*"/../"*|".."|"../"*) echo "ERROR: refusing unsafe Debian clean path: '$$path'."; exit 2 ;; \
-		build|build/|build/*|./build|./build/|./build/*) rm -rf "$$path" ;; \
+		build|build/|build/*|./build|./build/|./build/*) \
+			mkdir -p build; \
+			build_abs="$$(cd build && pwd -P)"; \
+			if [ -e "$$path" ]; then \
+				path_parent="$$(dirname "$$path")"; \
+				mkdir -p "$$path_parent"; \
+				path_parent_abs="$$(cd "$$path_parent" && pwd -P)"; \
+				path_abs="$$path_parent_abs/$$(basename "$$path")"; \
+				case "$$path_abs/" in "$$build_abs"/*) : ;; *) echo "ERROR: Debian clean path escapes real build directory: $$path"; exit 2 ;; esac; \
+			fi; \
+			rm -rf "$$path" ;; \
 		*) echo "ERROR: refusing Debian clean path outside build/: $$path"; exit 2 ;; \
 	esac
 
@@ -1105,12 +1109,14 @@ build.deb: .require-version-build-var
 		case "$$package" in ""|"."|".."|*"/"*) echo "ERROR: unsafe Debian package name in SERVICE_DEBIAN_PACKAGE_COPY_SPECS item '$$spec'."; exit 2 ;; esac; \
 		case "$$dest" in ""|"."|".."|/*|../*|*/../*|*/..) echo "ERROR: unsafe Debian package destination in SERVICE_DEBIAN_PACKAGE_COPY_SPECS item '$$spec'."; exit 2 ;; esac; \
 		package_root="$(DEBIAN_PATH)/$$package"; \
-		if [ ! -d "$$package_root" ]; then \
-			echo "ERROR: Debian package staging root is missing: $$package_root"; \
-			exit 1; \
-		fi; \
-		package_root_abs="$$(cd "$$package_root" && pwd -P)"; \
-		root_parent="$$(dirname "$$package_root/$$dest")"; \
+			if [ ! -d "$$package_root" ]; then \
+				echo "ERROR: Debian package staging root is missing: $$package_root"; \
+				exit 1; \
+			fi; \
+			build_abs="$$(cd build && pwd -P)"; \
+			package_root_abs="$$(cd "$$package_root" && pwd -P)"; \
+			case "$$package_root_abs/" in "$$build_abs"/*) : ;; *) echo "ERROR: Debian package root escapes real build directory: $$package_root"; exit 2 ;; esac; \
+			root_parent="$$(dirname "$$package_root/$$dest")"; \
 		mkdir -p "$$root_parent"; \
 		root_parent_abs="$$(cd "$$root_parent" && pwd -P)"; \
 		root_abs="$$root_parent_abs/$$(basename "$$dest")"; \

@@ -77,11 +77,23 @@ check-push-docker-sites:
 	fi
 	@if [ "$(DOCKER_REQUIRE_LOGIN_CONFIG)" = "yes" ]; then \
 		docker_config="$${HOME}/.docker/config.json"; \
+		docker_config_has_registry() { \
+			cfg="$$1"; \
+			registry="$$2"; \
+			if command -v jq >/dev/null 2>&1; then \
+				jq -e --arg registry "$$registry" '.auths? | type == "object" and has($$registry)' "$$cfg" >/dev/null 2>&1; \
+			elif command -v python3 >/dev/null 2>&1; then \
+				python3 -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); sys.exit(0 if sys.argv[2] in data.get("auths", {}) else 1)' "$$cfg" "$$registry"; \
+			else \
+				echo "ERROR: jq or python3 is required to validate Docker login config."; \
+				return 2; \
+			fi; \
+		}; \
 		if [ ! -f "$$docker_config" ]; then \
 			echo "ERROR: Docker login config is missing: $$docker_config"; \
 			exit 1; \
 		fi; \
-		if ! grep -Fq "$(DOCKER_REGISTRY_$(DOCKER_SITE))" "$$docker_config"; then \
+		if ! docker_config_has_registry "$$docker_config" "$(DOCKER_REGISTRY_$(DOCKER_SITE))"; then \
 			echo "ERROR: Docker registry $(DOCKER_SITE) is not logged in: $(DOCKER_REGISTRY_$(DOCKER_SITE))"; \
 			exit 1; \
 		fi; \
@@ -270,16 +282,22 @@ list-docker-%:
 		echo "Docker registry credential for $(DOCKER_SITE) must use user:password format."; \
 		if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 		echo ""; \
-	else \
-		repo_prefix=""; \
-		if [ -n "$(DOCKER_SUBREPO)" ]; then repo_prefix="$(DOCKER_SUBREPO)/"; fi; \
-		for image in $(DOCKER_IMAGES); do \
-			echo "Image: $$image"; \
-			echo ""; \
-			response=$$(curl $(DOCKER_CURL_TIMEOUT_FLAGS) -sS -u "$${$(REGISTRY_USER_VAR)}" "https://$(REGISTRY)/v2/$${repo_prefix}$$image/tags/list"); \
-			if [ -z "$$response" ]; then \
-				echo "(empty response from registry)"; \
-				if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
+		else \
+			curl_config_file="$$(mktemp "$${TMPDIR:-/tmp}/docker-curl-config.XXXXXX")"; \
+			chmod 600 "$$curl_config_file"; \
+			printf 'user = "%s"\n' "$${$(REGISTRY_USER_VAR)}" > "$$curl_config_file"; \
+			trap 'rm -f "$$curl_config_file"' EXIT; \
+			trap 'rm -f "$$curl_config_file"; exit 130' INT; \
+			trap 'rm -f "$$curl_config_file"; exit 143' TERM; \
+			repo_prefix=""; \
+			if [ -n "$(DOCKER_SUBREPO)" ]; then repo_prefix="$(DOCKER_SUBREPO)/"; fi; \
+			for image in $(DOCKER_IMAGES); do \
+				echo "Image: $$image"; \
+				echo ""; \
+				response=$$(curl $(DOCKER_CURL_TIMEOUT_FLAGS) -sS --config "$$curl_config_file" "https://$(REGISTRY)/v2/$${repo_prefix}$$image/tags/list"); \
+				if [ -z "$$response" ]; then \
+					echo "(empty response from registry)"; \
+					if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 			elif command -v jq >/dev/null; then \
 				if echo "$$response" | jq -e . >/dev/null; then \
 					if echo "$$response" | jq -e '.errors? // empty' >/dev/null; then \
@@ -318,6 +336,8 @@ list-docker-%:
 				echo ""; \
 				echo "$$response" | python3 -m json.tool || echo "$$response"; \
 			fi; \
-			echo ""; \
-		done; \
-	fi
+				echo ""; \
+			done; \
+			rm -f "$$curl_config_file"; \
+			trap - EXIT INT TERM; \
+		fi

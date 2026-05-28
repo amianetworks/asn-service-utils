@@ -16,8 +16,10 @@ DEBIAN_METADATA_CMD ?= $(DEBIAN_PACKAGE_CMD) metadata
 DEBIAN_ALLOW_INSECURE_TLS ?= no
 DEBIAN_INSECURE_TLS_APPROVED ?= no
 DEBIAN_CURL_TLS_FLAGS ?= $(if $(filter yes,$(DEBIAN_ALLOW_INSECURE_TLS)),-k,)
-DEBIAN_CURL_TIMEOUT_FLAGS ?= --connect-timeout 10 --max-time 300 --retry 2 --retry-delay 2 --retry-connrefused
-DEBIAN_CURL_FLAGS ?= $(DEBIAN_CURL_TLS_FLAGS) $(DEBIAN_CURL_TIMEOUT_FLAGS)
+DEBIAN_CURL_TIMEOUT_FLAGS ?= --connect-timeout 10 --max-time 300
+DEBIAN_CURL_RETRY_FLAGS ?= --retry 2 --retry-delay 2 --retry-connrefused
+DEBIAN_CURL_READ_FLAGS ?= $(DEBIAN_CURL_TLS_FLAGS) $(DEBIAN_CURL_TIMEOUT_FLAGS) $(DEBIAN_CURL_RETRY_FLAGS)
+DEBIAN_CURL_MUTATION_FLAGS ?= $(DEBIAN_CURL_TLS_FLAGS) $(DEBIAN_CURL_TIMEOUT_FLAGS)
 
 # The list/push recipes read credentials through shell variables such as
 # $${DEBIAN_REPO_USER_CN} so curl invocations do not contain make-expanded
@@ -35,6 +37,9 @@ define func_check_debian_curl_tls_flags
 			-k|--insecure) \
 				if [ "$(DEBIAN_ALLOW_INSECURE_TLS)" != "yes" ]; then \
 					echo "ERROR: insecure Debian curl TLS flag '$$flag' requires DEBIAN_ALLOW_INSECURE_TLS=yes."; \
+					exit 1; \
+				elif [ "$(DEBIAN_INSECURE_TLS_APPROVED)" != "yes" ]; then \
+					echo "ERROR: insecure Debian curl TLS flag '$$flag' requires DEBIAN_INSECURE_TLS_APPROVED=yes plus explicit release approval."; \
 					exit 1; \
 				fi ;; \
 		esac; \
@@ -87,7 +92,11 @@ check-push-debian-sites:
 	fi
 	@if [ "$(DEBIAN_REQUIRE_REMOTE_AUTH)" = "yes" ] && [ "$(DEBIAN_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
-		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
+			echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
+			exit 1; \
+		fi
+	@if ! command -v jq >/dev/null; then \
+		echo "ERROR: jq is required before Debian repository mutation."; \
 		exit 1; \
 	fi
 	@if [ "$(DEBIAN_USER_SET)" = "yes" ] && [ "$(DEBIAN_USER_FORMAT)" != "user:password" ]; then \
@@ -259,20 +268,28 @@ define func_push_debs
 			echo ""; \
 			echo "ERROR: package identity check failed before any remote repository mutation."; \
 			exit 1; \
-		fi; \
-		echo ""; \
-		snapshot="$(T_SUBREPO)-$$(date +%s)"; \
-		curl_response_file="$$(mktemp "$${TMPDIR:-/tmp}/debian-push-response.XXXXXX")"; \
-		curl_config_file="$$(mktemp "$${TMPDIR:-/tmp}/debian-curl-config.XXXXXX")"; \
+			fi; \
+			echo ""; \
+			snapshot="$(T_SUBREPO)-$$(date +%s)"; \
+			if ! command -v jq >/dev/null; then \
+				echo "ERROR: jq is required to parse repository package lists before any remote mutation."; \
+				exit 1; \
+			fi; \
+			curl_response_file="$$(mktemp "$${TMPDIR:-/tmp}/debian-push-response.XXXXXX")"; \
+			curl_config_file="$$(mktemp "$${TMPDIR:-/tmp}/debian-curl-config.XXXXXX")"; \
 		chmod 600 "$$curl_config_file"; \
 		repo_credential="$${$(T_USER_VAR)}"; \
 		printf 'user = "%s"\n' "$$repo_credential" > "$$curl_config_file"; \
 		trap 'rm -f "$$curl_response_file" "$$curl_config_file"' EXIT; \
 		trap 'rm -f "$$curl_response_file" "$$curl_config_file"; exit 130' INT; \
-		trap 'rm -f "$$curl_response_file" "$$curl_config_file"; exit 143' TERM; \
-		echo "Cleaning temporary upload directory..."; \
-		: > "$$curl_response_file"; \
-		http_code=$$(curl $(DEBIAN_CURL_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X DELETE --config "$$curl_config_file" "$(T_HOST)/files/${T_SUBREPO}"); \
+			trap 'rm -f "$$curl_response_file" "$$curl_config_file"; exit 143' TERM; \
+			echo "Cleaning temporary upload directory..."; \
+			: > "$$curl_response_file"; \
+			if ! http_code=$$(curl $(DEBIAN_CURL_MUTATION_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X DELETE --config "$$curl_config_file" "$(T_HOST)/files/${T_SUBREPO}"); then \
+				echo "ERROR: failed to clean temporary directory (curl transport failure); refusing to upload into an unknown remote staging state."; \
+				if [ -s "$$curl_response_file" ]; then cat "$$curl_response_file"; fi; \
+				exit 1; \
+			fi; \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Temporary directory cleaned successfully (HTTP $$http_code)"; \
 	elif [ "$$http_code" -eq 404 ]; then \
@@ -285,7 +302,7 @@ define func_push_debs
 	echo ""; \
 	echo "Checking for duplicate packages in repository..."; \
 	: > "$$curl_response_file"; \
-	if ! http_code=$$(curl $(DEBIAN_CURL_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X GET --config "$$curl_config_file" -H "Content-Type: application/json" "$(T_HOST)/repos/${T_SUBREPO}/packages"); then \
+	if ! http_code=$$(curl $(DEBIAN_CURL_READ_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X GET --config "$$curl_config_file" -H "Content-Type: application/json" "$(T_HOST)/repos/${T_SUBREPO}/packages"); then \
 			echo "ERROR: could not fetch repository package list; refusing to upload without duplicate protection."; \
 			if [ -s "$$curl_response_file" ]; then cat "$$curl_response_file"; fi; \
 			exit 1; \
@@ -298,9 +315,6 @@ define func_push_debs
 	fi; \
 	if [ -z "$$response" ]; then \
 		echo "ERROR: repository package list response is empty; refusing to upload without duplicate protection."; \
-		exit 1; \
-	elif ! command -v jq >/dev/null; then \
-		echo "ERROR: jq is required to parse repository package lists before upload."; \
 		exit 1; \
 	elif ! printf "%s" "$$response" | jq -e 'type == "array" and all(.[]; type == "string")' >/dev/null; then \
 		echo "ERROR: repository package list response has an unexpected format; refusing to upload without duplicate protection."; \
@@ -346,7 +360,9 @@ define func_push_debs
 			for file in $$package_files; do \
 				printf "%s" "Uploading $$(basename "$$file") to temporary directory..."; \
 				: > "$$curl_response_file"; \
-				http_code=$$(curl $(DEBIAN_CURL_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X POST --config "$$curl_config_file" -F file=@"$$file" "$(T_HOST)/files/${T_SUBREPO}"); \
+				if ! http_code=$$(curl $(DEBIAN_CURL_MUTATION_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X POST --config "$$curl_config_file" -F file=@"$$file" "$(T_HOST)/files/${T_SUBREPO}"); then \
+					http_code="000"; \
+				fi; \
 		if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 			echo " done (HTTP $$http_code)"; \
 			uploaded_files="$$uploaded_files$$file "; \
@@ -365,7 +381,7 @@ define func_push_debs
 				filename=$$(basename "$$file"); \
 				printf "%s" "   Deleting $$filename from temporary directory..."; \
 				delete_output=$$(mktemp); \
-				if curl $(DEBIAN_CURL_FLAGS) -sS -X DELETE --config "$$curl_config_file" "$(T_HOST)/files/${T_SUBREPO}/$$filename" > "$$delete_output" 2>&1; then \
+				if curl $(DEBIAN_CURL_MUTATION_FLAGS) -sS -X DELETE --config "$$curl_config_file" "$(T_HOST)/files/${T_SUBREPO}/$$filename" > "$$delete_output" 2>&1; then \
 				echo " done"; \
 			else \
 				echo " failed"; \
@@ -382,7 +398,9 @@ define func_push_debs
 		echo ""; \
 			echo "Pushing files from temporary directory to repository..."; \
 			: > "$$curl_response_file"; \
-			http_code=$$(curl $(DEBIAN_CURL_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X POST --config "$$curl_config_file" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); \
+			if ! http_code=$$(curl $(DEBIAN_CURL_MUTATION_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X POST --config "$$curl_config_file" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); then \
+				http_code="000"; \
+			fi; \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Files pushed to repository successfully (HTTP $$http_code)"; \
 		else \
@@ -395,7 +413,9 @@ define func_push_debs
 		echo ""; \
 			echo "Creating snapshot $$snapshot..."; \
 			: > "$$curl_response_file"; \
-			http_code=$$(curl $(DEBIAN_CURL_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X POST --config "$$curl_config_file" -H "Content-Type: application/json" -d "{\"Name\": \"$$snapshot\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); \
+			if ! http_code=$$(curl $(DEBIAN_CURL_MUTATION_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X POST --config "$$curl_config_file" -H "Content-Type: application/json" -d "{\"Name\": \"$$snapshot\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); then \
+				http_code="000"; \
+			fi; \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Snapshot created successfully (HTTP $$http_code)"; \
 		else \
@@ -406,7 +426,9 @@ define func_push_debs
 		echo ""; \
 			echo "Publishing snapshot $$snapshot..."; \
 			: > "$$curl_response_file"; \
-			http_code=$$(curl $(DEBIAN_CURL_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X PUT --config "$$curl_config_file" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"$$snapshot\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); \
+			if ! http_code=$$(curl $(DEBIAN_CURL_MUTATION_FLAGS) -sS -w "%{http_code}" -o "$$curl_response_file" -X PUT --config "$$curl_config_file" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"$$snapshot\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); then \
+				http_code="000"; \
+			fi; \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Snapshot published successfully (HTTP $$http_code)"; \
 		else \
@@ -455,7 +477,7 @@ define func_list_remote_debs
 	trap 'rm -f "$$curl_config_file"' EXIT; \
 	trap 'rm -f "$$curl_config_file"; exit 130' INT; \
 	trap 'rm -f "$$curl_config_file"; exit 143' TERM; \
-	response=$$(curl $(DEBIAN_CURL_FLAGS) -sS -X GET --config "$$curl_config_file" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages" 2>&1); \
+	response=$$(curl $(DEBIAN_CURL_READ_FLAGS) -sS -X GET --config "$$curl_config_file" -H "Content-Type: application/json" "$(T_HOST)/repos/$(T_SUBREPO)/packages" 2>&1); \
 	curl_status=$$?; \
 	rm -f "$$curl_config_file"; \
 	trap - EXIT INT TERM; \
