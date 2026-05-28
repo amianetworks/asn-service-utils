@@ -9,7 +9,7 @@
 
 RELEASE_CONFIG_STRICT ?= no
 RELEASE_CONFIG_CHECK_DOCKER_LOGIN ?= yes
-PUSH_PLAN_CHECK_LOCAL_IMAGES ?= yes
+PUSH_PLAN_CHECK_LOCAL_IMAGES ?= no
 
 .PHONY: \
 	check-release-config check-release-config-strict .check-release-config \
@@ -162,14 +162,26 @@ check-release-config-strict:
 plan-push: plan-push-docker plan-push-debian
 
 plan-push-docker:
-	@printf "## Docker Publish Plan\n"; \
+	@set -e; \
+	plan_version="$(DOCKER_PUSH_VERSION)"; \
+	plan_version_error=""; \
+	if [ -z "$$plan_version" ]; then \
+		if plan_version="$$( $(BUILD_MANIFEST_CMD) require-lane --lane docker $(BUILD_MANIFEST_COMMON_ARGS) 2>&1 )"; then \
+			:; \
+		else \
+			plan_version_error="$$plan_version"; \
+			plan_version="(manifest docker lane unavailable)"; \
+		fi; \
+	fi; \
+	printf "## Docker Publish Plan\n"; \
 	printf "  %-24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"; \
 	printf "  %-24s : %s\n" "Images" "$(DOCKER_IMAGES)"; \
-	printf "  %-24s : %s\n" "Version tag" "$(DOCKER_PUSH_VERSION)"; \
+	printf "  %-24s : %s\n" "Version tag" "$$plan_version"; \
 	printf "  %-24s : %s\n" "Latest tag" "$(DOCKER_PUSH_LATEST)"; \
-	printf "  %-24s : %s\n" "No-upload guarantee" "no docker tag/push is executed"
-	@for site in $(DOCKER_REGISTRY_SITES); do \
-		$(MAKE) -s .plan-push-docker-site SITE=$$site; \
+	printf "  %-24s : %s\n" "No-upload guarantee" "no docker tag/push is executed"; \
+	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
+	for site in $(DOCKER_REGISTRY_SITES); do \
+		$(MAKE) -s .plan-push-docker-site SITE=$$site DOCKER_PUSH_PLAN_VERSION="$$plan_version"; \
 	done
 
 .plan-push-docker-site:
@@ -178,30 +190,51 @@ plan-push-docker:
 	$(eval PUSH_PLAN_DOCKER_PREFIX := $(if $(DOCKER_SUBREPO),$(PUSH_PLAN_DOCKER_REGISTRY)/$(DOCKER_SUBREPO),$(PUSH_PLAN_DOCKER_REGISTRY)))
 	@printf "  %-24s : %s\n" "Docker site" "$(PUSH_PLAN_DOCKER_SITE)"; \
 	printf "  %-24s : %s\n" "Registry" "$(if $(PUSH_PLAN_DOCKER_REGISTRY),$(PUSH_PLAN_DOCKER_REGISTRY),not configured)"; \
+	plan_version="$(DOCKER_PUSH_PLAN_VERSION)"; \
 	for image in $(DOCKER_IMAGES); do \
-		printf "  %-24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:$(DOCKER_PUSH_VERSION)"; \
+		if [ "$${plan_version#\(}" != "$$plan_version" ]; then \
+			printf "  %-24s : %s\n" "Would push" "$$image (version unavailable)"; \
+			continue; \
+		fi; \
+		printf "  %-24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:$$plan_version"; \
 		if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
 			printf "  %-24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:latest"; \
 		fi; \
 		if [ "$(PUSH_PLAN_CHECK_LOCAL_IMAGES)" = "yes" ]; then \
-			if inspect_error=$$(docker image inspect "$$image:$(DOCKER_PUSH_VERSION)" 2>&1 >/dev/null); then \
-				printf "  %-24s : %s\n" "$$image:$(DOCKER_PUSH_VERSION)" "local image present"; \
+			inspect_output=$$(mktemp); \
+			if docker image inspect "$$image:$$plan_version" > "$$inspect_output" 2>&1; then \
+				printf "  %-24s : %s\n" "$$image:$$plan_version" "local image present"; \
 			else \
-				printf "  %-24s : %s\n" "$$image:$(DOCKER_PUSH_VERSION)" "local image missing"; \
-				if [ -n "$$inspect_error" ]; then printf '%s\n' "$$inspect_error" | sed 's/^/  Docker Error: /'; fi; \
+				printf "  %-24s : %s\n" "$$image:$$plan_version" "local image missing"; \
+				if [ -s "$$inspect_output" ]; then sed 's/^/  Docker Error: /' "$$inspect_output"; fi; \
 			fi; \
+			rm -f "$$inspect_output"; \
+		else \
+			printf "  %-24s : %s\n" "$$image:$$plan_version" "local image check skipped (set PUSH_PLAN_CHECK_LOCAL_IMAGES=yes)"; \
 		fi; \
 	done; \
 	echo ""
 
 plan-push-debian:
-	@printf "## Debian Publish Plan\n"; \
+	@set -e; \
+	plan_version="$(DEBIAN_PUSH_VERSION)"; \
+	plan_version_error=""; \
+	if [ -z "$$plan_version" ]; then \
+		if plan_version="$$( $(BUILD_MANIFEST_CMD) require-lane --lane debian $(BUILD_MANIFEST_COMMON_ARGS) 2>&1 )"; then \
+			:; \
+		else \
+			plan_version_error="$$plan_version"; \
+			plan_version="(manifest debian lane unavailable)"; \
+		fi; \
+	fi; \
+	printf "## Debian Publish Plan\n"; \
 	printf "  %-24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
 	printf "  %-24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"; \
-	printf "  %-24s : %s\n" "Package version" "$(DEBIAN_PUSH_VERSION)"; \
-	printf "  %-24s : %s\n" "No-upload guarantee" "no curl upload/publish is executed"
-	@for site in $(DEBIAN_REPO_SITES); do \
-		$(MAKE) -s .plan-push-debian-site SITE=$$site; \
+	printf "  %-24s : %s\n" "Package version" "$$plan_version"; \
+	printf "  %-24s : %s\n" "No-upload guarantee" "no curl upload/publish is executed"; \
+	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
+	for site in $(DEBIAN_REPO_SITES); do \
+		$(MAKE) -s .plan-push-debian-site SITE=$$site DEBIAN_PUSH_PLAN_VERSION="$$plan_version"; \
 	done
 
 .plan-push-debian-site:
@@ -214,7 +247,18 @@ plan-push-debian:
 	printf "  %-24s : %s\n" "Repo host" "$(if $(PUSH_PLAN_DEBIAN_HOST),$(PUSH_PLAN_DEBIAN_HOST),not configured)"; \
 	printf "  %-24s : %s\n" "Repo path" "$(if $(PUSH_PLAN_DEBIAN_PATH),$(PUSH_PLAN_DEBIAN_PATH),not configured)"; \
 	printf "  %-24s : %s\n" "Subrepo" "$(if $(PUSH_PLAN_DEBIAN_SUBREPO),$(PUSH_PLAN_DEBIAN_SUBREPO),not configured)"; \
-	for file in $(DEBIAN_PACKAGE_FILES); do \
+	plan_version="$(DEBIAN_PUSH_PLAN_VERSION)"; \
+	package_files="$(DEBIAN_PACKAGE_FILES)"; \
+	if [ -z "$$package_files" ] && [ "$${plan_version#\(}" = "$$plan_version" ] && [ -d "$(DEBIAN_PACKAGE_DIR)" ]; then \
+		for service in $(DEBIAN_SERVICES); do \
+			files=$$(find "$(DEBIAN_PACKAGE_DIR)" -maxdepth 1 -type f -name "$${service}_$${plan_version}_amd64.deb" -print | sort); \
+			if [ -n "$$files" ]; then package_files="$$package_files $$files"; fi; \
+		done; \
+	fi; \
+	if [ -z "$$package_files" ]; then \
+		printf "  %-24s : %s\n" "Would upload" "(no matching local packages)"; \
+	fi; \
+	for file in $$package_files; do \
 		if [ -f "$$file" ]; then \
 			printf "  %-24s : %s\n" "Would upload" "$$file"; \
 		else \

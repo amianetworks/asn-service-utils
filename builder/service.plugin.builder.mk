@@ -123,6 +123,14 @@ BUILDER_BASE_IMAGE_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/builder_base_image.s
 PROTO_TOOLS_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/proto_tools.sh
 PUBLISH_VARS_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/publish_vars.sh
 DEBIAN_PACKAGE_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/debian_package.sh
+
+# Framework-owned runtime and toolchain versions. The include stays optional so
+# `make init` can repair a missing service-utils checkout, but checked build
+# targets must pass `.check_service_utils_version_file` before they consume the
+# values. Keep this before manifest argument defaults so DEP_VERSION_ASN is not
+# captured as empty during Make expansion.
+-include $(BUILD_ENV_ASN_VERSION_FILE)
+
 BUILD_MANIFEST_ARGS ?=
 BUILD_MANIFEST_LANE ?=
 BUILD_MANIFEST_QUERY_FILE ?= $(BUILD_MANIFEST_FILE)
@@ -135,10 +143,12 @@ BUILD_MANIFEST_COMMIT_PLUGIN_ARGS ?= $(BUILD_MANIFEST_COMMON_ARGS) --dev-start "
 BUILD_MANIFEST_STAGE_DOCS_EXTRA_ARGS ?= $(BUILD_MANIFEST_ARGS)
 BUILD_MANIFEST_STAGE_DOCS_ARGS ?= $(BUILD_MANIFEST_CORE_ARGS) --docs-dir "$(STAGE_DOCS_DIR)" $(BUILD_MANIFEST_STAGE_DOCS_EXTRA_ARGS) --docs-required-artifacts "$(STAGE_DOCS_DIR)/release/ReleaseManifest.yaml $(STAGE_DOCS_DIR)/release/DocsChecksums.tsv $(STAGE_DOCS_DIR)/index.html" --docs-version-file "$(STAGE_DOCS_DIR)/release/ReleaseManifest.yaml" --docs-version-key "$(SERVICE_DOCS_VERSION_KEY)"
 # Build identity is shared builder state. If the caller did not pass
-# VERSION_BUILD explicitly, expose the current manifest version only when it
-# matches the selected build mode and service VERSION.
-VERSION_BUILD ?= $(shell $(BUILD_MANIFEST_CMD) active-version-build $(BUILD_MANIFEST_COMMON_ARGS))
+# VERSION_BUILD explicitly, leave it empty here and let recipes query
+# build_manifest.sh with fail-visible shell commands. Parse-time $(shell ...)
+# calls cannot propagate exit status, which makes manifest failures easy to miss.
+VERSION_BUILD ?=
 SERVICE_BUILD_MAKEFILE ?= Makefile
+SERVICE_RECURSIVE_MAKE ?= $(MAKE)
 SERVICE_BUILD_PLUGIN_TARGET ?= build.plugin
 SERVICE_BUILD_DEBIAN_TARGET ?= build.deb
 SERVICE_BUILD_CHECK_DEBIAN_TARGET ?= check.deb
@@ -215,15 +225,15 @@ build-plugin: check proto-gen
 	version_build="$$$$($(BUILD_MANIFEST_CMD) reserve-plugin-version $(BUILD_MANIFEST_RESERVE_ARGS))"; \
 	echo ">> Build Plugin Version"; \
 	printf "  %15s : %s\n" "Version" "$$$$version_build"; \
-	make --no-print-directory service-build-plugin VERSION_BUILD="$$$$version_build"; \
+	$$(SERVICE_RECURSIVE_MAKE) --no-print-directory service-build-plugin VERSION_BUILD="$$$$version_build"; \
 	if service_utils_ref="$$$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD 2>&1)"; then \
 		:; \
 	else \
 		echo "WARN: could not resolve service-utils git ref: $$$$service_utils_ref" >&2; \
 		service_utils_ref="unknown"; \
 	fi; \
-	$(BUILD_MANIFEST_CMD) commit-plugin \
-		$(BUILD_MANIFEST_COMMIT_PLUGIN_ARGS) \
+	$$(BUILD_MANIFEST_CMD) commit-plugin \
+		$$(BUILD_MANIFEST_COMMIT_PLUGIN_ARGS) \
 		--version-build "$$$$version_build" \
 		--service-utils-ref "$$$$service_utils_ref"
 	@echo "Built artifacts (DIR):"
@@ -232,9 +242,21 @@ build-plugin: check proto-gen
 endef
 $(if $(filter yes,$(SERVICE_UTILS_OWN_BUILD_TARGETS)),$(eval $(service_utils_owned_lifecycle_targets)))
 
-# Any artifacts should be under build/. Cleaning is simple.
+# Any artifacts should be under build/. Guard this shared clean path so a bad
+# override cannot remove source, config, or parent directories.
 clean:
-	@rm -rf $(SERVICE_CLEAN_DIRS)
+	@set -e; \
+	if [ -z "$(strip $(SERVICE_CLEAN_DIRS))" ]; then \
+		echo "No service clean directories configured."; \
+		exit 0; \
+	fi; \
+	for path in $(SERVICE_CLEAN_DIRS); do \
+		case "$$path" in \
+			""|"."|"/"|*"/.."|*"/../"*|".."|"../"*) echo "ERROR: refusing unsafe clean path: '$$path'."; exit 2 ;; \
+			build|build/|build/*|./build|./build/|./build/*) rm -rf "$$path" ;; \
+			*) echo "ERROR: refusing clean path outside build/: $$path"; exit 2 ;; \
+		esac; \
+	done
 
 ##----------------------------------------------------------------------------##
 ## Variable checks ##
@@ -268,14 +290,14 @@ clean:
 	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
 	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DOCKER)
 	$(eval VAR_REGISTRY := $(DOCKER_REGISTRY_$(VAR_SITE)))
-	@$(PUBLISH_VARS_CMD) print --kind docker --site "$(VAR_SITE)" --endpoint-name "DOCKER_REGISTRY_$(VAR_SITE)" --endpoint "$(VAR_REGISTRY)" --profile "$(VAR_PROFILE)" --auth-var "$(VAR_AUTH_VAR)" --credential-var "DOCKER_REGISTRY_$(VAR_SITE)_USER" --used-by "push-docker-$(shell echo $(VAR_SITE) | tr A-Z a-z)"
+	@$(PUBLISH_VARS_CMD) print --kind docker --site "$(VAR_SITE)" --endpoint-name "DOCKER_REGISTRY_$(VAR_SITE)" --endpoint "$(VAR_REGISTRY)" --profile "$(VAR_PROFILE)" --auth-var "$(VAR_AUTH_VAR)" --credential-var "DOCKER_REGISTRY_$(VAR_SITE)_USER" --used-by "push-docker-$(call lowercase,$(VAR_SITE))"
 
 .print-debian-push-var:
 	$(eval VAR_SITE := $(call uppercase,$(SITE)))
 	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
 	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DEBIAN)
 	$(eval VAR_HOST := $(DEBIAN_REPO_HOST_$(VAR_SITE)))
-	@$(PUBLISH_VARS_CMD) print --kind debian --site "$(VAR_SITE)" --endpoint-name "DEBIAN_REPO_HOST_$(VAR_SITE)" --endpoint "$(VAR_HOST)" --profile "$(VAR_PROFILE)" --auth-var "$(VAR_AUTH_VAR)" --credential-var "DEBIAN_REPO_USER_$(VAR_SITE)" --used-by "push-debian-$(shell echo $(VAR_SITE) | tr A-Z a-z)"
+	@$(PUBLISH_VARS_CMD) print --kind debian --site "$(VAR_SITE)" --endpoint-name "DEBIAN_REPO_HOST_$(VAR_SITE)" --endpoint "$(VAR_HOST)" --profile "$(VAR_PROFILE)" --auth-var "$(VAR_AUTH_VAR)" --credential-var "DEBIAN_REPO_USER_$(VAR_SITE)" --used-by "push-debian-$(call lowercase,$(VAR_SITE))"
 
 .check_build_vars:
 	@failed=0; \
@@ -606,7 +628,8 @@ increment-build:
 ##----------------------------------------------------------------------------##
 ## Debian Package handling ##
 
-uppercase = $(shell echo $(1) | tr a-z A-Z)
+uppercase = $(strip $(subst z,Z,$(subst y,Y,$(subst x,X,$(subst w,W,$(subst v,V,$(subst u,U,$(subst t,T,$(subst s,S,$(subst r,R,$(subst q,Q,$(subst p,P,$(subst o,O,$(subst n,N,$(subst m,M,$(subst l,L,$(subst k,K,$(subst j,J,$(subst i,I,$(subst h,H,$(subst g,G,$(subst f,F,$(subst e,E,$(subst d,D,$(subst c,C,$(subst b,B,$(subst a,A,$(1))))))))))))))))))))))))))))
+lowercase = $(strip $(subst Z,z,$(subst Y,y,$(subst X,x,$(subst W,w,$(subst V,v,$(subst U,u,$(subst T,t,$(subst S,s,$(subst R,r,$(subst Q,q,$(subst P,p,$(subst O,o,$(subst N,n,$(subst M,m,$(subst L,l,$(subst K,k,$(subst J,j,$(subst I,i,$(subst H,h,$(subst G,g,$(subst F,f,$(subst E,e,$(subst D,d,$(subst C,c,$(subst B,b,$(subst A,a,$(1))))))))))))))))))))))))))))
 
 require-build-manifest:
 	@version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane plugin $(BUILD_MANIFEST_COMMON_ARGS))"; \
@@ -642,7 +665,13 @@ build-debian: require-build-manifest check $(DEBIAN_BUILD_PRE_TARGETS) check-deb
 	@echo
 
 clean-debian:
-	@rm -rf "$(DEBIAN_PATH)"
+	@set -e; \
+	path="$(DEBIAN_PATH)"; \
+	case "$$path" in \
+		""|"."|"/"|*"/.."|*"/../"*|".."|"../"*) echo "ERROR: refusing unsafe Debian clean path: '$$path'."; exit 2 ;; \
+		build|build/|build/*|./build|./build/|./build/*) rm -rf "$$path" ;; \
+		*) echo "ERROR: refusing Debian clean path outside build/: $$path"; exit 2 ;; \
+	esac
 
 check-debian-inputs:
 	@$(MAKE) --no-print-directory -f $(SERVICE_BUILD_MAKEFILE) $(SERVICE_BUILD_CHECK_DEBIAN_TARGET)
@@ -733,7 +762,13 @@ DOCKER_PUSH_LATEST ?= $(if $(filter pro,$(BUILD_MODE)),yes,no)
 	done; \
 	for glob_template in $(SERVICE_DOCKER_REQUIRED_GLOBS); do \
 		glob="$${glob_template//@VERSION_BUILD@/$$version_build}"; \
-		matches="$$(compgen -G "$$glob" || true)"; \
+		if matches="$$(compgen -G "$$glob" 2>&1)"; then \
+			:; \
+		elif [ -n "$$matches" ]; then \
+			echo "ERROR: Docker input glob probe failed for $$glob"; \
+			echo "$$matches"; \
+			missing=1; \
+		fi; \
 		if [ -z "$$matches" ]; then \
 			echo "Missing Docker input: $$glob"; \
 			missing=1; \
@@ -760,11 +795,21 @@ DOCKER_PUSH_LATEST ?= $(if $(filter pro,$(BUILD_MODE)),yes,no)
 	missing=""; latest=""; \
 	for image in $(DOCKER_IMAGES); do \
 		ref="$$image:$$selected_version"; \
-		if ! docker image inspect "$$ref" >/dev/null 2>&1; then \
+		inspect_output=$$(mktemp); \
+		if docker image inspect "$$ref" > "$$inspect_output" 2>&1; then \
+			rm -f "$$inspect_output"; \
+			:; \
+		else \
 			missing="$${missing}$${missing:+ }$$ref"; \
+			if [ -s "$$inspect_output" ]; then \
+				latest="$${latest}$${latest:+ }docker-inspect-error:$$ref"; \
+				sed "s/^/Docker inspect $$ref: /" "$$inspect_output"; \
+			fi; \
+			rm -f "$$inspect_output"; \
 			if images_output="$$(docker images --format '{{.Repository}}\t{{.Tag}}' "$$image" 2>&1)"; then \
 				local_latest="$$(printf '%s\n' "$$images_output" | awk -F '\t' '$$2 != "<none>" { print $$1 ":" $$2; exit }')"; \
 			else \
+				if [ -n "$$images_output" ]; then printf "%s\n" "$$images_output" | sed "s/^/Docker images $$image: /"; fi; \
 				local_latest="$$image:(docker unavailable)"; \
 			fi; \
 			[ -n "$$local_latest" ] || local_latest="$$image:(none)"; \
@@ -803,10 +848,6 @@ define func_build_docker
 endef
 
 #------------------------------------------------------------------------------#
-
-# Framework-owned runtime and toolchain versions. This include intentionally
-# happens after service config so copied service projects inherit these values.
--include $(BUILD_ENV_ASN_VERSION_FILE)
 
 .check_service_utils_version_file:
 	@if [ ! -f "$(BUILD_ENV_ASN_VERSION_FILE)" ]; then \
@@ -941,7 +982,13 @@ check.deb:
 	fi
 
 build.deb: .require-version-build-var
-	@rm -rf "$(DEBIAN_PATH)"
+	@set -e; \
+	path="$(DEBIAN_PATH)"; \
+	case "$$path" in \
+		""|"."|"/"|*"/.."|*"/../"*|".."|"../"*) echo "ERROR: refusing unsafe Debian clean path: '$$path'."; exit 2 ;; \
+		build|build/|build/*|./build|./build/|./build/*) rm -rf "$$path" ;; \
+		*) echo "ERROR: refusing Debian clean path outside build/: $$path"; exit 2 ;; \
+	esac
 	@$(MAKE) --no-print-directory check.deb
 	@echo "Building Debian packages for: $(DEBIAN_SERVICES)"
 	@set -e; \

@@ -19,7 +19,7 @@ DOCKER_SUBREPO ?=
 # $${DOCKER_REGISTRY_CN_USER} so curl invocations do not contain make-expanded
 # secret values. Export the selected site variables because projects often
 # derive them from RELEASE_SECRET_* values in config.mk or ignored local.mk.
-docker_registry_uppercase = $(shell echo $(1) | tr a-z A-Z)
+docker_registry_uppercase = $(call uppercase,$(1))
 DOCKER_REGISTRY_USER_EXPORTS := $(foreach site,$(DOCKER_REGISTRY_SITES),DOCKER_REGISTRY_$(call docker_registry_uppercase,$(site))_USER)
 export $(DOCKER_REGISTRY_USER_EXPORTS)
 
@@ -89,26 +89,36 @@ check-push-docker-sites:
 .push-docker-site: $(DOCKER_INTERNAL_PUSH_CHECK_TARGETS)
 	$(eval DOCKER_SITE := $(call uppercase,$(SITE)))
 	$(eval REGISTRY := $(DOCKER_REGISTRY_$(DOCKER_SITE)))
-	@echo ">> Docker Publish Target"
-	@printf "  %15s : %s\n" "Site" "$(DOCKER_SITE)"
-	@printf "  %15s : %s\n" "Registry" "$(REGISTRY)"
-	@printf "  %15s : %s\n" "Subrepo" "$(if $(DOCKER_SUBREPO),$(DOCKER_SUBREPO),(none))"
-	@printf "  %15s : %s\n" "Version Tag" "$(DOCKER_PUSH_VERSION)"
-	@printf "  %15s : %s\n" "Latest Tag" "$(DOCKER_PUSH_LATEST)"
-	@echo ""
-	@for image in $(DOCKER_IMAGES); do \
-		if ! inspect_error="$$(docker image inspect "$$image:$(DOCKER_PUSH_VERSION)" 2>&1 >/dev/null)"; then \
-			echo "ERROR: local image $$image:$(DOCKER_PUSH_VERSION) is missing. Run make build-docker first."; \
-			if [ -n "$$inspect_error" ]; then echo "$$inspect_error"; fi; \
+	@set -e; \
+	push_version="$(DOCKER_PUSH_VERSION)"; \
+	if [ -z "$$push_version" ]; then \
+		push_version="$$($(BUILD_MANIFEST_CMD) require-lane --lane docker $(BUILD_MANIFEST_COMMON_ARGS))"; \
+	fi; \
+	echo ">> Docker Publish Target"; \
+	printf "  %15s : %s\n" "Site" "$(DOCKER_SITE)"; \
+	printf "  %15s : %s\n" "Registry" "$(REGISTRY)"; \
+	printf "  %15s : %s\n" "Subrepo" "$(if $(DOCKER_SUBREPO),$(DOCKER_SUBREPO),(none))"; \
+	printf "  %15s : %s\n" "Version Tag" "$$push_version"; \
+	printf "  %15s : %s\n" "Latest Tag" "$(DOCKER_PUSH_LATEST)"; \
+	echo ""; \
+	for image in $(DOCKER_IMAGES); do \
+		inspect_output=$$(mktemp); \
+		if docker image inspect "$$image:$$push_version" > "$$inspect_output" 2>&1; then \
+			:; \
+		else \
+			echo "ERROR: local image $$image:$$push_version is missing. Run make build-docker first."; \
+			if [ -s "$$inspect_output" ]; then cat "$$inspect_output"; fi; \
+			rm -f "$$inspect_output"; \
 			exit 1; \
 		fi; \
-	done
-	@for image in $(DOCKER_IMAGES); do \
-		$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=$(DOCKER_PUSH_VERSION) REGISTRY=$(REGISTRY); \
-	done
-	@if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
+		rm -f "$$inspect_output"; \
+	done; \
+	for image in $(DOCKER_IMAGES); do \
+		$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=$$push_version REGISTRY=$(REGISTRY); \
+	done; \
+	if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
 		for image in $(DOCKER_IMAGES); do \
-			$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=latest REGISTRY=$(REGISTRY) SOURCE_TAG=$(DOCKER_PUSH_VERSION); \
+			$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=latest REGISTRY=$(REGISTRY) SOURCE_TAG=$$push_version; \
 		done; \
 	fi
 
@@ -182,11 +192,14 @@ list-docker-%:
 	@echo ">> Local Docker Images"
 	@printf "  %15s : %s\n" "$(DOCKER_LIST_LOCAL_LABEL)" "$(DOCKER_IMAGES)"
 	@echo ""
-	@if ! docker_error="$$(docker info 2>&1 >/dev/null)"; then \
+	@docker_info_output=$$(mktemp); \
+	if ! docker info > "$$docker_info_output" 2>&1; then \
 		echo "Docker daemon is not running or not reachable."; \
-		if [ -n "$$docker_error" ]; then echo "$$docker_error"; fi; \
+		if [ -s "$$docker_info_output" ]; then cat "$$docker_info_output"; fi; \
+		rm -f "$$docker_info_output"; \
 		echo ""; \
 	else \
+		rm -f "$$docker_info_output"; \
 		for image in $(DOCKER_IMAGES); do \
 			printf "Image: %s\n" "$$image"; \
 			echo ""; \

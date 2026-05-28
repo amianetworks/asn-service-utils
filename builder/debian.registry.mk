@@ -18,7 +18,7 @@ DEBIAN_METADATA_CMD ?= $(DEBIAN_PACKAGE_CMD) metadata
 # $${DEBIAN_REPO_USER_CN} so curl invocations do not contain make-expanded
 # secret values. Export the selected site variables because projects often
 # derive them from RELEASE_SECRET_* values in config.mk or ignored local.mk.
-debian_registry_uppercase = $(shell echo $(1) | tr a-z A-Z)
+debian_registry_uppercase = $(call uppercase,$(1))
 DEBIAN_REPO_USER_EXPORTS := $(foreach site,$(DEBIAN_REPO_SITES),DEBIAN_REPO_USER_$(call debian_registry_uppercase,$(site)))
 export $(DEBIAN_REPO_USER_EXPORTS)
 
@@ -82,7 +82,6 @@ check-push-debian-sites:
 	$(eval T_USER_SET := $(if $(strip $(DEBIAN_REPO_USER_$(DEBIAN_SITE))),yes,no))
 	$(eval T_USER_FORMAT := $(if $(findstring :,$(DEBIAN_REPO_USER_$(DEBIAN_SITE))),user:password,invalid))
 	$(eval T_SUBREPO := $(if ${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},__UNCONFIGURED__))
-	$(eval T_SNAPSHOT := ${T_SUBREPO}-$(shell date +%s))
 	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ] || [ "$(T_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
 		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
@@ -100,7 +99,7 @@ check-push-debian-sites:
 	@printf "  %15s : %s\n" "Site" "$(DEBIAN_SITE)"
 	@printf "  %15s : %s\n" "Repo Host" "$(T_HOST)"
 	@printf "  %15s : %s\n" "Subrepo" "$(T_SUBREPO)"
-	@printf "  %15s : %s\n" "Version" "$(DEBIAN_PUSH_VERSION)"
+	@printf "  %15s : %s\n" "Version" "$(if $(strip $(DEBIAN_PUSH_VERSION)),$(DEBIAN_PUSH_VERSION),(manifest debian lane))"
 	@echo ""
 	$(call func_push_debs)
 
@@ -165,11 +164,17 @@ define func_push_debs
 	$(call func_check_variable,T_USER_VAR)
 	$(call func_check_variable,T_SUBREPO)
 
-	@package_files="$(DEBIAN_PACKAGE_FILES)"; \
+	@selected_version="$(DEBIAN_PUSH_VERSION)"; \
+	if [ -z "$$selected_version" ]; then \
+		selected_version="$$($(BUILD_MANIFEST_CMD) require-lane --lane debian $(BUILD_MANIFEST_COMMON_ARGS))"; \
+	fi; \
+	printf "  %15s : %s\n" "Effective Version" "$$selected_version"; \
+	echo ""; \
+	package_files="$(DEBIAN_PACKAGE_FILES)"; \
 	if [ -z "$$package_files" ]; then \
 		if [ -d "$(DEBIAN_PACKAGE_DIR)" ]; then \
 			for svc in $(DEBIAN_SERVICES); do \
-				files=$$(find "$(DEBIAN_PACKAGE_DIR)" -maxdepth 1 -type f -name "$${svc}_*.deb" -print | sort); \
+				files=$$(find "$(DEBIAN_PACKAGE_DIR)" -maxdepth 1 -type f -name "$${svc}_$${selected_version}_amd64.deb" -print | sort); \
 				if [ -n "$$files" ]; then package_files="$$package_files $$files"; fi; \
 			done; \
 		else \
@@ -197,26 +202,42 @@ define func_push_debs
 		echo "ERROR: Debian package file check failed before any remote repository mutation."; \
 		echo "Run make build-debian before $(DEBIAN_TARGET_HINT)."; \
 		exit 1; \
-	fi; \
-	echo ""; \
-	echo "Cleaning temporary upload directory..."; \
-	http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}"); \
+		fi; \
+		echo ""; \
+		snapshot="$(T_SUBREPO)-$$(date +%s)"; \
+		curl_response_file="$$(mktemp "$${TMPDIR:-/tmp}/debian-push-response.XXXXXX")"; \
+		trap 'rm -f "$$curl_response_file"' EXIT; \
+		trap 'rm -f "$$curl_response_file"; exit 130' INT; \
+		trap 'rm -f "$$curl_response_file"; exit 143' TERM; \
+		echo "Cleaning temporary upload directory..."; \
+		: > "$$curl_response_file"; \
+		http_code=$$(curl -k -sS -w "%{http_code}" -o "$$curl_response_file" -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Temporary directory cleaned successfully (HTTP $$http_code)"; \
 	elif [ "$$http_code" -eq 404 ]; then \
 		echo "Temporary directory does not exist (HTTP $$http_code); it will be created."; \
 	else \
-		echo "Warning: failed to clean temporary directory (HTTP $$http_code)."; \
-		if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
-		echo "Continuing with upload."; \
+			echo "Warning: failed to clean temporary directory (HTTP $$http_code)."; \
+			if [ -s "$$curl_response_file" ]; then cat "$$curl_response_file"; fi; \
+			echo "Continuing with upload."; \
+		fi; \
+		echo ""; \
+		echo "Checking for duplicate packages in repository..."; \
+		: > "$$curl_response_file"; \
+		if ! http_code=$$(curl -k -sS -w "%{http_code}" -o "$$curl_response_file" -X GET -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" "$(T_HOST)/repos/${T_SUBREPO}/packages"); then \
+			echo "ERROR: could not fetch repository package list; refusing to upload without duplicate protection."; \
+			if [ -s "$$curl_response_file" ]; then cat "$$curl_response_file"; fi; \
+			exit 1; \
+		fi; \
+		response="$$(cat "$$curl_response_file")"; \
+	if [ "$$http_code" -lt 200 ] || [ "$$http_code" -ge 300 ]; then \
+		echo "ERROR: could not fetch repository package list (HTTP $$http_code); refusing to upload without duplicate protection."; \
+		if [ -n "$$response" ]; then echo "$$response"; fi; \
+		exit 1; \
 	fi; \
-	rm -f /tmp/curl_response.txt; \
-	echo ""; \
-	echo "Checking for duplicate packages in repository..."; \
-	response=$$(curl -k -sS -X GET -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" "$(T_HOST)/repos/${T_SUBREPO}/packages"); \
 	if [ -z "$$response" ]; then \
-		echo "Warning: could not fetch repository package list."; \
-		echo "Continuing with upload."; \
+		echo "ERROR: repository package list response is empty; refusing to upload without duplicate protection."; \
+		exit 1; \
 	else \
 		duplicate_found=false; \
 		metadata_failed=false; \
@@ -254,34 +275,36 @@ define func_push_debs
 		fi; \
 	fi; \
 	upload_success=true; \
-	uploaded_files=""; \
-	for file in $$package_files; do \
-		printf "%s" "Uploading $$(basename $$file) to temporary directory..."; \
-		http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -F file=@$$file "$(T_HOST)/files/${T_SUBREPO}"); \
+		uploaded_files=""; \
+		for file in $$package_files; do \
+			printf "%s" "Uploading $$(basename $$file) to temporary directory..."; \
+			: > "$$curl_response_file"; \
+			http_code=$$(curl -k -sS -w "%{http_code}" -o "$$curl_response_file" -X POST -u "$${$(T_USER_VAR)}" -F file=@$$file "$(T_HOST)/files/${T_SUBREPO}"); \
 		if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 			echo " done (HTTP $$http_code)"; \
 			uploaded_files="$$uploaded_files$$file "; \
-		else \
-			echo " failed (HTTP $$http_code)"; \
-			if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
-			echo ""; \
-			upload_success=false; \
-			break; \
-		fi; \
-	done; \
-	rm -f /tmp/curl_response.txt; \
+			else \
+				echo " failed (HTTP $$http_code)"; \
+				if [ -s "$$curl_response_file" ]; then cat "$$curl_response_file"; fi; \
+				echo ""; \
+				upload_success=false; \
+				break; \
+			fi; \
+		done; \
 	if [ "$$upload_success" = "false" ]; then \
 		echo ""; \
 		echo "Upload failed. Cleaning up temporary files..."; \
 		for file in $$uploaded_files; do \
 			filename=$$(basename $$file); \
 			printf "%s" "   Deleting $$filename from temporary directory..."; \
-			if delete_error=$$(curl -k -sS -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}/$$filename" 2>&1 >/dev/null); then \
+			delete_output=$$(mktemp); \
+			if curl -k -sS -X DELETE -u "$${$(T_USER_VAR)}" "$(T_HOST)/files/${T_SUBREPO}/$$filename" > "$$delete_output" 2>&1; then \
 				echo " done"; \
 			else \
 				echo " failed"; \
-				if [ -n "$$delete_error" ]; then echo "$$delete_error"; fi; \
+				if [ -s "$$delete_output" ]; then cat "$$delete_output"; fi; \
 			fi; \
+			rm -f "$$delete_output"; \
 		done; \
 		echo ""; \
 		echo "ERROR: Debian package upload failed. Process aborted."; \
@@ -289,45 +312,42 @@ define func_push_debs
 	fi; \
 	echo ""; \
 	echo "All files uploaded successfully to temporary directory."; \
-	echo ""; \
-	echo "Pushing files from temporary directory to repository..."; \
-	http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); \
+		echo ""; \
+		echo "Pushing files from temporary directory to repository..."; \
+		: > "$$curl_response_file"; \
+		http_code=$$(curl -k -sS -w "%{http_code}" -o "$$curl_response_file" -X POST -u "$${$(T_USER_VAR)}" "$(T_HOST)/repos/${T_SUBREPO}/file/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Files pushed to repository successfully (HTTP $$http_code)"; \
-	else \
-		echo "Failed to push files to repository (HTTP $$http_code)"; \
-		if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
+		else \
+			echo "Failed to push files to repository (HTTP $$http_code)"; \
+			if [ -s "$$curl_response_file" ]; then cat "$$curl_response_file"; fi; \
+			echo ""; \
+			echo "WARNING: files remain in temporary directory ${T_SUBREPO}."; \
+			exit 1; \
+		fi; \
 		echo ""; \
-		echo "WARNING: files remain in temporary directory ${T_SUBREPO}."; \
-		rm -f /tmp/curl_response.txt; \
-		exit 1; \
-	fi; \
-	rm -f /tmp/curl_response.txt; \
-	echo ""; \
-	echo "Creating snapshot ${T_SNAPSHOT}..."; \
-	http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X POST -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{\"Name\": \"${T_SNAPSHOT}\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); \
+		echo "Creating snapshot $$snapshot..."; \
+		: > "$$curl_response_file"; \
+		http_code=$$(curl -k -sS -w "%{http_code}" -o "$$curl_response_file" -X POST -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{\"Name\": \"$$snapshot\", \"Description\": \"Snapshot created by Makefile. \"}" "$(T_HOST)/repos/${T_SUBREPO}/snapshots"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Snapshot created successfully (HTTP $$http_code)"; \
-	else \
-		echo "Failed to create snapshot (HTTP $$http_code)"; \
-		if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
-		rm -f /tmp/curl_response.txt; \
-		exit 1; \
-	fi; \
-	rm -f /tmp/curl_response.txt; \
-	echo ""; \
-	echo "Publishing snapshot ${T_SNAPSHOT}..."; \
-	http_code=$$(curl -k -sS -w "%{http_code}" -o /tmp/curl_response.txt -X PUT -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"${T_SNAPSHOT}\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); \
+		else \
+			echo "Failed to create snapshot (HTTP $$http_code)"; \
+			if [ -s "$$curl_response_file" ]; then cat "$$curl_response_file"; fi; \
+			exit 1; \
+		fi; \
+		echo ""; \
+		echo "Publishing snapshot $$snapshot..."; \
+		: > "$$curl_response_file"; \
+		http_code=$$(curl -k -sS -w "%{http_code}" -o "$$curl_response_file" -X PUT -u "$${$(T_USER_VAR)}" -H "Content-Type: application/json" -d "{ \"Snapshots\": [{\"Component\": \"main\", \"Name\": \"$$snapshot\"}],\"SigningOptions\": {\"Skip\": false}}" "$(T_HOST)/publish/:/${T_SUBREPO}"); \
 	if [ "$$http_code" -ge 200 ] && [ "$$http_code" -lt 300 ]; then \
 		echo "Snapshot published successfully (HTTP $$http_code)"; \
-	else \
-		echo "Failed to publish snapshot (HTTP $$http_code)"; \
-		if [ -s /tmp/curl_response.txt ]; then cat /tmp/curl_response.txt; fi; \
-		rm -f /tmp/curl_response.txt; \
-		exit 1; \
-	fi; \
-	rm -f /tmp/curl_response.txt; \
-	echo ""; \
+		else \
+			echo "Failed to publish snapshot (HTTP $$http_code)"; \
+			if [ -s "$$curl_response_file" ]; then cat "$$curl_response_file"; fi; \
+			exit 1; \
+		fi; \
+		echo ""; \
 	echo "Debian package deployment completed successfully."; \
 	echo ""
 endef
