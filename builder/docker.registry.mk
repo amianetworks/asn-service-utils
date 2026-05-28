@@ -94,6 +94,32 @@ check-push-docker-sites:
 	if [ -z "$$push_version" ]; then \
 		push_version="$$($(BUILD_MANIFEST_CMD) require-lane --lane docker $(BUILD_MANIFEST_COMMON_ARGS))"; \
 	fi; \
+	registry="$(REGISTRY)"; \
+	registry_prefix="$$registry"; \
+	if [ -n "$(DOCKER_SUBREPO)" ]; then registry_prefix="$$registry/$(DOCKER_SUBREPO)"; fi; \
+	validate_docker_ref() { \
+		label="$$1"; \
+		ref="$$2"; \
+		case "$$ref" in ""|*[^A-Za-z0-9._:/-]*) echo "ERROR: invalid Docker $$label: $$ref"; exit 2 ;; esac; \
+	}; \
+	publish_docker_ref() { \
+		image="$$1"; \
+		target_tag="$$2"; \
+		source_tag="$$3"; \
+		source_ref="$$image:$$source_tag"; \
+		target_ref="$$registry_prefix/$$image:$$target_tag"; \
+		validate_docker_ref "source ref" "$$source_ref"; \
+		validate_docker_ref "target ref" "$$target_ref"; \
+		echo ""; \
+		printf "%s" "Tagging image $$source_ref to registry: $$target_ref"; \
+		docker tag "$$source_ref" "$$target_ref"; \
+		echo " ...Done."; \
+		echo "Pushing image $$target_ref"; \
+		docker push "$$target_ref"; \
+		echo "Pushed."; \
+	}; \
+	validate_docker_ref "registry prefix" "$$registry_prefix"; \
+	validate_docker_ref "version tag" "$$push_version"; \
 	echo ">> Docker Publish Target"; \
 	printf "  %15s : %s\n" "Site" "$(DOCKER_SITE)"; \
 	printf "  %15s : %s\n" "Registry" "$(REGISTRY)"; \
@@ -114,23 +140,28 @@ check-push-docker-sites:
 		rm -f "$$inspect_output"; \
 	done; \
 	for image in $(DOCKER_IMAGES); do \
-		$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=$$push_version REGISTRY=$(REGISTRY); \
+		publish_docker_ref "$$image" "$$push_version" "$$push_version"; \
 	done; \
 	if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
 		for image in $(DOCKER_IMAGES); do \
-			$(MAKE) -s .push-docker-image IMAGE=$$image IMAGE_TAG=latest REGISTRY=$(REGISTRY) SOURCE_TAG=$$push_version; \
+			publish_docker_ref "$$image" "latest" "$$push_version"; \
 		done; \
 	fi
 
 .push-docker-image: $(DOCKER_INTERNAL_PUSH_CHECK_TARGETS)
 	$(eval SOURCE_IMAGE_TAG := $(if $(SOURCE_TAG),$(SOURCE_TAG),$(IMAGE_TAG)))
 	$(eval REGISTRY_IMAGE_PREFIX := $(if $(DOCKER_SUBREPO),$(REGISTRY)/$(DOCKER_SUBREPO),$(REGISTRY)))
+	@set -e; \
+	source_ref="$(IMAGE):$(SOURCE_IMAGE_TAG)"; \
+	target_ref="$(REGISTRY_IMAGE_PREFIX)/$(IMAGE):$(IMAGE_TAG)"; \
+	case "$$source_ref" in ""|*[^A-Za-z0-9._:/-]*) echo "ERROR: invalid Docker source ref: $$source_ref"; exit 2 ;; esac; \
+	case "$$target_ref" in ""|*[^A-Za-z0-9._:/-]*) echo "ERROR: invalid Docker target ref: $$target_ref"; exit 2 ;; esac
 	@echo ""
 	@printf "%s" "Tagging image $(IMAGE):$(SOURCE_IMAGE_TAG) to registry: $(REGISTRY_IMAGE_PREFIX)/$(IMAGE):$(IMAGE_TAG)"
-	@docker tag $(IMAGE):$(SOURCE_IMAGE_TAG) $(REGISTRY_IMAGE_PREFIX)/$(IMAGE):$(IMAGE_TAG)
+	@docker tag "$(IMAGE):$(SOURCE_IMAGE_TAG)" "$(REGISTRY_IMAGE_PREFIX)/$(IMAGE):$(IMAGE_TAG)"
 	@echo " ...Done."
 	@echo "Pushing image $(IMAGE):$(IMAGE_TAG) to registry: $(REGISTRY)"
-	@docker push $(REGISTRY_IMAGE_PREFIX)/$(IMAGE):$(IMAGE_TAG)
+	@docker push "$(REGISTRY_IMAGE_PREFIX)/$(IMAGE):$(IMAGE_TAG)"
 	@echo "Pushed."
 
 list-docker:

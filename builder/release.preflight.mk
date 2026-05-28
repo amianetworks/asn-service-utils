@@ -10,11 +10,12 @@
 RELEASE_CONFIG_STRICT ?= no
 RELEASE_CONFIG_CHECK_DOCKER_LOGIN ?= yes
 PUSH_PLAN_CHECK_LOCAL_IMAGES ?= no
+PUSH_PLAN_STRICT ?= yes
 
 .PHONY: \
 	check-release-config check-release-config-strict .check-release-config \
 	.check-release-docker-site .check-release-debian-site \
-	plan-push plan-push-docker plan-push-debian \
+	plan-push plan-push-preview plan-push-readiness plan-push-docker plan-push-debian \
 	.plan-push-docker-site .plan-push-debian-site
 
 check-release-config:
@@ -26,7 +27,7 @@ check-release-config-strict:
 .check-release-config:
 	@printf "## Release Config Check\n"; \
 	printf "  %-24s : %s\n" "Strict" "$(RELEASE_CONFIG_STRICT)"; \
-	printf "  %-24s : %s\n" "Private Git key" "$(if $(strip $(PRIVATE_GIT_SSH_KEY_FILE)),$(PRIVATE_GIT_SSH_KEY_FILE),not set)"; \
+	printf "  %-24s : %s\n" "Private Git key" "$(if $(strip $(PRIVATE_GIT_SSH_KEY_FILE)),set,not set)"; \
 	if [ -z "$(PRIVATE_GIT_SSH_KEY_FILE)" ]; then \
 		if [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
 			echo "ERROR: PRIVATE_GIT_SSH_KEY_FILE is not set."; \
@@ -161,8 +162,23 @@ check-release-config-strict:
 
 plan-push: plan-push-docker plan-push-debian
 
+# `plan-push` is a readiness gate by default: it still never uploads, but it
+# must prove concrete artifact identities and configured destinations. Use the
+# preview target only when a non-failing topology printout is useful before
+# artifacts exist.
+plan-push-preview:
+	@$(MAKE) -s plan-push PUSH_PLAN_STRICT=no
+
+plan-push-readiness:
+	@$(MAKE) -s plan-push PUSH_PLAN_STRICT=yes PUSH_PLAN_CHECK_LOCAL_IMAGES=yes
+
 plan-push-docker:
 	@set -e; \
+	plan_status=0; \
+	if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
+		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
+		plan_status=1; \
+	fi; \
 	plan_version="$(DOCKER_PUSH_VERSION)"; \
 	plan_version_error=""; \
 	if [ -z "$$plan_version" ]; then \
@@ -171,6 +187,7 @@ plan-push-docker:
 		else \
 			plan_version_error="$$plan_version"; \
 			plan_version="(manifest docker lane unavailable)"; \
+			plan_status=1; \
 		fi; \
 	fi; \
 	printf "## Docker Publish Plan\n"; \
@@ -181,8 +198,12 @@ plan-push-docker:
 	printf "  %-24s : %s\n" "No-upload guarantee" "no docker tag/push is executed"; \
 	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
 	for site in $(DOCKER_REGISTRY_SITES); do \
-		$(MAKE) -s .plan-push-docker-site SITE=$$site DOCKER_PUSH_PLAN_VERSION="$$plan_version"; \
-	done
+		$(MAKE) -s .plan-push-docker-site SITE=$$site DOCKER_PUSH_PLAN_VERSION="$$plan_version" || plan_status=$$?; \
+	done; \
+	if [ "$(PUSH_PLAN_STRICT)" = "yes" ] && [ "$$plan_status" -ne 0 ]; then \
+		echo "ERROR: Docker publish plan is not release-ready."; \
+		exit "$$plan_status"; \
+	fi
 
 .plan-push-docker-site:
 	$(eval PUSH_PLAN_DOCKER_SITE := $(call uppercase,$(SITE)))
@@ -190,10 +211,17 @@ plan-push-docker:
 	$(eval PUSH_PLAN_DOCKER_PREFIX := $(if $(DOCKER_SUBREPO),$(PUSH_PLAN_DOCKER_REGISTRY)/$(DOCKER_SUBREPO),$(PUSH_PLAN_DOCKER_REGISTRY)))
 	@printf "  %-24s : %s\n" "Docker site" "$(PUSH_PLAN_DOCKER_SITE)"; \
 	printf "  %-24s : %s\n" "Registry" "$(if $(PUSH_PLAN_DOCKER_REGISTRY),$(PUSH_PLAN_DOCKER_REGISTRY),not configured)"; \
+	site_status=0; \
+	if [ -z "$(PUSH_PLAN_DOCKER_REGISTRY)" ]; then site_status=1; fi; \
 	plan_version="$(DOCKER_PUSH_PLAN_VERSION)"; \
 	for image in $(DOCKER_IMAGES); do \
 		if [ "$${plan_version#\(}" != "$$plan_version" ]; then \
 			printf "  %-24s : %s\n" "Would push" "$$image (version unavailable)"; \
+			site_status=1; \
+			continue; \
+		fi; \
+		if [ -z "$(PUSH_PLAN_DOCKER_REGISTRY)" ]; then \
+			printf "  %-24s : %s\n" "Would push" "$$image (destination unavailable)"; \
 			continue; \
 		fi; \
 		printf "  %-24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:$$plan_version"; \
@@ -207,16 +235,23 @@ plan-push-docker:
 			else \
 				printf "  %-24s : %s\n" "$$image:$$plan_version" "local image missing"; \
 				if [ -s "$$inspect_output" ]; then sed 's/^/  Docker Error: /' "$$inspect_output"; fi; \
+				site_status=1; \
 			fi; \
 			rm -f "$$inspect_output"; \
 		else \
 			printf "  %-24s : %s\n" "$$image:$$plan_version" "local image check skipped (set PUSH_PLAN_CHECK_LOCAL_IMAGES=yes)"; \
 		fi; \
 	done; \
-	echo ""
+	echo ""; \
+	if [ "$(PUSH_PLAN_STRICT)" = "yes" ] && [ "$$site_status" -ne 0 ]; then exit "$$site_status"; fi
 
 plan-push-debian:
 	@set -e; \
+	plan_status=0; \
+	if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
+		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
+		plan_status=1; \
+	fi; \
 	plan_version="$(DEBIAN_PUSH_VERSION)"; \
 	plan_version_error=""; \
 	if [ -z "$$plan_version" ]; then \
@@ -225,6 +260,7 @@ plan-push-debian:
 		else \
 			plan_version_error="$$plan_version"; \
 			plan_version="(manifest debian lane unavailable)"; \
+			plan_status=1; \
 		fi; \
 	fi; \
 	printf "## Debian Publish Plan\n"; \
@@ -234,8 +270,12 @@ plan-push-debian:
 	printf "  %-24s : %s\n" "No-upload guarantee" "no curl upload/publish is executed"; \
 	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
 	for site in $(DEBIAN_REPO_SITES); do \
-		$(MAKE) -s .plan-push-debian-site SITE=$$site DEBIAN_PUSH_PLAN_VERSION="$$plan_version"; \
-	done
+		$(MAKE) -s .plan-push-debian-site SITE=$$site DEBIAN_PUSH_PLAN_VERSION="$$plan_version" || plan_status=$$?; \
+	done; \
+	if [ "$(PUSH_PLAN_STRICT)" = "yes" ] && [ "$$plan_status" -ne 0 ]; then \
+		echo "ERROR: Debian publish plan is not release-ready."; \
+		exit "$$plan_status"; \
+	fi
 
 .plan-push-debian-site:
 	$(eval PUSH_PLAN_DEBIAN_SITE := $(call uppercase,$(SITE)))
@@ -247,6 +287,8 @@ plan-push-debian:
 	printf "  %-24s : %s\n" "Repo host" "$(if $(PUSH_PLAN_DEBIAN_HOST),$(PUSH_PLAN_DEBIAN_HOST),not configured)"; \
 	printf "  %-24s : %s\n" "Repo path" "$(if $(PUSH_PLAN_DEBIAN_PATH),$(PUSH_PLAN_DEBIAN_PATH),not configured)"; \
 	printf "  %-24s : %s\n" "Subrepo" "$(if $(PUSH_PLAN_DEBIAN_SUBREPO),$(PUSH_PLAN_DEBIAN_SUBREPO),not configured)"; \
+	site_status=0; \
+	if [ -z "$(PUSH_PLAN_DEBIAN_HOST)" ] || [ -z "$(PUSH_PLAN_DEBIAN_PATH)" ] || [ -z "$(PUSH_PLAN_DEBIAN_SUBREPO)" ]; then site_status=1; fi; \
 	plan_version="$(DEBIAN_PUSH_PLAN_VERSION)"; \
 	package_files="$(DEBIAN_PACKAGE_FILES)"; \
 	if [ -z "$$package_files" ] && [ "$${plan_version#\(}" = "$$plan_version" ] && [ -d "$(DEBIAN_PACKAGE_DIR)" ]; then \
@@ -257,6 +299,7 @@ plan-push-debian:
 	fi; \
 	if [ -z "$$package_files" ]; then \
 		printf "  %-24s : %s\n" "Would upload" "(no matching local packages)"; \
+		site_status=1; \
 	fi; \
 	for file in $$package_files; do \
 		if [ -f "$$file" ]; then \
@@ -265,4 +308,5 @@ plan-push-debian:
 			printf "  %-24s : %s\n" "Would upload" "$$file (missing locally)"; \
 		fi; \
 	done; \
-	echo ""
+	echo ""; \
+	if [ "$(PUSH_PLAN_STRICT)" = "yes" ] && [ "$$site_status" -ne 0 ]; then exit "$$site_status"; fi

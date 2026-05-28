@@ -2,6 +2,11 @@
 
 #$(info service.plugin.builder.mk loaded)
 
+# Shared builder recipes use Bash arrays and pattern substitutions. Declare the
+# shell contract here so service repositories that include this file directly do
+# not inherit GNU Make's default /bin/sh by accident.
+SHELL := /bin/bash
+
 # The following variables must be definded. (predefined in make/config.mk)
 #ASN_SERVICE_API_VERSION
 #BUILD_ENV_BASE_IMAGE
@@ -28,7 +33,9 @@ push-all: push-docker push-debian
 
 ##----------------------------------------------------------------------------##
 ## Main targets ##
-## All dependent used below targets are defined in service.plugin.build.env.mk.
+## Project-owned Makefiles define service variables and include this shared
+## builder. Helper targets below own the common build, package, publish, and
+## validation mechanics.
 
 .PHONY: \
 	service-utils-init \
@@ -101,6 +108,8 @@ push-all: push-docker push-debian
 	.print-debian-push-var \
 	.check-docker-push-var \
 	.check-debian-push-var \
+	.check-docker-release-mode \
+	.check-debian-release-mode \
 	.check-docker-publish-images \
 	.check-debian-publish-packages \
 	.check-docker-build-inputs \
@@ -184,6 +193,33 @@ SERVICE_DOCS_DOCUMENTATION_CHANNEL_pro ?=
 SERVICE_DOCS_ROLLBACK_REQUIREMENT_dev ?=
 SERVICE_DOCS_ROLLBACK_REQUIREMENT_pro ?=
 
+# Destructive shared targets are limited to the generated artifact tree. The
+# Make-side assertion catches bad command-line overrides before a shell recipe
+# can interpret punctuation, and the shell-side guard remains readable in dry
+# runs and logs.
+semicolon := ;
+ampersand := &
+pipe := |
+lt := <
+gt := >
+backtick := `
+squote := '
+dquote := "
+dollar_char := $$
+left_paren := (
+right_paren := )
+left_brace := {
+right_brace := }
+left_bracket := [
+right_bracket := ]
+asterisk := *
+question := ?
+service_utils_path_shell_chars := $(semicolon) $(ampersand) $(pipe) $(lt) $(gt) $(backtick) $(squote) $(dquote) $(dollar_char) $(left_paren) $(right_paren) $(left_brace) $(right_brace) $(left_bracket) $(right_bracket) $(asterisk) $(question)
+service_utils_path_has_shell_chars = $(strip $(foreach char,$(service_utils_path_shell_chars),$(findstring $(char),$(1))))
+service_utils_build_path_allowed = $(and $(filter build build/ build/% ./build ./build/ ./build/%,$(1)),$(if $(findstring ..,$(1)),,$(if $(filter /%,$(1)),,$(if $(call service_utils_path_has_shell_chars,$(1)),,$(1)))))
+service_utils_unsafe_build_paths = $(strip $(foreach path,$(1),$(if $(call service_utils_build_path_allowed,$(path)),,$(path))))
+service_utils_assert_build_paths = $(if $(strip $(1)),$(if $(call service_utils_unsafe_build_paths,$(1)),$(error $(2) contains unsafe path(s): $(call service_utils_unsafe_build_paths,$(1)))))
+
 .PHONY: $(SERVICE_GO_BUILD_TARGETS)
 
 define service_local_make_target
@@ -245,6 +281,7 @@ $(if $(filter yes,$(SERVICE_UTILS_OWN_BUILD_TARGETS)),$(eval $(service_utils_own
 # Any artifacts should be under build/. Guard this shared clean path so a bad
 # override cannot remove source, config, or parent directories.
 clean:
+	$(call service_utils_assert_build_paths,$(SERVICE_CLEAN_DIRS),SERVICE_CLEAN_DIRS)
 	@set -e; \
 	if [ -z "$(strip $(SERVICE_CLEAN_DIRS))" ]; then \
 		echo "No service clean directories configured."; \
@@ -631,6 +668,17 @@ increment-build:
 uppercase = $(strip $(subst z,Z,$(subst y,Y,$(subst x,X,$(subst w,W,$(subst v,V,$(subst u,U,$(subst t,T,$(subst s,S,$(subst r,R,$(subst q,Q,$(subst p,P,$(subst o,O,$(subst n,N,$(subst m,M,$(subst l,L,$(subst k,K,$(subst j,J,$(subst i,I,$(subst h,H,$(subst g,G,$(subst f,F,$(subst e,E,$(subst d,D,$(subst c,C,$(subst b,B,$(subst a,A,$(1))))))))))))))))))))))))))))
 lowercase = $(strip $(subst Z,z,$(subst Y,y,$(subst X,x,$(subst W,w,$(subst V,v,$(subst U,u,$(subst T,t,$(subst S,s,$(subst R,r,$(subst Q,q,$(subst P,p,$(subst O,o,$(subst N,n,$(subst M,m,$(subst L,l,$(subst K,k,$(subst J,j,$(subst I,i,$(subst H,h,$(subst G,g,$(subst F,f,$(subst E,e,$(subst D,d,$(subst C,c,$(subst B,b,$(subst A,a,$(1))))))))))))))))))))))))))))
 
+define func_check_release_mode
+	@set -e; \
+	case "$(BUILD_MODE)" in \
+		dev|pro) : ;; \
+		*) echo "ERROR: BUILD_MODE must be dev or pro for publish targets, got '$(BUILD_MODE)'."; exit 2 ;; \
+	esac; \
+	case "$(RELEASE_CHANNEL)" in \
+		""|unknown) echo "ERROR: RELEASE_CHANNEL is not configured for BUILD_MODE=$(BUILD_MODE)."; exit 2 ;; \
+	esac
+endef
+
 require-build-manifest:
 	@version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane plugin $(BUILD_MANIFEST_COMMON_ARGS))"; \
 	: "$$version_build"
@@ -655,7 +703,7 @@ DEBIAN_BUILD_PRE_TARGETS ?=
 build-debian: require-build-manifest check $(DEBIAN_BUILD_PRE_TARGETS) check-debian-inputs clean-debian
 	@set -e; \
 	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane docs $(BUILD_MANIFEST_COMMON_ARGS))"; \
-	make --no-print-directory service-build-debian VERSION_BUILD="$$version_build"; \
+	$(MAKE) --no-print-directory service-build-debian VERSION_BUILD="$$version_build"; \
 	$(BUILD_MANIFEST_CMD) commit-lane \
 		--lane debian \
 		$(BUILD_MANIFEST_COMMON_ARGS) \
@@ -665,6 +713,7 @@ build-debian: require-build-manifest check $(DEBIAN_BUILD_PRE_TARGETS) check-deb
 	@echo
 
 clean-debian:
+	$(call service_utils_assert_build_paths,$(DEBIAN_PATH),DEBIAN_PATH)
 	@set -e; \
 	path="$(DEBIAN_PATH)"; \
 	case "$$path" in \
@@ -732,7 +781,24 @@ build-docker: require-build-manifest $(DOCKER_BUILD_PRE_TARGETS) $(DOCKER_BUILD_
 	for spec in $(DOCKER_IMAGE_BUILD_SPECS); do \
 		image=$${spec%%:*}; \
 		dockerfile=$${spec#*:}; \
-		make -s .docker-build-image IMAGE=$$image DOCKERFILE=$$dockerfile VERSION_BUILD="$$version_build"; \
+		case "$$image" in ""|*[^A-Za-z0-9._/-]*) echo "ERROR: invalid Docker image name in DOCKER_IMAGE_BUILD_SPECS: $$image"; exit 2 ;; esac; \
+		if [ "$$dockerfile" = "$$spec" ] || [ -z "$$dockerfile" ] || [ ! -f "$$dockerfile" ]; then \
+			echo "ERROR: invalid Dockerfile in DOCKER_IMAGE_BUILD_SPECS item '$$spec'."; \
+			exit 2; \
+		fi; \
+		echo ""; \
+		echo "Building docker image: $$image:$$version_build"; \
+		echo "Dockerfile: $$dockerfile; BUILD_ARGS: $(DEP_DOCKER_BUILD_ARGS)"; \
+		docker buildx build \
+			--progress=plain \
+			--platform linux/amd64 \
+			--load \
+			-f "$$dockerfile" \
+			$(DEP_DOCKER_BUILD_ARGS) \
+			-t "$$image:$$version_build" \
+			.; \
+		echo "Successfully built docker image for $$image/$$version_build"; \
+		echo ""; \
 	done; \
 	$(BUILD_MANIFEST_CMD) commit-lane \
 		--lane docker \
@@ -933,9 +999,17 @@ build.plugin: .require-version-build-var
 		echo "ERROR: SERVICE_GO_BUILD_ARTIFACTS is empty."; \
 		exit 2; \
 	fi
+	$(call service_utils_assert_build_paths,$(SERVICE_BUILD_CLEAN_DIRS),SERVICE_BUILD_CLEAN_DIRS)
 	@if [ -n "$(strip $(SERVICE_BUILD_CLEAN_DIRS))" ]; then \
-		rm -rf $(SERVICE_BUILD_CLEAN_DIRS); \
+		set -e; \
+		for path in $(SERVICE_BUILD_CLEAN_DIRS); do \
+			case "$$path" in \
+				build|build/|build/*|./build|./build/|./build/*) rm -rf "$$path" ;; \
+				*) echo "ERROR: refusing service build clean path outside build/: $$path"; exit 2 ;; \
+			esac; \
+		done; \
 	fi
+	$(call service_utils_assert_build_paths,$(SERVICE_BUILD_DIRS),SERVICE_BUILD_DIRS)
 	@if [ -n "$(strip $(SERVICE_BUILD_DIRS))" ]; then \
 		mkdir -p $(SERVICE_BUILD_DIRS); \
 	fi
@@ -1060,7 +1134,7 @@ SERVICE_BUILD_WORKDIR ?= /asn-service
 SERVICE_BUILD_SECRET_TARGET ?= /run/secrets/sshkey
 SERVICE_BUILD_DOCKER_RUN_ARGS ?=
 
-service-build-once:
+service-build-once: .require-version-build-var
 	@case "$(SERVICE_BUILD_EXECUTION_MODE)" in \
 		docker-run) \
 			$(MAKE) --no-print-directory service-build-once-docker-run BUILD_MAKE_TARGET="$(BUILD_MAKE_TARGET)" ;; \
@@ -1071,7 +1145,7 @@ service-build-once:
 			exit 2 ;; \
 	esac
 
-service-build-once-docker-run:
+service-build-once-docker-run: .require-version-build-var
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building with $(BUILD_ENV_BASE_IMAGE_REF)"
 	@echo "Build target: $(BUILD_MAKE_TARGET)"
@@ -1111,7 +1185,7 @@ service-build-once-docker-run:
 	@echo " - Run 'make check' if you need to verify the prepared base image labels before building."
 	@echo ""
 
-service-build-once-docker-build:
+service-build-once-docker-build: .require-version-build-var
 	@echo "Current working directory: ${PWD}"
 	@echo "Start building $(BUILD_ENV_IMAGE):latest"
 	@echo "Build target: $(BUILD_MAKE_TARGET)"
@@ -1187,8 +1261,19 @@ deb-%: check-deb-%
 
 
 clean-deb-%:
-	@echo "Cleaning $*..."
-	@rm -rf "$(DEBIAN_PATH)/$*"
+	$(call service_utils_assert_build_paths,$(DEBIAN_PATH),DEBIAN_PATH)
+	@set -e; \
+	stem="$*"; \
+	case "$$stem" in \
+		""|"."|".."|*..*|*[^A-Za-z0-9._-]*) \
+			echo "ERROR: refusing unsafe Debian clean target stem: '$$stem'."; \
+			exit 2 ;; \
+	esac; \
+	path="$(DEBIAN_PATH)/$$stem"; \
+	case "$$path" in \
+		build/*|./build/*) echo "Cleaning $$path..."; rm -rf "$$path" ;; \
+		*) echo "ERROR: refusing Debian clean path outside build/: $$path"; exit 2 ;; \
+	esac
 
 # Debug purpose
 show-prepare:
