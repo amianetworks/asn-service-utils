@@ -107,7 +107,7 @@ check-release-config-strict:
 			else \
 				echo "WARN: Docker login config is missing: $$docker_config"; \
 			fi; \
-		elif grep -q "$(RELEASE_DOCKER_REGISTRY)" "$$docker_config"; then \
+		elif grep -Fq "$(RELEASE_DOCKER_REGISTRY)" "$$docker_config"; then \
 			printf "  %-24s : %s\n" "Docker login" "present"; \
 		elif [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
 			echo "ERROR: Docker login for $(RELEASE_DOCKER_SITE) is missing: $(RELEASE_DOCKER_REGISTRY)."; \
@@ -160,7 +160,12 @@ check-release-config-strict:
 	fi; \
 	echo ""
 
-plan-push: plan-push-docker plan-push-debian
+plan-push:
+	@set -e; \
+	plan_status=0; \
+	$(MAKE) -s plan-push-docker || plan_status=$$?; \
+	$(MAKE) -s plan-push-debian || plan_status=$$?; \
+	exit "$$plan_status"
 
 # `plan-push` is a readiness gate by default: it still never uploads, but it
 # must prove concrete artifact identities and configured destinations. Use the
@@ -180,15 +185,19 @@ plan-push-docker:
 		plan_status=1; \
 	fi; \
 	plan_version="$(DOCKER_PUSH_VERSION)"; \
+	manifest_version=""; \
 	plan_version_error=""; \
-	if [ -z "$$plan_version" ]; then \
-		if plan_version="$$( $(BUILD_MANIFEST_CMD) require-lane --lane docker $(BUILD_MANIFEST_COMMON_ARGS) 2>&1 )"; then \
-			:; \
-		else \
-			plan_version_error="$$plan_version"; \
-			plan_version="(manifest docker lane unavailable)"; \
+	if manifest_version="$$( $(BUILD_MANIFEST_CMD) require-lane --lane docker $(BUILD_MANIFEST_COMMON_ARGS) 2>&1 )"; then \
+		if [ -z "$$plan_version" ]; then \
+			plan_version="$$manifest_version"; \
+		elif [ "$$plan_version" != "$$manifest_version" ]; then \
+			plan_version_error="selected docker version '$$plan_version' does not match manifest docker lane '$$manifest_version'"; \
 			plan_status=1; \
 		fi; \
+	else \
+		plan_version_error="$$manifest_version"; \
+		[ -n "$$plan_version" ] || plan_version="(manifest docker lane unavailable)"; \
+		plan_status=1; \
 	fi; \
 	printf "## Docker Publish Plan\n"; \
 	printf "  %-24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"; \
@@ -253,15 +262,19 @@ plan-push-debian:
 		plan_status=1; \
 	fi; \
 	plan_version="$(DEBIAN_PUSH_VERSION)"; \
+	manifest_version=""; \
 	plan_version_error=""; \
-	if [ -z "$$plan_version" ]; then \
-		if plan_version="$$( $(BUILD_MANIFEST_CMD) require-lane --lane debian $(BUILD_MANIFEST_COMMON_ARGS) 2>&1 )"; then \
-			:; \
-		else \
-			plan_version_error="$$plan_version"; \
-			plan_version="(manifest debian lane unavailable)"; \
+	if manifest_version="$$( $(BUILD_MANIFEST_CMD) require-lane --lane debian $(BUILD_MANIFEST_COMMON_ARGS) 2>&1 )"; then \
+		if [ -z "$$plan_version" ]; then \
+			plan_version="$$manifest_version"; \
+		elif [ "$$plan_version" != "$$manifest_version" ]; then \
+			plan_version_error="selected debian version '$$plan_version' does not match manifest debian lane '$$manifest_version'"; \
 			plan_status=1; \
 		fi; \
+	else \
+		plan_version_error="$$manifest_version"; \
+		[ -n "$$plan_version" ] || plan_version="(manifest debian lane unavailable)"; \
+		plan_status=1; \
 	fi; \
 	printf "## Debian Publish Plan\n"; \
 	printf "  %-24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
@@ -306,6 +319,7 @@ plan-push-debian:
 			printf "  %-24s : %s\n" "Would upload" "$$file"; \
 		else \
 			printf "  %-24s : %s\n" "Would upload" "$$file (missing locally)"; \
+			site_status=1; \
 		fi; \
 	done; \
 	echo ""; \

@@ -14,6 +14,7 @@ DOCKER_LIST_LIMIT ?= 20
 DOCKER_LIST_LOCAL_LABEL ?= Services
 DOCKER_LIST_REQUIRE_REMOTE_AUTH ?= yes
 DOCKER_SUBREPO ?=
+DOCKER_CURL_TIMEOUT_FLAGS ?= --connect-timeout 10 --max-time 120 --retry 2 --retry-delay 2 --retry-connrefused
 
 # The list/push recipes read credentials through shell variables such as
 # $${DOCKER_REGISTRY_CN_USER} so curl invocations do not contain make-expanded
@@ -80,7 +81,7 @@ check-push-docker-sites:
 			echo "ERROR: Docker login config is missing: $$docker_config"; \
 			exit 1; \
 		fi; \
-		if ! grep -q "$(DOCKER_REGISTRY_$(DOCKER_SITE))" "$$docker_config"; then \
+		if ! grep -Fq "$(DOCKER_REGISTRY_$(DOCKER_SITE))" "$$docker_config"; then \
 			echo "ERROR: Docker registry $(DOCKER_SITE) is not logged in: $(DOCKER_REGISTRY_$(DOCKER_SITE))"; \
 			exit 1; \
 		fi; \
@@ -275,7 +276,7 @@ list-docker-%:
 		for image in $(DOCKER_IMAGES); do \
 			echo "Image: $$image"; \
 			echo ""; \
-			response=$$(curl -sS -u "$${$(REGISTRY_USER_VAR)}" "https://$(REGISTRY)/v2/$${repo_prefix}$$image/tags/list"); \
+			response=$$(curl $(DOCKER_CURL_TIMEOUT_FLAGS) -sS -u "$${$(REGISTRY_USER_VAR)}" "https://$(REGISTRY)/v2/$${repo_prefix}$$image/tags/list"); \
 			if [ -z "$$response" ]; then \
 				echo "(empty response from registry)"; \
 				if [ "$(DOCKER_LIST_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \

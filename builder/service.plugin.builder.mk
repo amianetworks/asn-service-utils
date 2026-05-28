@@ -158,6 +158,7 @@ BUILD_MANIFEST_STAGE_DOCS_ARGS ?= $(BUILD_MANIFEST_CORE_ARGS) --docs-dir "$(STAG
 VERSION_BUILD ?=
 SERVICE_BUILD_MAKEFILE ?= Makefile
 SERVICE_RECURSIVE_MAKE ?= $(MAKE)
+BUILD_PLUGIN_VERSION_FILE ?= $(BUILD_DIR)/.plugin-version
 SERVICE_BUILD_PLUGIN_TARGET ?= build.plugin
 SERVICE_BUILD_DEBIAN_TARGET ?= build.deb
 SERVICE_BUILD_CHECK_DEBIAN_TARGET ?= check.deb
@@ -258,10 +259,18 @@ build-fresh: clean prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian buil
 
 build-plugin: check proto-gen
 	@set -e; \
+	mkdir -p "$(BUILD_DIR)"; \
 	version_build="$$$$($(BUILD_MANIFEST_CMD) reserve-plugin-version $(BUILD_MANIFEST_RESERVE_ARGS))"; \
 	echo ">> Build Plugin Version"; \
 	printf "  %15s : %s\n" "Version" "$$$$version_build"; \
-	$$(SERVICE_RECURSIVE_MAKE) --no-print-directory service-build-plugin VERSION_BUILD="$$$$version_build"; \
+	printf "%s\n" "$$$$version_build" > "$(BUILD_PLUGIN_VERSION_FILE)"
+	$$(MAKE) --no-print-directory .build-plugin-artifacts VERSION_BUILD="$$$$([ -f "$(BUILD_PLUGIN_VERSION_FILE)" ] && cat "$(BUILD_PLUGIN_VERSION_FILE)" || printf "%s" "DRY-RUN-VERSION")"
+	@set -e; \
+	version_build="$$$$([ -f "$(BUILD_PLUGIN_VERSION_FILE)" ] && cat "$(BUILD_PLUGIN_VERSION_FILE)")"; \
+	if [ -z "$$$$version_build" ]; then \
+		echo "ERROR: build plugin version handoff is missing: $(BUILD_PLUGIN_VERSION_FILE)"; \
+		exit 1; \
+	fi; \
 	if service_utils_ref="$$$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD 2>&1)"; then \
 		:; \
 	else \
@@ -271,10 +280,14 @@ build-plugin: check proto-gen
 	$$(BUILD_MANIFEST_CMD) commit-plugin \
 		$$(BUILD_MANIFEST_COMMIT_PLUGIN_ARGS) \
 		--version-build "$$$$version_build" \
-		--service-utils-ref "$$$$service_utils_ref"
+		--service-utils-ref "$$$$service_utils_ref"; \
+	rm -f "$(BUILD_PLUGIN_VERSION_FILE)"
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
+
+.build-plugin-artifacts: .require-version-build-var
+	$$(MAKE) --no-print-directory service-build-plugin VERSION_BUILD="$(VERSION_BUILD)"
 endef
 $(if $(filter yes,$(SERVICE_UTILS_OWN_BUILD_TARGETS)),$(eval $(service_utils_owned_lifecycle_targets)))
 
@@ -778,6 +791,8 @@ build-docker: require-build-manifest $(DOCKER_BUILD_PRE_TARGETS) $(DOCKER_BUILD_
 	fi
 	@set -e; \
 	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane debian $(BUILD_MANIFEST_COMMON_ARGS))"; \
+	docker_build_args="$(DEP_DOCKER_BUILD_ARGS)"; \
+	docker_build_args="$${docker_build_args//@VERSION_BUILD@/$$version_build}"; \
 	for spec in $(DOCKER_IMAGE_BUILD_SPECS); do \
 		image=$${spec%%:*}; \
 		dockerfile=$${spec#*:}; \
@@ -788,13 +803,13 @@ build-docker: require-build-manifest $(DOCKER_BUILD_PRE_TARGETS) $(DOCKER_BUILD_
 		fi; \
 		echo ""; \
 		echo "Building docker image: $$image:$$version_build"; \
-		echo "Dockerfile: $$dockerfile; BUILD_ARGS: $(DEP_DOCKER_BUILD_ARGS)"; \
+		echo "Dockerfile: $$dockerfile; BUILD_ARGS: $$docker_build_args"; \
 		docker buildx build \
 			--progress=plain \
 			--platform linux/amd64 \
 			--load \
 			-f "$$dockerfile" \
-			$(DEP_DOCKER_BUILD_ARGS) \
+			$$docker_build_args \
 			-t "$$image:$$version_build" \
 			.; \
 		echo "Successfully built docker image for $$image/$$version_build"; \
@@ -900,13 +915,16 @@ include $(SERVICE_UTILS_DIR)/builder/release.preflight.mk
 define func_build_docker
 	@echo ""
 	@echo "Building docker image: $(1):$(2)"
-	@echo "Dockerfile: $(3); BUILD_ARGS: $(4)"
-	@docker buildx build \
+	@set -e; \
+	docker_build_args="$(4)"; \
+	docker_build_args="$${docker_build_args//@VERSION_BUILD@/$(2)}"; \
+	echo "Dockerfile: $(3); BUILD_ARGS: $$docker_build_args"; \
+	docker buildx build \
 		--progress=plain \
 		--platform linux/amd64 \
 		--load \
 		-f $(3) \
-		$(4) \
+		$$docker_build_args \
 		-t $(1):$(2) \
 		.
 	@echo "Successfully built docker image for $(1)/$(2)"
@@ -1084,14 +1102,26 @@ build.deb: .require-version-build-var
 			echo "ERROR: Debian package copy source is missing: $$src"; \
 			exit 1; \
 		fi; \
-		root="$(DEBIAN_PATH)/$$package/$$dest"; \
+		case "$$package" in ""|"."|".."|*"/"*) echo "ERROR: unsafe Debian package name in SERVICE_DEBIAN_PACKAGE_COPY_SPECS item '$$spec'."; exit 2 ;; esac; \
+		case "$$dest" in ""|"."|".."|/*|../*|*/../*|*/..) echo "ERROR: unsafe Debian package destination in SERVICE_DEBIAN_PACKAGE_COPY_SPECS item '$$spec'."; exit 2 ;; esac; \
+		package_root="$(DEBIAN_PATH)/$$package"; \
+		if [ ! -d "$$package_root" ]; then \
+			echo "ERROR: Debian package staging root is missing: $$package_root"; \
+			exit 1; \
+		fi; \
+		package_root_abs="$$(cd "$$package_root" && pwd -P)"; \
+		root_parent="$$(dirname "$$package_root/$$dest")"; \
+		mkdir -p "$$root_parent"; \
+		root_parent_abs="$$(cd "$$root_parent" && pwd -P)"; \
+		root_abs="$$root_parent_abs/$$(basename "$$dest")"; \
+		case "$$root_abs/" in "$$package_root_abs"/*) : ;; *) echo "ERROR: Debian package destination escapes package root: $$dest"; exit 2 ;; esac; \
 		echo "Staging $$src into $$package:$$dest"; \
-		rm -rf "$$root"; \
-		mkdir -p "$$root"; \
+		rm -rf "$$root_abs"; \
+		mkdir -p "$$root_abs"; \
 		if [ -d "$$src" ]; then \
-			cp -R "$$src"/. "$$root"/; \
+			cp -R "$$src"/. "$$root_abs"/; \
 		else \
-			cp -R "$$src" "$$root"/; \
+			cp -R "$$src" "$$root_abs"/; \
 		fi; \
 		dpkg-deb --build "$(DEBIAN_PATH)/$$package" "$(DEBIAN_PATH)/$${package}_$(VERSION_BUILD)_amd64.deb"; \
 		echo "Repacked: $(DEBIAN_PATH)/$${package}_$(VERSION_BUILD)_amd64.deb"; \
