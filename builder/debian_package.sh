@@ -142,7 +142,6 @@ cmd_build() {
     for pair in $debian_files; do
         src="${pair%%:*}"
         dst="${pair#*:}"
-        dst="${dst#/}"
         case "$dst" in
             ""|"."|".."|/*|../*|*/../*|*/..)
                 echo "debian_package ERROR: unsafe Debian file destination: $dst" >&2

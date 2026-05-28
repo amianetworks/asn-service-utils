@@ -270,7 +270,7 @@ define func_push_debs
 			exit 1; \
 			fi; \
 			echo ""; \
-			snapshot="$(T_SUBREPO)-$$(date +%s)"; \
+			snapshot="$(T_SUBREPO)-$${selected_version}-$$(date +%Y%m%d%H%M%S)-$$$$"; \
 			if ! command -v jq >/dev/null; then \
 				echo "ERROR: jq is required to parse repository package lists before any remote mutation."; \
 				exit 1; \

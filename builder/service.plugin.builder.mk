@@ -258,17 +258,19 @@ build-fresh: clean prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian buil
 
 build-plugin: check proto-gen
 	@set -e; \
-	mkdir -p "$(BUILD_DIR)"; \
 	case "$$$$MAKEFLAGS" in *n*|*--just-print*|*--dry-run*|*--recon*) dry_run=1 ;; *) dry_run=0 ;; esac; \
 	if [ "$$$$dry_run" = "1" ]; then \
 		version_build="DRY-RUN-VERSION"; \
+		echo ">> Build Plugin Version"; \
+		printf "  %15s : %s\n" "Version" "$$$$version_build"; \
+		exit 0; \
 	else \
 		version_build="$$$$($(BUILD_MANIFEST_CMD) reserve-plugin-version $(BUILD_MANIFEST_RESERVE_ARGS))"; \
 	fi; \
+	mkdir -p "$(BUILD_DIR)"; \
 	echo ">> Build Plugin Version"; \
 	printf "  %15s : %s\n" "Version" "$$$$version_build"; \
 	$$(MAKE) --no-print-directory service-build-plugin VERSION_BUILD="$$$$version_build"; \
-	if [ "$$$$dry_run" = "1" ]; then exit 0; fi; \
 	if service_utils_ref="$$$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD 2>&1)"; then \
 		:; \
 	else \
