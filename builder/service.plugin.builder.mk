@@ -198,7 +198,7 @@ check: check-build-vars check-prepare
 
 check-prepare: check-build check-service-builder-base
 
-ifeq ($(SERVICE_UTILS_OWN_BUILD_TARGETS),yes)
+define service_utils_owned_lifecycle_targets
 ## `build-all` is the only legacy spelling kept, and it is a plain alias for
 ## `build` in service repositories that use the shared lifecycle directly.
 build-all: build
@@ -212,24 +212,25 @@ build-fresh: clean prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian buil
 
 build-plugin: check proto-gen
 	@set -e; \
-	version_build="$$($(BUILD_MANIFEST_CMD) reserve-plugin-version $(BUILD_MANIFEST_RESERVE_ARGS))"; \
+	version_build="$$$$($(BUILD_MANIFEST_CMD) reserve-plugin-version $(BUILD_MANIFEST_RESERVE_ARGS))"; \
 	echo ">> Build Plugin Version"; \
-	printf "  %15s : %s\n" "Version" "$$version_build"; \
-	make --no-print-directory service-build-plugin VERSION_BUILD="$$version_build"; \
-	if service_utils_ref="$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD 2>&1)"; then \
+	printf "  %15s : %s\n" "Version" "$$$$version_build"; \
+	make --no-print-directory service-build-plugin VERSION_BUILD="$$$$version_build"; \
+	if service_utils_ref="$$$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD 2>&1)"; then \
 		:; \
 	else \
-		echo "WARN: could not resolve service-utils git ref: $$service_utils_ref" >&2; \
+		echo "WARN: could not resolve service-utils git ref: $$$$service_utils_ref" >&2; \
 		service_utils_ref="unknown"; \
 	fi; \
 	$(BUILD_MANIFEST_CMD) commit-plugin \
 		$(BUILD_MANIFEST_COMMIT_PLUGIN_ARGS) \
-		--version-build "$$version_build" \
-		--service-utils-ref "$$service_utils_ref"
+		--version-build "$$$$version_build" \
+		--service-utils-ref "$$$$service_utils_ref"
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
-endif
+endef
+$(if $(filter yes,$(SERVICE_UTILS_OWN_BUILD_TARGETS)),$(eval $(service_utils_owned_lifecycle_targets)))
 
 # Any artifacts should be under build/. Cleaning is simple.
 clean:
