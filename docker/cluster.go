@@ -158,7 +158,7 @@ func main() {
 		},
 		Environment: map[string]string{
 			"MONGO_INITDB_ROOT_USERNAME": "amia",
-			"MONGO_INITDB_ROOT_PASSWORD": "2022",
+			"MONGO_INITDB_ROOT_PASSWORD": "${ASNC_MONGO_ROOT_PASSWORD:?set ASNC_MONGO_ROOT_PASSWORD}",
 		},
 		NetworkMode: "host",
 		Volumes:     []string{"./data/:/data/db"},
@@ -171,10 +171,10 @@ func main() {
 		Environment: map[string]string{
 			"DOCKER_INFLUXDB_INIT_MODE":        "setup",
 			"DOCKER_INFLUXDB_INIT_USERNAME":    "amia",
-			"DOCKER_INFLUXDB_INIT_PASSWORD":    "Amiasys2025",
+			"DOCKER_INFLUXDB_INIT_PASSWORD":    "${ASNC_INFLUXDB_ADMIN_PASSWORD:?set ASNC_INFLUXDB_ADMIN_PASSWORD}",
 			"DOCKER_INFLUXDB_INIT_ORG":         "amia",
 			"DOCKER_INFLUXDB_INIT_BUCKET":      "asn",
-			"DOCKER_INFLUXDB_INIT_ADMIN_TOKEN": "Amiasys2025",
+			"DOCKER_INFLUXDB_INIT_ADMIN_TOKEN": "${ASNC_INFLUXDB_ADMIN_TOKEN:?set ASNC_INFLUXDB_ADMIN_TOKEN}",
 			"DOCKER_INFLUXDB_INIT_RETENTION":   "0",
 		},
 		Volumes: []string{"influxdb_data:/var/lib/influxdb2"},
@@ -403,7 +403,7 @@ mode: dev # pro | dev, Default: pro
 #  provider: "mongodb" # Supported: "mongodb" | "filedb". Default: "mongodb"
 #  url: "localhost:27017" # Default: "localhost:27017"
 #  username: "amia" # Default: "amia"
-#  password: "2022" # Default: "2022"
+#  password: "REPLACE_WITH_SECRET" # Default: generated secret
 
 ## Email Service
 #smtp: # SMTP email server config
@@ -471,7 +471,7 @@ mode: dev # pro | dev, Default: pro
 #  url: "ldap://localhost:389" # Default: "ldap://localhost:389"
 #  base_dn: "dc=amianetworks,dc=com" # Default: "dc=amianetworks,dc=com"
 #  password_cn: "cn=admin" # Default: "cn=admin"
-#  password: "2022" # Default: "2022"
+#  password: "REPLACE_WITH_SECRET" # Default: generated secret
 #  ous:
 #    account: "People"
 #    group: "Group"
@@ -492,7 +492,7 @@ mode: dev # pro | dev, Default: pro
 #      urls:
 #        - "localhost:6379" # Default: "localhost:6379"
 #      passwords:
-#        - "2023"
+#        - "REPLACE_WITH_SECRET"
 #      dbs:
 #        - 0 # index: 0 ~ 15 (Default: 0)
 
@@ -503,7 +503,7 @@ mode: dev # pro | dev, Default: pro
 
 ## Account Configurations
 #account:
-#  special_key: "SpecialAccount@AmiaNetworks2025" # Used to create special accounts which skips MFA.
+#  special_key: "REPLACE_WITH_SECRET" # Used to create special accounts which skips MFA.
 #  password_algo: sha1 # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: sha256. CAUTION: more demanding algorithms like argon2id are not recommended in VMs.
 #
 #  # Username must be unique system wide, and it is the default identifier for login.
@@ -617,7 +617,7 @@ mode: dev # pro | dev, Default: pro
 ## Testing Configurations
 # Caution: This part should only be configured when testing.
 #testing:
-#  apple_token_secret: testAppleTokenSecret@2025
+#  apple_token_secret: "REPLACE_WITH_SECRET"
 #  wechat_bypass_server: true
 `
 	if err := os.WriteFile("controller/config/iam.yml", []byte(ymlIam), 0644); err != nil {

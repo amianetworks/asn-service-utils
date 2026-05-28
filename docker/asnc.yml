@@ -9,7 +9,7 @@ services:
       nofile: 100000
     environment:
       MONGO_INITDB_ROOT_USERNAME: amia  # db root username,
-      MONGO_INITDB_ROOT_PASSWORD: 2022  # db root user password
+      MONGO_INITDB_ROOT_PASSWORD: ${ASNC_MONGO_ROOT_PASSWORD:?set ASNC_MONGO_ROOT_PASSWORD}  # db root user password
     ports:
       - "27017:27017"  # port forwarding (localPort:containerPort)
     volumes:
@@ -25,17 +25,17 @@ services:
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
       DOCKER_INFLUXDB_INIT_USERNAME: amia
-      DOCKER_INFLUXDB_INIT_PASSWORD: 2022
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${ASNC_INFLUXDB_ADMIN_PASSWORD:?set ASNC_INFLUXDB_ADMIN_PASSWORD}
       DOCKER_INFLUXDB_INIT_ORG: amia
       DOCKER_INFLUXDB_INIT_BUCKET: asn
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: Amiasys2025
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${ASNC_INFLUXDB_ADMIN_TOKEN:?set ASNC_INFLUXDB_ADMIN_TOKEN}
       DOCKER_INFLUXDB_INIT_RETENTION: 0
   asn-rdb:
     container_name: asn-rdb
     image: redis:8
     restart: always   # auto restart the container if it fails
     network_mode: "host"
-    command: [ "redis-server", "--save", "", "--appendonly", "yes", "--requirepass", "2022", "--port", "6379", "--bind", "0.0.0.0" ]
+    command: [ "redis-server", "--save", "", "--appendonly", "yes", "--requirepass", "${ASNC_REDIS_PASSWORD:?set ASNC_REDIS_PASSWORD}", "--port", "6379", "--bind", "0.0.0.0" ]
     volumes:
       - redis_data:/data
   sapphire-iam:

@@ -334,5 +334,30 @@ plan-push-debian:
 			site_status=1; \
 		fi; \
 	done; \
+	metadata_failed=false; \
+	for file in $$package_files; do \
+		[ -f "$$file" ] || continue; \
+		if ! pkg_name=$$($(DEBIAN_METADATA_CMD) --file "$$file" --field Package 2>&1); then \
+			printf "  %-24s : %s\n" "Package metadata" "$$file (invalid package)"; \
+			printf "%s\n" "$$pkg_name" | sed "s/^/  Debian Error: /"; \
+			metadata_failed=true; \
+			continue; \
+		fi; \
+		if ! pkg_version=$$($(DEBIAN_METADATA_CMD) --file "$$file" --field Version 2>&1); then \
+			printf "  %-24s : %s\n" "Package metadata" "$$file (missing version)"; \
+			printf "%s\n" "$$pkg_version" | sed "s/^/  Debian Error: /"; \
+			metadata_failed=true; \
+			continue; \
+		fi; \
+		case " $(DEBIAN_SERVICES) " in \
+			*" $$pkg_name "*) : ;; \
+			*) printf "  %-24s : %s\n" "Package metadata" "$$file package $$pkg_name is not in DEBIAN_SERVICES"; metadata_failed=true ;; \
+		esac; \
+		if [ "$$pkg_version" != "$$plan_version" ]; then \
+			printf "  %-24s : %s\n" "Package metadata" "$$file version $$pkg_version, expected $$plan_version"; \
+			metadata_failed=true; \
+		fi; \
+	done; \
+	if [ "$$metadata_failed" = "true" ]; then site_status=1; fi; \
 	echo ""; \
 	if [ "$(PUSH_PLAN_STRICT)" = "yes" ] && [ "$$site_status" -ne 0 ]; then exit "$$site_status"; fi

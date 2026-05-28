@@ -345,6 +345,6 @@ services_provisioned: [ asn, swan, scarlette ]
 ## Testing Configurations
 # Caution: This part should only be configured when testing.
 #testing:
-#  apple_token_secret: testAppleTokenSecret@2025
-#  google_token_secret: testGoogleTokenSecret@2025
+#  apple_token_secret: "REPLACE_WITH_SECRET"
+#  google_token_secret: "REPLACE_WITH_SECRET"
 #  wechat_bypass_server: true
