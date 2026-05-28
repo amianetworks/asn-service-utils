@@ -17,9 +17,10 @@
 ##----------------------------------------------------------------------------##
 ## Lifecycle targets.
 ##
-## Services should expose these names directly. `build-all` is the only legacy
-## spelling kept, and it is a plain alias for `build`.
-build-all: build
+## Services expose shared build lifecycle names by default. Framework repos can
+## set SERVICE_UTILS_OWN_BUILD_TARGETS=no before including this file and provide
+## their own public build map while still using the shared helper targets below.
+SERVICE_UTILS_OWN_BUILD_TARGETS ?= yes
 
 ## `push-all` is Make-only artifact publication. Release validation and handoff
 ## remain outside the generic builder and should consume the published outputs.
@@ -141,8 +142,10 @@ SERVICE_BUILD_MAKEFILE ?= Makefile
 SERVICE_BUILD_PLUGIN_TARGET ?= build.plugin
 SERVICE_BUILD_DEBIAN_TARGET ?= build.deb
 SERVICE_BUILD_CHECK_DEBIAN_TARGET ?= check.deb
+SERVICE_ARTIFACT_BUILD_TARGET ?= build-plugin
 SERVICE_BUILD_CLEAN_DIRS ?=
 SERVICE_BUILD_DIRS ?= $(SERVICE_BUILD_CLEAN_DIRS)
+SERVICE_CLEAN_DIRS ?= build/
 SERVICE_GO_BUILD_ARTIFACTS ?=
 SERVICE_GO_BUILD_TARGETS := $(addprefix .service-go-build-,$(SERVICE_GO_BUILD_ARTIFACTS))
 SERVICE_ARTIFACT_COPY_SPECS ?=
@@ -195,6 +198,11 @@ check: check-build-vars check-prepare
 
 check-prepare: check-build check-service-builder-base
 
+ifeq ($(SERVICE_UTILS_OWN_BUILD_TARGETS),yes)
+## `build-all` is the only legacy spelling kept, and it is a plain alias for
+## `build` in service repositories that use the shared lifecycle directly.
+build-all: build
+
 build: prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian build-docker
 
 build-fresh: clean prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian build-docker
@@ -221,10 +229,11 @@ build-plugin: check proto-gen
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
+endif
 
 # Any artifacts should be under build/. Cleaning is simple.
 clean:
-	@rm -rf build/
+	@rm -rf $(SERVICE_CLEAN_DIRS)
 
 ##----------------------------------------------------------------------------##
 ## Variable checks ##
@@ -590,7 +599,7 @@ set-version: check-build
 
 increment-build:
 	@echo "ERROR: make increment-build has been removed."
-	@echo "build-plugin now commits $(DEV_BUILD_FILE) only after plugin artifacts build successfully."
+	@echo "$(SERVICE_ARTIFACT_BUILD_TARGET) now commits $(DEV_BUILD_FILE) only after artifacts build successfully."
 	@exit 2
 
 ##----------------------------------------------------------------------------##
@@ -732,7 +741,7 @@ DOCKER_PUSH_LATEST ?= $(if $(filter pro,$(BUILD_MODE)),yes,no)
 	if [ "$$missing" = "1" ]; then \
 		echo "ERROR: Docker inputs for $$version_build are incomplete."; \
 		echo "Expected version source: $(BUILD_MANIFEST_FILE)"; \
-		echo "Run 'make build-plugin && make build-debian' first, or 'make build' for the full local build."; \
+		echo "Run 'make $(SERVICE_ARTIFACT_BUILD_TARGET) && make build-debian' first, or 'make build-all' for the full local build."; \
 		exit 1; \
 	fi
 
@@ -847,8 +856,8 @@ prepare-service-builder-base: .check_service_utils_version_file
 	@echo " - MUST BE DONE everytime when service-api version changes."
 	@echo " - MUST BE DONE everytime when the service go.mod/go.sum or builder inputs change."
 	@echo " - Run \`docker images | grep asn\` to list the images."
-	@echo " - Run \`make build-plugin\` to build plugin artifacts."
-	@echo " - Run \`make build-debian\` to build Debian packages from plugin artifacts."
+	@echo " - Run \`make $(SERVICE_ARTIFACT_BUILD_TARGET)\` to build artifacts."
+	@echo " - Run \`make build-debian\` to build Debian packages from artifacts."
 	@echo " - Run \`make build-docker\` to build standalone docker images, for non-plugin setup."
 	@echo ""
 
@@ -985,7 +994,7 @@ service-build-debian: .require-version-build-var
 .require-version-build-var:
 	@if [ -z "$(strip $(VERSION_BUILD))" ]; then \
 		echo "ERROR: VERSION_BUILD is not set for this internal build step."; \
-		echo "Use make build-plugin, make build-debian, or make build-docker so build/Manifest.yaml owns the version."; \
+		echo "Use make $(SERVICE_ARTIFACT_BUILD_TARGET), make build-debian, or make build-docker so build/Manifest.yaml owns the version."; \
 		exit 2; \
 	fi
 

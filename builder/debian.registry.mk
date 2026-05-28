@@ -3,6 +3,7 @@
 # Shared Debian repository targets for ASN framework and services.
 
 DEBIAN_PUSH_CHECK_TARGETS ?=
+DEBIAN_INTERNAL_PUSH_CHECK_TARGETS ?= $(DEBIAN_PUSH_CHECK_TARGETS)
 DEBIAN_PUSH_VERSION ?= $(VERSION_BUILD)
 DEBIAN_REPO_SITES ?= $(DEBIAN_REPOS)
 DEBIAN_RELEASE_CHANNEL ?= $(RELEASE_CHANNEL)
@@ -73,7 +74,7 @@ check-push-debian-sites:
 		exit 1; \
 	fi
 
-.push-debian-site:
+.push-debian-site: $(DEBIAN_INTERNAL_PUSH_CHECK_TARGETS)
 	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
 	$(eval DEBIAN_CHANNEL := $(if $(strip $(DEBIAN_RELEASE_CHANNEL)),$(call uppercase,$(DEBIAN_RELEASE_CHANNEL)),$(DEBIAN_SITE)))
 	$(eval T_HOST := $(if ${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},__UNCONFIGURED__))

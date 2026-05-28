@@ -3,6 +3,7 @@
 # Shared Docker registry targets for ASN framework and services.
 
 DOCKER_PUSH_CHECK_TARGETS ?=
+DOCKER_INTERNAL_PUSH_CHECK_TARGETS ?= $(DOCKER_PUSH_CHECK_TARGETS)
 DOCKER_PUSH_VERSION ?= $(VERSION_BUILD)
 DOCKER_PUSH_LATEST ?= no
 DOCKER_REQUIRE_REGISTRY_USER ?= yes
@@ -85,7 +86,7 @@ check-push-docker-sites:
 		fi; \
 	fi
 
-.push-docker-site:
+.push-docker-site: $(DOCKER_INTERNAL_PUSH_CHECK_TARGETS)
 	$(eval DOCKER_SITE := $(call uppercase,$(SITE)))
 	$(eval REGISTRY := $(DOCKER_REGISTRY_$(DOCKER_SITE)))
 	@echo ">> Docker Publish Target"
@@ -111,7 +112,7 @@ check-push-docker-sites:
 		done; \
 	fi
 
-.push-docker-image:
+.push-docker-image: $(DOCKER_INTERNAL_PUSH_CHECK_TARGETS)
 	$(eval SOURCE_IMAGE_TAG := $(if $(SOURCE_TAG),$(SOURCE_TAG),$(IMAGE_TAG)))
 	$(eval REGISTRY_IMAGE_PREFIX := $(if $(DOCKER_SUBREPO),$(REGISTRY)/$(DOCKER_SUBREPO),$(REGISTRY)))
 	@echo ""
