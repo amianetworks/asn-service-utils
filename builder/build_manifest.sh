@@ -42,6 +42,8 @@ docs_version_key="${SERVICE_DOCS_VERSION_KEY:-version_build}"
 service_utils_dir="${SERVICE_UTILS_DIR:-service-utils}"
 asn_service_api_version="${ASN_SERVICE_API_VERSION:-}"
 dep_version_asn="${DEP_VERSION_ASN:-}"
+go_version="${GO_VERSION:-}"
+dep_version_go="${DEP_VERSION_GO:-}"
 service_utils_ref=""
 service_name=""
 
@@ -59,7 +61,7 @@ Commands:
   active-version-build  Print current manifest version_build when it matches mode/version.
   value                 Print a manifest value, such as version_build.
   check-build           Print the active and next local build identity.
-  check-version         Compatibility alias for check-build.
+  check-version         Print the local version identity.
 EOF
 }
 
@@ -94,6 +96,8 @@ while [ "$#" -gt 0 ]; do
         --service) shift; service_name="${1:-}" ;;
         --asn-service-api-version) shift; asn_service_api_version="${1:-}" ;;
         --dep-version-asn) shift; dep_version_asn="${1:-}" ;;
+        --go-version) shift; go_version="${1:-}" ;;
+        --dep-version-go) shift; dep_version_go="${1:-}" ;;
         --service-utils-ref) shift; service_utils_ref="${1:-}" ;;
         --key) shift; key_path="${1:-}" ;;
         -h|--help) usage; exit 0 ;;
@@ -178,6 +182,65 @@ yaml_value() {
         }
         END { exit found ? 0 : 1 }
     ' "$file"
+}
+
+replace_placeholders() {
+    local value="$1"
+    value="${value//@SERVICE@/$service_name}"
+    value="${value//@BUILD_MODE@/$mode_lower}"
+    value="${value//@MANIFEST@/$(relpath "$manifest_file")}"
+    value="${value//@BUILT_VERSION@/$display_built_version}"
+    value="${value//@NEXT_BUILD@/$display_next_build}"
+    value="${value//@VERSION_BUILD@/$display_version_build}"
+    value="${value//@ASN_SERVICE_API_VERSION@/$asn_service_api_version}"
+    value="${value//@DEP_VERSION_ASN@/$dep_version_asn}"
+    value="${value//@GO_VERSION@/$go_version}"
+    value="${value//@DEP_VERSION_GO@/$dep_version_go}"
+    printf '%s\n' "$value"
+}
+
+render_rows() {
+    local rows="$1"
+    local line label value
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            ""|"#"*) continue ;;
+        esac
+        label="${line%%=*}"
+        value="${line#*=}"
+        if [ "$label" = "$line" ]; then
+            continue
+        fi
+        label="$(printf '%s' "$label" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+        value="$(replace_placeholders "$value")"
+        printf "  %15s : %s\n" "$label" "$value"
+    done <<EOF
+$rows
+EOF
+}
+
+set_check_display_values() {
+    active="$(yaml_value "$manifest_file" version_build || true)"
+    manifest_mode="$(yaml_value "$manifest_file" build_mode || true)"
+    next="$(next_plugin_version)"
+    active_matches=no
+    if [ -n "$active" ] && [ "$manifest_mode" = "$mode_lower" ]; then
+        case "$active" in
+            "$version".*) active_matches=yes ;;
+        esac
+        if [ "$mode_lower" = "pro" ] && [ "$active" != "$version.$maintainer_build" ]; then
+            active_matches=no
+        fi
+    fi
+    display_built_version="<none>"
+    if [ "$active_matches" = "yes" ]; then
+        display_built_version="$active"
+    fi
+    display_next_build="$next"
+    display_version_build="$next"
+    if [ -n "$active" ] && [ "$manifest_mode" = "$mode_lower" ]; then
+        display_version_build="$active"
+    fi
 }
 
 has_glob() {
@@ -678,33 +741,36 @@ case "$command_name" in
         [ -n "$key_path" ] || { echo "build_manifest ERROR: value requires --key" >&2; exit 2; }
         yaml_value "$manifest_file" "$key_path"
         ;;
-    check-build|check-version)
-        active="$(yaml_value "$manifest_file" version_build || true)"
-        manifest_mode="$(yaml_value "$manifest_file" build_mode || true)"
-        next="$(next_plugin_version)"
-        active_matches=no
-        if [ -n "$active" ] && [ "$manifest_mode" = "$mode_lower" ]; then
-            case "$active" in
-                "$version".*) active_matches=yes ;;
-            esac
-            if [ "$mode_lower" = "pro" ] && [ "$active" != "$version.$maintainer_build" ]; then
-                active_matches=no
-            fi
+    check-build)
+        set_check_display_values
+        rows="${CHECK_BUILD_ROWS:-}"
+        if [ -z "$rows" ]; then
+            rows="$(cat <<'EOF'
+Service=@SERVICE@
+Build Mode=@BUILD_MODE@
+Manifest=@MANIFEST@
+Built Version=@BUILT_VERSION@
+Next Build=@NEXT_BUILD@
+EOF
+)"
         fi
         printf ">> Build Status\n"
-        printf "  %15s : %s\n" "Build Mode" "$mode_lower"
-        if [ "$active_matches" = "yes" ]; then
-            printf "  %15s : %s\n" "Built Version" "$active"
-        else
-            printf "  %15s : %s\n" "Built Version" "<none>"
+        render_rows "$rows"
+        ;;
+    check-version)
+        set_check_display_values
+        rows="${CHECK_VERSION_ROWS:-}"
+        if [ -z "$rows" ]; then
+            rows="$(cat <<'EOF'
+Service=@SERVICE@
+Version Build=@VERSION_BUILD@
+ASN Version=@ASN_SERVICE_API_VERSION@ (service-utils)
+Go Version=@GO_VERSION@
+EOF
+)"
         fi
-        printf "  %15s : %s\n" "Next Build" "$next"
-        if [ -n "$active" ] && [ "$active_matches" != "yes" ]; then
-            printf "  %15s : %s (contains %s %s)\n" "Manifest" "$(relpath "$manifest_file")" "$manifest_mode" "$active"
-        else
-            printf "  %15s : %s\n" "Manifest" "$(relpath "$manifest_file")"
-        fi
-        [ -n "$asn_service_api_version" ] && printf "  %15s : %s\n" "ASN Service API" "$asn_service_api_version"
+        printf ">> Version Status\n"
+        render_rows "$rows"
         ;;
     *)
         echo "build_manifest ERROR: unsupported command: $command_name" >&2

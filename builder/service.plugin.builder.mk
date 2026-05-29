@@ -27,6 +27,7 @@ SHELL := /bin/bash
 ## their own public build map while still using the shared helper targets below.
 SERVICE_UTILS_OWN_BUILD_TARGETS ?= yes
 SERVICE_UTILS_OWN_CLEAN_TARGET ?= yes
+SERVICE_UTILS_OWN_SET_VERSION_TARGET ?= yes
 
 ## `push-all` is Make-only artifact publication. Release validation and handoff
 ## remain outside the generic builder and should consume the published outputs.
@@ -240,7 +241,7 @@ prepare: .check_service_utils_version_file prepare-service-builder-base
 	@echo "Successfully built base image."
 	@echo
 
-check: check-build-vars check-prepare
+check: check-build check-version
 	@echo "Local project check passed."
 
 check-prepare: check-build check-service-builder-base
@@ -431,11 +432,23 @@ check-build:
 		--dev-file "$(DEV_BUILD_FILE)" \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
+		--dep-version-asn "$(DEP_VERSION_ASN)" \
 		$(BUILD_MANIFEST_ARGS)
-	@echo ""
-	@$(MAKE) --no-print-directory check-go-mod
 
-check-version: check-build
+check-version:
+	@$(BUILD_MANIFEST_CMD) check-version \
+		--service "$(SERVICE)" \
+		--version "$(VERSION)" \
+		--mode "$(BUILD_MODE)" \
+		--build "$(BUILD)" \
+		--dev-start "$(BUILD_NUM_DEV)" \
+		--dev-file "$(DEV_BUILD_FILE)" \
+		--manifest "$(BUILD_MANIFEST_FILE)" \
+		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
+		--dep-version-asn "$(DEP_VERSION_ASN)" \
+		--go-version "$(GO_VERSION)" \
+		--dep-version-go "$(DEP_VERSION_GO)" \
+		$(BUILD_MANIFEST_ARGS)
 
 check-go-mod:
 	@failed=0; compared=0; skipped=0; \
@@ -665,9 +678,11 @@ stage-docs:
 		$(BUILD_MANIFEST_CMD) commit-lane --lane docs --version-build "$$version_build" $(BUILD_MANIFEST_STAGE_DOCS_ARGS); \
 	fi
 
+ifeq ($(SERVICE_UTILS_OWN_SET_VERSION_TARGET),yes)
 set-version: check-build
 	@echo "Modify make/config.mk to update the version and build."
 	@echo "NOTE: Only CI/CD or maintainer should change the version with caution."
+endif
 
 increment-build:
 	@echo "ERROR: make increment-build has been removed."
