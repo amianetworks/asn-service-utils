@@ -29,7 +29,7 @@ documentation_channel=""
 rollback_requirement=""
 artifact_source="${SERVICE_DOCS_ARTIFACT_SOURCE:-local-build}"
 published_manifest="${SERVICE_DOCS_PUBLISHED_MANIFEST:-not selected}"
-approval_record="${SERVICE_DOCS_APPROVAL_RECORD:-not provided}"
+release_intent="${SERVICE_DOCS_RELEASE_INTENT:-not provided}"
 rollback_plan="${SERVICE_DOCS_ROLLBACK_PLAN:-not provided}"
 
 usage() {
@@ -60,7 +60,7 @@ Options:
   --rollback-requirement TEXT
   --artifact-source TEXT
   --published-manifest TEXT
-  --approval-record TEXT
+  --release-intent TEXT
   --rollback-plan TEXT
 EOF
 }
@@ -110,7 +110,7 @@ while [ "$#" -gt 0 ]; do
         --rollback-requirement) shift; rollback_requirement="${1:-}" ;;
         --artifact-source) shift; artifact_source="${1:-}" ;;
         --published-manifest) shift; published_manifest="${1:-}" ;;
-        --approval-record) shift; approval_record="${1:-}" ;;
+        --release-intent) shift; release_intent="${1:-}" ;;
         --rollback-plan) shift; rollback_plan="${1:-}" ;;
         -h|--help)
             usage
@@ -404,7 +404,7 @@ Published Artifact Manifest: $published_manifest
 Package Channel: ${package_channel:-not configured}
 Docker Image Intent: ${docker_image_intent:-not configured}
 Documentation Channel: ${documentation_channel:-service-served docs inside the selected package/image artifacts}
-Approval Record: $approval_record
+Release Intent: $release_intent
 Rollback Plan: $rollback_plan
 
 ## Artifact Inventory
@@ -416,10 +416,10 @@ Rollback Plan: $rollback_plan
 | Docker images | Docker lane or published registry metadata | Image coordinates and digests must match the selected release mode. |
 | Documentation | Release manifest and docs checksums | Service-served docs must match the release version and selected audience. |
 
-## Approval And Rollback
+## Release And Rollback
 
-- Publishing, package repository access, registry pushes, optional docs download upload, deployment, live credentials, and deployment phases remain approval-gated.
-- Release readiness requires final artifact identity, rollback guidance, and approval records before customer/operator handoff.
+- Publishing, package repository access, registry pushes, optional docs download upload, deployment, live credentials, and deployment phases require explicit user request.
+- Release readiness requires final artifact identity, rollback guidance, and release intent before customer/operator handoff.
 - ${rollback_requirement:-No additional rollback requirement configured.}
 EOF
 }
