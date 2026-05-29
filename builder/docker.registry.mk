@@ -19,7 +19,7 @@ DOCKER_CURL_TIMEOUT_FLAGS ?= --connect-timeout 10 --max-time 120 --retry 2 --ret
 # The list/push recipes read credentials through shell variables such as
 # $${DOCKER_REGISTRY_CN_USER} so curl invocations do not contain make-expanded
 # secret values. Export the selected site variables because projects often
-# derive them from RELEASE_SECRET_* values in config.mk or ignored local.mk.
+# derive them from RELEASE_SECRET_* values in make/config.mk or ignored make/local.mk.
 docker_registry_uppercase = $(call uppercase,$(1))
 DOCKER_REGISTRY_USER_EXPORTS := $(foreach site,$(DOCKER_REGISTRY_SITES),DOCKER_REGISTRY_$(call docker_registry_uppercase,$(site))_USER)
 export $(DOCKER_REGISTRY_USER_EXPORTS)

@@ -26,6 +26,7 @@ SHELL := /bin/bash
 ## set SERVICE_UTILS_OWN_BUILD_TARGETS=no before including this file and provide
 ## their own public build map while still using the shared helper targets below.
 SERVICE_UTILS_OWN_BUILD_TARGETS ?= yes
+SERVICE_UTILS_OWN_CLEAN_TARGET ?= yes
 
 ## `push-all` is Make-only artifact publication. Release validation and handoff
 ## remain outside the generic builder and should consume the published outputs.
@@ -289,6 +290,7 @@ $(if $(filter yes,$(SERVICE_UTILS_OWN_BUILD_TARGETS)),$(eval $(service_utils_own
 
 # Any artifacts should be under build/. Guard this shared clean path so a bad
 # override cannot remove source, config, or parent directories.
+ifeq ($(SERVICE_UTILS_OWN_CLEAN_TARGET),yes)
 clean:
 	$(call service_utils_assert_build_paths,$(SERVICE_CLEAN_DIRS),SERVICE_CLEAN_DIRS)
 	@set -e; \
@@ -303,6 +305,7 @@ clean:
 			*) echo "ERROR: refusing clean path outside build/: $$path"; exit 2 ;; \
 		esac; \
 	done
+endif
 
 ##----------------------------------------------------------------------------##
 ## Variable checks ##
@@ -663,7 +666,7 @@ stage-docs:
 	fi
 
 set-version: check-build
-	@echo "Modify config.mk to update the version and build."
+	@echo "Modify make/config.mk to update the version and build."
 	@echo "NOTE: Only CI/CD or maintainer should change the version with caution."
 
 increment-build:

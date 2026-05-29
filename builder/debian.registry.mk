@@ -24,7 +24,7 @@ DEBIAN_CURL_MUTATION_FLAGS ?= $(DEBIAN_CURL_TLS_FLAGS) $(DEBIAN_CURL_TIMEOUT_FLA
 # The list/push recipes read credentials through shell variables such as
 # $${DEBIAN_REPO_USER_CN} so curl invocations do not contain make-expanded
 # secret values. Export the selected site variables because projects often
-# derive them from RELEASE_SECRET_* values in config.mk or ignored local.mk.
+# derive them from RELEASE_SECRET_* values in make/config.mk or ignored make/local.mk.
 debian_registry_uppercase = $(call uppercase,$(1))
 DEBIAN_REPO_USER_EXPORTS := $(foreach site,$(DEBIAN_REPO_SITES),DEBIAN_REPO_USER_$(call debian_registry_uppercase,$(site)))
 export $(DEBIAN_REPO_USER_EXPORTS)
