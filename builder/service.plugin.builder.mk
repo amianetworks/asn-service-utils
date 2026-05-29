@@ -241,7 +241,7 @@ prepare: .check_service_utils_version_file prepare-service-builder-base
 	@echo "Successfully built base image."
 	@echo
 
-check: check-build check-version
+check: check-build-vars check-prepare
 	@echo "Local project check passed."
 
 check-prepare: check-build check-service-builder-base
@@ -291,7 +291,7 @@ $(if $(filter yes,$(SERVICE_UTILS_OWN_BUILD_TARGETS)),$(eval $(service_utils_own
 
 # Any artifacts should be under build/. Guard this shared clean path so a bad
 # override cannot remove source, config, or parent directories.
-ifeq ($(SERVICE_UTILS_OWN_CLEAN_TARGET),yes)
+define service_utils_owned_clean_target
 clean:
 	$(call service_utils_assert_build_paths,$(SERVICE_CLEAN_DIRS),SERVICE_CLEAN_DIRS)
 	@set -e; \
@@ -306,7 +306,8 @@ clean:
 			*) echo "ERROR: refusing clean path outside build/: $$path"; exit 2 ;; \
 		esac; \
 	done
-endif
+endef
+$(if $(filter yes,$(SERVICE_UTILS_OWN_CLEAN_TARGET)),$(eval $(service_utils_owned_clean_target)))
 
 ##----------------------------------------------------------------------------##
 ## Variable checks ##
@@ -678,11 +679,12 @@ stage-docs:
 		$(BUILD_MANIFEST_CMD) commit-lane --lane docs --version-build "$$version_build" $(BUILD_MANIFEST_STAGE_DOCS_ARGS); \
 	fi
 
-ifeq ($(SERVICE_UTILS_OWN_SET_VERSION_TARGET),yes)
+define service_utils_owned_set_version_target
 set-version: check-build
 	@echo "Modify make/config.mk to update the version and build."
 	@echo "NOTE: Only CI/CD or maintainer should change the version with caution."
-endif
+endef
+$(if $(filter yes,$(SERVICE_UTILS_OWN_SET_VERSION_TARGET)),$(eval $(service_utils_owned_set_version_target)))
 
 increment-build:
 	@echo "ERROR: make increment-build has been removed."
