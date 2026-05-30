@@ -47,9 +47,9 @@ push-all: push-docker push-debian
 	push-all \
 	check \
 	check-prepare \
+	.check-local-start \
+	.check-prepare-start \
 	check-vars \
-	check-build-vars \
-	check-push-vars \
 	check-build \
 	check-version \
 	go-test \
@@ -105,11 +105,9 @@ push-all: push-docker push-debian
 	.check_service_utils_version_file \
 	.check_vars \
 	.check_build_vars \
-	.check_push_vars \
+	.print-publish-profile-var \
 	.print-docker-push-var \
 	.print-debian-push-var \
-	.check-docker-push-var \
-	.check-debian-push-var \
 	.check-docker-release-mode \
 	.check-debian-release-mode \
 	.check-docker-publish-images \
@@ -123,11 +121,13 @@ push-all: push-docker push-debian
 
 # Root Makefiles own public `init` so missing service-utils can be repaired
 # before this shared builder is included. This target owns post-bootstrap checks.
-service-utils-init: .check_service_utils_version_file check-build-vars update_service_utils
+service-utils-init: .check_service_utils_version_file .check_build_vars update_service_utils
 	@$(MAKE) --no-print-directory check-build
 
 # Build identity and manifest mutation make these lifecycle targets serial.
-.NOTPARALLEL: build build-plugin build-fresh build-debian build-docker
+# Public check/report targets are also serialized so readable output does not
+# interleave when callers use parallel Make.
+.NOTPARALLEL: check check-prepare check-vars check-build check-version check-go-mod check-service-builder-base build build-plugin build-fresh build-debian build-docker
 
 BUILD_MANIFEST_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/build_manifest.sh
 BUILDER_BASE_IMAGE_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/builder_base_image.sh
@@ -241,10 +241,38 @@ prepare: .check_service_utils_version_file prepare-service-builder-base
 	@echo "Successfully built base image."
 	@echo
 
-check: check-build-vars check-prepare
-	@echo "Local project check passed."
+# Check target taxonomy:
+# - check: canonical local readiness aggregate for humans/agents.
+# - check-prepare: build-readiness bundle used by lifecycle and workflow targets.
+# - check-vars: redacted inventory only.
+# Extension contract:
+# - CHECK_LOCAL_EXTRA_TARGETS appends targets to default `make check`.
+# - CHECK_PREPARE_EXTRA_TARGETS appends targets to `make check-prepare`.
+# - CHECK_VERSION_ROWS and CHECK_BUILD_ROWS replace the default identity rows.
+# - CHECK_VERSION_EXTRA_ROWS and CHECK_BUILD_EXTRA_ROWS append rows to the
+#   active identity sections.
+CHECK_LOCAL_EXTRA_TARGETS ?=
+CHECK_PREPARE_EXTRA_TARGETS ?=
+CHECK_PREPARE_TARGETS ?= check-version check-go-mod check-build check-service-builder-base $(CHECK_PREPARE_EXTRA_TARGETS)
+CHECK_BUILD_EXTRA_ROWS ?=
+CHECK_VERSION_EXTRA_ROWS ?=
+export CHECK_BUILD_ROWS CHECK_VERSION_ROWS CHECK_BUILD_EXTRA_ROWS CHECK_VERSION_EXTRA_ROWS
 
-check-prepare: check-build check-service-builder-base
+check: .check-local-start check-prepare $(CHECK_LOCAL_EXTRA_TARGETS)
+	@echo ">> Local Check: [PASS]"
+
+.check-local-start:
+	@echo ">> Local Check"; \
+	printf "  %15s : %s\n" "Scope" "version identity, manifest state, Go module compatibility, builder image"; \
+	echo ""
+
+check-prepare: .check-prepare-start $(CHECK_PREPARE_TARGETS)
+	@echo ">> Local Readiness: [PASS]"
+
+.check-prepare-start:
+	@echo ">> Local Readiness"; \
+	printf "  %15s : %s\n" "Targets" "$(strip $(CHECK_PREPARE_TARGETS))"; \
+	echo ""
 
 define service_utils_owned_lifecycle_targets
 ## `build-all` is the only legacy spelling kept, and it is a plain alias for
@@ -314,17 +342,20 @@ $(if $(filter yes,$(SERVICE_UTILS_OWN_CLEAN_TARGET)),$(eval $(service_utils_owne
 
 .check_vars:
 	@echo ">> Variable Inventory"; \
-	echo "Secret values are redacted. This inventory is informational; run check-build-vars or check-push-vars for failing gates."; \
+	echo "Secret values are redacted."; \
 	echo ""; \
 	printf "%-44s %-11s %-7s %s\n" "Variable" "Status" "Secret" "Used by"; \
 	printf "%-44s %-11s %-7s %s\n" "--------" "------" "------" "-------"; \
 	private_key="$${PRIVATE_GIT_SSH_KEY_FILE:-}"; \
 	if [ -z "$$private_key" ]; then status="MISSING"; elif [ ! -r "$$private_key" ]; then status="UNREADABLE"; else status="SET"; fi; \
-	printf "%-44s %-11s %-7s %s\n" "PRIVATE_GIT_SSH_KEY_FILE" "$$status" "yes" "check-build-vars, make init, make check"; \
+	printf "%-44s %-11s %-7s %s\n" "PRIVATE_GIT_SSH_KEY_FILE" "$$status" "yes" "init"; \
 	if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then status="MISSING"; else status="SET"; fi; \
-	printf "%-44s %-11s %-7s %s\n" "DOCKER_REGISTRY_SITES" "$$status" "no" "check-push-vars, push-docker"; \
+	printf "%-44s %-11s %-7s %s\n" "DOCKER_REGISTRY_SITES" "$$status" "no" "plan-push-docker, push-docker"; \
 	if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then status="MISSING"; else status="SET"; fi; \
-	printf "%-44s %-11s %-7s %s\n" "DEBIAN_REPO_SITES" "$$status" "no" "check-push-vars, push-debian"
+	printf "%-44s %-11s %-7s %s\n" "DEBIAN_REPO_SITES" "$$status" "no" "plan-push-debian, push-debian"
+	@for site in $(sort $(DOCKER_REGISTRY_SITES) $(DEBIAN_REPO_SITES)); do \
+		$(MAKE) -s .print-publish-profile-var SITE=$$site; \
+	done
 	@for site in $(DOCKER_REGISTRY_SITES); do \
 		$(MAKE) -s .print-docker-push-var SITE=$$site; \
 	done
@@ -332,26 +363,33 @@ $(if $(filter yes,$(SERVICE_UTILS_OWN_CLEAN_TARGET)),$(eval $(service_utils_owne
 		$(MAKE) -s .print-debian-push-var SITE=$$site; \
 	done
 	@echo ""; \
-	echo "Variable inventory completed without printing secret values."; \
-	echo "Run 'make check-build-vars' for the local build/init gate."; \
-	echo "Run 'make check-push-vars' for selected Docker/Debian publish credentials."
+	echo "Variable inventory completed without printing secret values."
+
+.print-publish-profile-var:
+	$(eval VAR_SITE := $(call uppercase,$(SITE)))
+	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
+	@status="SET"; \
+	if [ -z "$(strip $(VAR_PROFILE))" ]; then status="MISSING"; fi; \
+	printf "%-44s %-11s %-7s %s\n" "RELEASE_SECRET_PROFILE_$(VAR_SITE)" "$$status" "no" "publish credential selection"
 
 .print-docker-push-var:
 	$(eval VAR_SITE := $(call uppercase,$(SITE)))
 	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
 	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DOCKER)
 	$(eval VAR_REGISTRY := $(DOCKER_REGISTRY_$(VAR_SITE)))
-	@$(PUBLISH_VARS_CMD) print --kind docker --site "$(VAR_SITE)" --endpoint-name "DOCKER_REGISTRY_$(VAR_SITE)" --endpoint "$(VAR_REGISTRY)" --profile "$(VAR_PROFILE)" --auth-var "$(VAR_AUTH_VAR)" --credential-var "DOCKER_REGISTRY_$(VAR_SITE)_USER" --used-by "push-docker-$(call lowercase,$(VAR_SITE))"
+	@$(PUBLISH_VARS_CMD) print --kind docker --site "$(VAR_SITE)" --endpoint-name "DOCKER_REGISTRY_$(VAR_SITE)" --endpoint "$(VAR_REGISTRY)" --profile "$(VAR_PROFILE)" --profile-row no --auth-var "$(VAR_AUTH_VAR)" --credential-var "DOCKER_REGISTRY_$(VAR_SITE)_USER" --used-by "push-docker-$(call lowercase,$(VAR_SITE))"
 
 .print-debian-push-var:
 	$(eval VAR_SITE := $(call uppercase,$(SITE)))
 	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
 	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DEBIAN)
 	$(eval VAR_HOST := $(DEBIAN_REPO_HOST_$(VAR_SITE)))
-	@$(PUBLISH_VARS_CMD) print --kind debian --site "$(VAR_SITE)" --endpoint-name "DEBIAN_REPO_HOST_$(VAR_SITE)" --endpoint "$(VAR_HOST)" --profile "$(VAR_PROFILE)" --auth-var "$(VAR_AUTH_VAR)" --credential-var "DEBIAN_REPO_USER_$(VAR_SITE)" --used-by "push-debian-$(call lowercase,$(VAR_SITE))"
+	@$(PUBLISH_VARS_CMD) print --kind debian --site "$(VAR_SITE)" --endpoint-name "DEBIAN_REPO_HOST_$(VAR_SITE)" --endpoint "$(VAR_HOST)" --profile "$(VAR_PROFILE)" --profile-row no --auth-var "$(VAR_AUTH_VAR)" --credential-var "DEBIAN_REPO_USER_$(VAR_SITE)" --used-by "push-debian-$(call lowercase,$(VAR_SITE))"
 
 .check_build_vars:
 	@failed=0; \
+	tmp="$$(mktemp "$${TMPDIR:-/tmp}/check-private-key.XXXXXX")"; \
+	trap 'rm -f "$$tmp"' EXIT; \
 	check_file_var() { \
 		name="$$1"; value="$$2"; required="$$3"; secret="$$4"; \
 		display="$$value"; \
@@ -363,11 +401,12 @@ $(if $(filter yes,$(SERVICE_UTILS_OWN_CLEAN_TARGET)),$(eval $(service_utils_owne
 			display="$$display (unreadable)"; \
 			failed=1; \
 		fi; \
-		printf "  %24s : %s\n" "$$name" "$$display"; \
+		printf "  %24s : %s\n" "$$name" "$$display" >> "$$tmp"; \
 	}; \
-	echo ">> Build Variable Check"; \
 	check_file_var "PRIVATE_GIT_SSH_KEY_FILE" "$${PRIVATE_GIT_SSH_KEY_FILE:-}" "yes" "yes"; \
 	if [ "$$failed" -ne 0 ]; then \
+		echo ">> Build Variable Check: [FAIL]"; \
+		cat "$$tmp"; \
 		echo ""; \
 		echo "Build variable check failed. Set PRIVATE_GIT_SSH_KEY_FILE to a readable private Git SSH key using one of the methods below."; \
 		echo ""; \
@@ -378,50 +417,10 @@ $(if $(filter yes,$(SERVICE_UTILS_OWN_CLEAN_TARGET)),$(eval $(service_utils_owne
 		echo "    export PRIVATE_GIT_SSH_KEY_FILE=/path/to/private_git_key"; \
 		exit 1; \
 	fi; \
-	echo ""; \
-	echo "Build variable check passed."; \
-	echo "Run 'make check-vars' for the full redacted variable inventory."
-
-.check_push_vars:
-	@echo ">> Publish Variable Check"; \
-	echo "Secret values are redacted."; \
-	if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
-		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
-		exit 1; \
-	fi; \
-	if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
-		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
-		exit 1; \
-	fi
-	@for site in $(DOCKER_REGISTRY_SITES); do \
-		$(MAKE) -s .check-docker-push-var SITE=$$site; \
-	done
-	@for site in $(DEBIAN_REPO_SITES); do \
-		$(MAKE) -s .check-debian-push-var SITE=$$site; \
-	done
-	@echo ""; \
-	echo "Publish variable check passed without printing secret values."
-
-.check-docker-push-var:
-	$(eval VAR_SITE := $(call uppercase,$(SITE)))
-	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
-	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DOCKER)
-	$(eval VAR_REGISTRY := $(DOCKER_REGISTRY_$(VAR_SITE)))
-	@$(PUBLISH_VARS_CMD) check --kind docker --site "$(VAR_SITE)" --endpoint-name "DOCKER_REGISTRY_$(VAR_SITE)" --endpoint "$(VAR_REGISTRY)" --profile "$(VAR_PROFILE)" --auth-var "$(VAR_AUTH_VAR)" --credential-var "DOCKER_REGISTRY_$(VAR_SITE)_USER"
-
-.check-debian-push-var:
-	$(eval VAR_SITE := $(call uppercase,$(SITE)))
-	$(eval VAR_PROFILE := $(RELEASE_SECRET_PROFILE_$(VAR_SITE)))
-	$(eval VAR_AUTH_VAR := RELEASE_SECRET_AUTH_$(VAR_PROFILE)_DEBIAN)
-	$(eval VAR_HOST := $(DEBIAN_REPO_HOST_$(VAR_SITE)))
-	@$(PUBLISH_VARS_CMD) check --kind debian --site "$(VAR_SITE)" --endpoint-name "DEBIAN_REPO_HOST_$(VAR_SITE)" --endpoint "$(VAR_HOST)" --profile "$(VAR_PROFILE)" --auth-var "$(VAR_AUTH_VAR)" --credential-var "DEBIAN_REPO_USER_$(VAR_SITE)"
+	echo ">> Build Variable Check: [PASS]"; \
+	cat "$$tmp"
 
 check-vars: .check_vars
-
-check-build-vars: .check_build_vars
-
-check-push-vars: .check_push_vars
-
 
 check-build:
 	@$(BUILD_MANIFEST_CMD) check-build \
@@ -433,6 +432,7 @@ check-build:
 		--dev-file "$(DEV_BUILD_FILE)" \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
+		--asn-version "$(ASN_VERSION)" \
 		--dep-version-asn "$(DEP_VERSION_ASN)" \
 		$(BUILD_MANIFEST_ARGS)
 
@@ -446,6 +446,7 @@ check-version:
 		--dev-file "$(DEV_BUILD_FILE)" \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
+		--asn-version "$(ASN_VERSION)" \
 		--dep-version-asn "$(DEP_VERSION_ASN)" \
 		--go-version "$(GO_VERSION)" \
 		--dep-version-go "$(DEP_VERSION_GO)" \
@@ -455,13 +456,13 @@ check-go-mod:
 	@failed=0; compared=0; skipped=0; \
 	root_requires=$$(mktemp); utils_requires=$$(mktemp); \
 	if [ ! -f go.mod ]; then \
-		echo ">> go.mod Conflict Check: [FAIL]"; \
+		echo ">> Go Module Compatibility: [FAIL]"; \
 		echo "            Missing root go.mod."; \
 		rm -f "$$root_requires" "$$utils_requires"; \
 		exit 1; \
 	fi; \
 	if [ ! -f "$(SERVICE_UTILS_DIR)/go.mod" ]; then \
-		echo ">> go.mod Conflict Check: [FAIL]"; \
+		echo ">> Go Module Compatibility: [FAIL]"; \
 		echo "            Missing $(SERVICE_UTILS_DIR)/go.mod."; \
 		rm -f "$$root_requires" "$$utils_requires"; \
 		exit 1; \
@@ -492,13 +493,13 @@ check-go-mod:
 	rm -f "$$root_requires" "$$utils_requires"; \
 	if [ "$$failed" -ne 0 ]; then \
 		echo ""; \
-		echo ">> go.mod Conflict Check: [FAIL]"; \
+		echo ">> Go Module Compatibility: [FAIL]"; \
 		echo "            Shared package versions must match between root go.mod and service-utils/go.mod."; \
 		exit 1; \
 	fi; \
-	echo ">> go.mod Conflict Check: [PASS]"; \
-	printf "  %15s : %s matched\n" "Shared Packages" "$$compared"; \
-	printf "  %15s : %s ignored\n" "Utils-only Mods" "$$skipped"
+	echo ">> Go Module Compatibility: [PASS]"; \
+	printf "  %15s : %s matched\n" "Shared packages" "$$compared"; \
+	printf "  %15s : %s ignored\n" "Utils-only mods" "$$skipped"
 	@echo ""
 
 ##----------------------------------------------------------------------------##
@@ -1080,10 +1081,9 @@ build.plugin: .require-version-build-var
 	done
 
 check.deb:
-	@echo "Checking Debian package inputs for: $(DEBIAN_SERVICES)"
+	@echo ">> Debian Inputs"
 	@set -e; \
 	for svc in $(DEBIAN_SERVICES); do \
-		echo ">>> Checking $$svc..."; \
 		$(MAKE) --no-print-directory check-deb-$$svc; \
 	done
 	@set -e; \
@@ -1098,6 +1098,7 @@ check.deb:
 		echo "ERROR: Debian package inputs are incomplete."; \
 		exit 1; \
 	fi
+	@echo ">> Debian Inputs: [PASS]"
 
 build.deb: .require-version-build-var
 	@set -e; \

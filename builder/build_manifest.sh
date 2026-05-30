@@ -41,6 +41,7 @@ docs_version_file="${SERVICE_DOCS_VERSION_FILE:-}"
 docs_version_key="${SERVICE_DOCS_VERSION_KEY:-version_build}"
 service_utils_dir="${SERVICE_UTILS_DIR:-service-utils}"
 asn_service_api_version="${ASN_SERVICE_API_VERSION:-}"
+asn_version="${ASN_VERSION:-}"
 dep_version_asn="${DEP_VERSION_ASN:-}"
 go_version="${GO_VERSION:-}"
 dep_version_go="${DEP_VERSION_GO:-}"
@@ -95,6 +96,7 @@ while [ "$#" -gt 0 ]; do
         --service-utils-dir) shift; service_utils_dir="${1:-}" ;;
         --service) shift; service_name="${1:-}" ;;
         --asn-service-api-version) shift; asn_service_api_version="${1:-}" ;;
+        --asn-version) shift; asn_version="${1:-}" ;;
         --dep-version-asn) shift; dep_version_asn="${1:-}" ;;
         --go-version) shift; go_version="${1:-}" ;;
         --dep-version-go) shift; dep_version_go="${1:-}" ;;
@@ -193,8 +195,9 @@ replace_placeholders() {
     value="${value//@NEXT_BUILD@/$display_next_build}"
     value="${value//@VERSION_BUILD@/$display_version_build}"
     value="${value//@ASN_SERVICE_API_VERSION@/$asn_service_api_version}"
+    value="${value//@ASN_VERSION@/${asn_version:-$dep_version_asn}}"
     value="${value//@DEP_VERSION_ASN@/$dep_version_asn}"
-    value="${value//@GO_VERSION@/$go_version}"
+    value="${value//@GO_VERSION@/${go_version:-$dep_version_go}}"
     value="${value//@DEP_VERSION_GO@/$dep_version_go}"
     printf '%s\n' "$value"
 }
@@ -754,8 +757,12 @@ Next Build=@NEXT_BUILD@
 EOF
 )"
         fi
-        printf ">> Build Status\n"
+        if [ -n "${CHECK_BUILD_EXTRA_ROWS:-}" ]; then
+            rows="${rows}"$'\n'"${CHECK_BUILD_EXTRA_ROWS}"
+        fi
+        printf ">> Build Identity\n"
         render_rows "$rows"
+        printf '\n'
         ;;
     check-version)
         set_check_display_values
@@ -764,13 +771,18 @@ EOF
             rows="$(cat <<'EOF'
 Service=@SERVICE@
 Version Build=@VERSION_BUILD@
-ASN Version=@ASN_SERVICE_API_VERSION@ (service-utils)
-Go Version=@GO_VERSION@
+ASN Service API=@ASN_SERVICE_API_VERSION@
+ASN Framework=@DEP_VERSION_ASN@
+Go Toolchain=@GO_VERSION@
 EOF
 )"
         fi
-        printf ">> Version Status\n"
+        if [ -n "${CHECK_VERSION_EXTRA_ROWS:-}" ]; then
+            rows="${rows}"$'\n'"${CHECK_VERSION_EXTRA_ROWS}"
+        fi
+        printf ">> Version Identity\n"
         render_rows "$rows"
+        printf '\n'
         ;;
     *)
         echo "build_manifest ERROR: unsupported command: $command_name" >&2

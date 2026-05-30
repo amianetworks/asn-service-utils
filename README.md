@@ -110,6 +110,7 @@ For version-control details, see:
 - `workflow/VersionControl.md`
 - `workflow/ASNFrameworkAdoption.md`
 - `workflow/MakefileMigration.md`
+- `workflow/CheckPlanTargetMigration.md`
 
 ## Using service-utils in a Service
 
@@ -132,7 +133,6 @@ make prepare
 make build-plugin
 make build-debian
 make build-docker
-make check-release-config
 make plan-push
 ```
 
@@ -145,6 +145,8 @@ Exact target names may vary by service repository.
 Manifest-aware build adoption is documented in `workflow/ASNFrameworkAdoption.md`.
 The step-by-step refreshed Makefile migration path for ASN Framework and
 consuming service repositories is documented in `workflow/MakefileMigration.md`.
+The simplified `check*`/`plan*` target migration, including ASN Framework row
+providers, is documented in `workflow/CheckPlanTargetMigration.md`.
 
 ## Build Outputs
 
@@ -184,8 +186,8 @@ Treat these as templates. Production deployment requires service-specific review
 - Do not run `update_service_utils` casually; it performs networked git operations and can move the submodule checkout.
 - Keep registry and Debian repository URLs in tracked config, but keep credential
   values in ignored local files, shell environment, or CI secret injection.
-- Use `make check-release-config` and `make plan-push` to inspect release
-  destinations without printing secrets, tagging images, uploading packages, or
-  publishing repository snapshots.
+- Use `make plan-push` to inspect release destinations and readiness without
+  printing secrets, tagging images, uploading packages, or publishing repository
+  snapshots.
 - Do not publish packages, push images, or run deployment commands without explicit approval.
 - Record the intended API, `service-utils`, framework/runtime, builder Go toolchain, and service product version pairing for every release.

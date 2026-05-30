@@ -18,6 +18,7 @@ profile_name=""
 auth_var=""
 credential_var=""
 used_by=""
+profile_row="yes"
 
 usage() {
     cat <<'EOF'
@@ -33,6 +34,7 @@ Options:
   --endpoint-name VAR
   --endpoint VALUE
   --profile PROFILE
+  --profile-row yes|no
   --auth-var VAR
   --credential-var VAR
   --used-by TEXT
@@ -46,6 +48,7 @@ while [ "$#" -gt 0 ]; do
         --endpoint-name) shift; endpoint_name="${1:-}" ;;
         --endpoint) shift; endpoint_value="${1:-}" ;;
         --profile) shift; profile_name="${1:-}" ;;
+        --profile-row) shift; profile_row="${1:-}" ;;
         --auth-var) shift; auth_var="${1:-}" ;;
         --credential-var) shift; credential_var="${1:-}" ;;
         --used-by) shift; used_by="${1:-}" ;;
@@ -74,6 +77,10 @@ validate_args() {
     [ -n "$site" ] || { echo "publish_vars ERROR: --site is required" >&2; exit 2; }
     [ -n "$endpoint_name" ] || { echo "publish_vars ERROR: --endpoint-name is required" >&2; exit 2; }
     [ -n "$credential_var" ] || { echo "publish_vars ERROR: --credential-var is required" >&2; exit 2; }
+    case "$profile_row" in
+        yes|no) ;;
+        *) echo "publish_vars ERROR: --profile-row must be yes or no" >&2; exit 2 ;;
+    esac
 }
 
 cmd_print() {
@@ -86,8 +93,10 @@ cmd_print() {
     printf "%-44s %-11s %-7s %s\n" "$endpoint_name" "$status" "no" "$used_by"
 
     status="SET"
-    [ -n "$profile_name" ] || status="MISSING"
-    printf "%-44s %-11s %-7s %s\n" "RELEASE_SECRET_PROFILE_$site" "$status" "no" "$auth_var"
+    if [ "$profile_row" = "yes" ]; then
+        [ -n "$profile_name" ] || status="MISSING"
+        printf "%-44s %-11s %-7s %s\n" "RELEASE_SECRET_PROFILE_$site" "$status" "no" "$auth_var"
+    fi
 
     status="SET"
     if [ -z "$effective_value" ]; then

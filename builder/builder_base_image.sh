@@ -136,33 +136,33 @@ cmd_prepare() {
 print_check_failure() {
     local inspect_id="$1" api="$2" framework="$3" image_go="$4" go_mod="$5" builder_inputs="$6" expected_go_mod="$7" expected_builder_inputs="$8"
 
-    echo ">> Builder Version and Base Image Check: [FAIL]"
-    printf "  %-15s : %s\n" "Base Image" "$image"
-    printf "  %-15s : %s\n" "ID" "${inspect_id#sha256:}"
+    echo ">> Builder Base Image: [FAIL]"
+    printf "  %15s : %s\n" "Base image" "$image"
+    printf "  %15s : %s\n" "ID" "${inspect_id#sha256:}"
     if [ "$api" = "$api_version" ]; then
-        printf "  %-15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "${api:-unknown}"
+        printf "  %15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API version" "${api:-unknown}"
     else
-        printf "  %-15s : %s (expected %s as ASN_SERVICE_API_VERSION). FAIL\n" "API Version" "${api:-unknown}" "$api_version"
+        printf "  %15s : %s (expected %s as ASN_SERVICE_API_VERSION). FAIL\n" "API version" "${api:-unknown}" "$api_version"
     fi
     if [ "$framework" = "$framework_version" ]; then
-        printf "  %-15s : %s (expected from service-utils)\n" "ASN Version" "${framework:-unknown}"
+        printf "  %15s : %s (expected from service-utils)\n" "ASN framework" "${framework:-unknown}"
     else
-        printf "  %-15s : %s (expected %s from service-utils). FAIL\n" "ASN Version" "${framework:-unknown}" "$framework_version"
+        printf "  %15s : %s (expected %s from service-utils). FAIL\n" "ASN framework" "${framework:-unknown}" "$framework_version"
     fi
     if [ "$image_go" = "$go_version" ]; then
-        printf "  %-15s : %s (expected from service-utils)\n" "Go Version" "${image_go:-unknown}"
+        printf "  %15s : %s (expected from service-utils)\n" "Go toolchain" "${image_go:-unknown}"
     else
-        printf "  %-15s : %s (expected %s from service-utils). FAIL\n" "Go Version" "${image_go:-unknown}" "$go_version"
+        printf "  %15s : %s (expected %s from service-utils). FAIL\n" "Go toolchain" "${image_go:-unknown}" "$go_version"
     fi
     if [ "$go_mod" = "$expected_go_mod" ]; then
-        printf "  %-15s : %s (expected from service go.mod).\n" "Service go.mod" "${go_mod:-unknown}"
+        printf "  %15s : %s (expected from service go.mod).\n" "Service go.mod" "${go_mod:-unknown}"
     else
-        printf "  %-15s : %s (expected %s from service go.mod). FAIL\n" "Service go.mod" "${go_mod:-missing}" "$expected_go_mod"
+        printf "  %15s : %s (expected %s from service go.mod). FAIL\n" "Service go.mod" "${go_mod:-missing}" "$expected_go_mod"
     fi
     if [ "$builder_inputs" = "$expected_builder_inputs" ]; then
-        printf "  %-15s : %s (expected from builder inputs).\n" "Builder Inputs" "${builder_inputs:-unknown}"
+        printf "  %15s : %s (expected from builder inputs).\n" "Builder inputs" "${builder_inputs:-unknown}"
     else
-        printf "  %-15s : %s (expected %s from builder inputs). FAIL\n" "Builder Inputs" "${builder_inputs:-missing}" "$expected_builder_inputs"
+        printf "  %15s : %s (expected %s from builder inputs). FAIL\n" "Builder inputs" "${builder_inputs:-missing}" "$expected_builder_inputs"
     fi
     echo "Local builder base image check failed. Run make prepare."
 }
@@ -172,8 +172,8 @@ cmd_check() {
 
     local docker_info image_id inspect_err inspect_id inspect_status
     if ! docker_info="$(docker info 2>&1)"; then
-        echo ">> Builder Version and Base Image Check: [FAIL]"
-        printf "  %-15s : unavailable\n" "Docker"
+        echo ">> Builder Base Image: [FAIL]"
+        printf "  %15s : unavailable\n" "Docker"
         echo "Local builder base image check failed: Docker daemon is not reachable."
         printf '%s\n' "$docker_info" | sed -n '1,10p' | sed 's/^/  Docker Error             /'
         exit 1
@@ -181,8 +181,8 @@ cmd_check() {
 
     image_id="$(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' | awk -v image="$image" '$1 == image { print $2; exit }')"
     if [ -z "$image_id" ]; then
-        echo ">> Builder Version and Base Image Check: [FAIL]"
-        printf "  %-15s : %s (missing)\n" "Base Image" "$image"
+        echo ">> Builder Base Image: [FAIL]"
+        printf "  %15s : %s (missing)\n" "Base image" "$image"
         echo "Local builder base image check failed: run make prepare before make build-plugin."
         exit 1
     fi
@@ -193,12 +193,12 @@ cmd_check() {
     inspect_status=$?
     set -e
     if [ "$inspect_status" -ne 0 ]; then
-        echo ">> Builder Version and Base Image Check: [FAIL]"
+        echo ">> Builder Base Image: [FAIL]"
         if grep -qi "No such image" "$inspect_err"; then
-            printf "  %-15s : %s (listed, unusable)\n" "Base Image" "$image"
+            printf "  %15s : %s (listed, unusable)\n" "Base image" "$image"
             echo "Local builder base image check failed: stale Docker image ID; run make prepare."
         else
-            printf "  %-15s : %s (inspect failed)\n" "Base Image" "$image"
+            printf "  %15s : %s (inspect failed)\n" "Base image" "$image"
             echo "Local builder base image check failed: docker image inspect failed."
             sed 's/^/  Docker Error             /' "$inspect_err"
         fi
@@ -237,24 +237,24 @@ cmd_check() {
     cache_probe_status=$?
     set -e
     if [ "$cache_probe_status" -ne 0 ]; then
-        echo ">> Builder Version and Base Image Check: [FAIL]"
-        printf "  %-15s : %s\n" "Base Image" "$image"
-        printf "  %-15s : %s\n" "Packages" "$cache_packages"
+        echo ">> Builder Base Image: [FAIL]"
+        printf "  %15s : %s\n" "Base image" "$image"
+        printf "  %15s : %s\n" "Packages" "$cache_packages"
         echo "Local builder base image check failed: warmed Go module cache does not satisfy offline package resolution."
         printf '%s\n' "$cache_probe" | sed -n '1,20p' | sed 's/^/  Go Error                 /'
         echo "Run make prepare after confirming private module access."
         exit 1
     fi
 
-    echo ">> Builder Version and Base Image Check: [PASS]"
-    printf "  %15s : %s\n" "Base Image" "$image"
+    echo ">> Builder Base Image: [PASS]"
+    printf "  %15s : %s\n" "Base image" "$image"
     printf "  %15s : %s\n" "ID" "${inspect_id#sha256:}"
-    printf "  %15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API Version" "$api"
-    printf "  %15s : %s (expected from service-utils)\n" "ASN Version" "$framework"
-    printf "  %15s : %s (expected from service-utils)\n" "Go Version" "$image_go"
+    printf "  %15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API version" "$api"
+    printf "  %15s : %s (expected from service-utils)\n" "ASN framework" "$framework"
+    printf "  %15s : %s (expected from service-utils)\n" "Go toolchain" "$image_go"
     printf "  %15s : %s (expected from service go.mod).\n" "Service go.mod" "$go_mod"
-    printf "  %15s : %s (expected from builder inputs).\n" "Builder Inputs" "$builder_inputs"
-    printf "  %15s : %s\n" "Offline Cache" "PASS"
+    printf "  %15s : %s (expected from builder inputs).\n" "Builder inputs" "$builder_inputs"
+    printf "  %15s : %s\n" "Offline cache" "PASS"
 }
 
 case "$command_name" in

@@ -75,10 +75,14 @@ require_common() {
 }
 
 check_inputs() {
-    local missing=0 pair src
+    local missing=0 pair src seen_missing=""
     for pair in $debian_files; do
         src="${pair%%:*}"
         if [ ! -e "$src" ]; then
+            case " $seen_missing " in
+                *" $src "*) continue ;;
+            esac
+            seen_missing="$seen_missing $src"
             echo "Missing Debian input: $src"
             missing=1
         fi
@@ -91,8 +95,8 @@ check_inputs() {
 
 cmd_check() {
     require_common
-    echo "SERVICE_NAME: $service_name"
     check_inputs
+    printf "  %-24s : inputs present\n" "$service_name"
 }
 
 copy_if_present() {

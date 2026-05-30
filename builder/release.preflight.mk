@@ -7,98 +7,112 @@
 # destination topology so P6/P7 operators can catch bad local setup before
 # running approval-gated publish or deployment commands.
 
-RELEASE_CONFIG_STRICT ?= no
 RELEASE_CONFIG_CHECK_DOCKER_LOGIN ?= yes
-PUSH_PLAN_CHECK_LOCAL_IMAGES ?= no
-PUSH_PLAN_STRICT ?= yes
+PUSH_PLAN_CHECK_LOCAL_IMAGES ?= yes
 
 .PHONY: \
-	check-release-config check-release-config-strict .check-release-config \
-	.check-release-docker-site .check-release-debian-site \
-	plan-push plan-push-preview plan-push-readiness plan-push-docker plan-push-debian \
+	.check-push-config .check-push-common .check-push-docker-config .check-push-debian-config \
+	.check-push-docker-site .check-push-debian-site \
+	plan-push plan-push-docker plan-push-debian \
 	.plan-push-docker-site .plan-push-debian-site
 
-check-release-config:
-	@$(MAKE) -s .check-release-config RELEASE_CONFIG_STRICT=$(RELEASE_CONFIG_STRICT)
-
-check-release-config-strict:
-	@$(MAKE) -s .check-release-config RELEASE_CONFIG_STRICT=yes
-
-.check-release-config:
-	@printf "## Release Config Check\n"; \
-	printf "  %-24s : %s\n" "Strict" "$(RELEASE_CONFIG_STRICT)"; \
-	printf "  %-24s : %s\n" "Private Git key" "$(if $(strip $(PRIVATE_GIT_SSH_KEY_FILE)),set,not set)"; \
-	if [ -z "$(PRIVATE_GIT_SSH_KEY_FILE)" ]; then \
-		if [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
-			echo "ERROR: PRIVATE_GIT_SSH_KEY_FILE is not set."; \
-			exit 1; \
-		fi; \
-		echo "WARN: PRIVATE_GIT_SSH_KEY_FILE is not set."; \
-	elif [ ! -r "$(PRIVATE_GIT_SSH_KEY_FILE)" ]; then \
-		if [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
-			echo "ERROR: PRIVATE_GIT_SSH_KEY_FILE does not point to a readable file."; \
-			exit 1; \
-		fi; \
-		echo "WARN: PRIVATE_GIT_SSH_KEY_FILE does not point to a readable file."; \
+.check-push-config:
+	@status_file="$$(mktemp "$${TMPDIR:-/tmp}/check-push-config.XXXXXX")"; \
+	trap 'rm -f "$$status_file"' EXIT; \
+	$(MAKE) -s .check-push-common PUSH_CONFIG_STATUS_FILE="$$status_file"; \
+	$(MAKE) -s .check-push-docker-config PUSH_CONFIG_STATUS_FILE="$$status_file"; \
+	$(MAKE) -s .check-push-debian-config PUSH_CONFIG_STATUS_FILE="$$status_file"; \
+	if [ -s "$$status_file" ]; then \
+		if [ -n "$(PUSH_CONFIG_STATUS_FILE)" ]; then cat "$$status_file" >> "$(PUSH_CONFIG_STATUS_FILE)"; else exit 1; fi; \
 	else \
-		printf "  %-24s : %s\n" "Private Git key check" "readable"; \
+		printf ">> Publish Readiness: [PASS]\n"; \
+	fi; \
+
+.check-push-common:
+	@printf ">> Publish Readiness\n"; \
+	printf "  %24s : %s\n" "Private Git key" "$(if $(strip $(PRIVATE_GIT_SSH_KEY_FILE)),set,not set)"; \
+	common_status=0; \
+	if [ -z "$(PRIVATE_GIT_SSH_KEY_FILE)" ]; then \
+		echo "ERROR: PRIVATE_GIT_SSH_KEY_FILE is not set."; \
+		common_status=1; \
+	elif [ ! -r "$(PRIVATE_GIT_SSH_KEY_FILE)" ]; then \
+		echo "ERROR: PRIVATE_GIT_SSH_KEY_FILE does not point to a readable file."; \
+		common_status=1; \
+	else \
+		printf "  %24s : %s\n" "Private Git key check" "readable"; \
+	fi; \
+	if [ "$$common_status" -ne 0 ]; then \
+		if [ -n "$(PUSH_CONFIG_STATUS_FILE)" ]; then printf '%s\n' "$$common_status" >> "$(PUSH_CONFIG_STATUS_FILE)"; else exit "$$common_status"; fi; \
 	fi; \
 	echo ""
+
+.check-push-docker-config:
 	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
 		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
 		exit 1; \
 	fi
-	@printf "## Docker Release Destinations\n"; \
-	printf "  %-24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"
-	@for site in $(DOCKER_REGISTRY_SITES); do \
-		$(MAKE) -s .check-release-docker-site SITE=$$site RELEASE_CONFIG_STRICT=$(RELEASE_CONFIG_STRICT) || exit $$?; \
-	done
+	@printf ">> Docker Destinations\n"; \
+	printf "  %24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"
+	@status_file="$$(mktemp "$${TMPDIR:-/tmp}/check-push-docker.XXXXXX")"; \
+	trap 'rm -f "$$status_file"' EXIT; \
+	for site in $(DOCKER_REGISTRY_SITES); do \
+		$(MAKE) -s .check-push-docker-site SITE=$$site PUSH_CONFIG_STATUS_FILE="$$status_file"; \
+	done; \
+	if [ -s "$$status_file" ]; then \
+		if [ -n "$(PUSH_CONFIG_STATUS_FILE)" ]; then cat "$$status_file" >> "$(PUSH_CONFIG_STATUS_FILE)"; else exit 1; fi; \
+	fi
+
+.check-push-debian-config:
 	@if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
 		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
 		exit 1; \
 	fi
-	@printf "## Debian Release Destinations\n"; \
-	printf "  %-24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
-	printf "  %-24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"
-	@for site in $(DEBIAN_REPO_SITES); do \
-		$(MAKE) -s .check-release-debian-site SITE=$$site RELEASE_CONFIG_STRICT=$(RELEASE_CONFIG_STRICT) || exit $$?; \
-	done
+	@printf ">> Debian Destinations\n"; \
+	printf "  %24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
+	printf "  %24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"
+	@status_file="$$(mktemp "$${TMPDIR:-/tmp}/check-push-debian.XXXXXX")"; \
+	trap 'rm -f "$$status_file"' EXIT; \
+	for site in $(DEBIAN_REPO_SITES); do \
+		$(MAKE) -s .check-push-debian-site SITE=$$site PUSH_CONFIG_STATUS_FILE="$$status_file"; \
+	done; \
+	if [ -s "$$status_file" ]; then \
+		if [ -n "$(PUSH_CONFIG_STATUS_FILE)" ]; then cat "$$status_file" >> "$(PUSH_CONFIG_STATUS_FILE)"; else exit 1; fi; \
+	fi
 	@if [ -z "$(strip $(DEBIAN_REPO_HOST_US))$(strip $(DEBIAN_REPO_PATH_US))" ]; then \
-		printf "  %-24s : %s\n" "Debian US" "disabled until host/path are configured"; \
+		printf "  %24s : %s\n" "Debian US" "disabled until host/path are configured"; \
 		if [ -n "$(strip $(DEBIAN_REPO_USER_US))" ]; then \
 			echo "WARN: DEBIAN_REPO_USER_US is set while Debian US is disabled."; \
 		fi; \
 	fi
-	@printf "\nRelease config check completed without printing secret values.\n"
+	@echo ""
 
-.check-release-docker-site:
+.check-push-docker-site:
 	$(eval RELEASE_DOCKER_SITE := $(call uppercase,$(SITE)))
 	$(eval RELEASE_DOCKER_REGISTRY := $(DOCKER_REGISTRY_$(RELEASE_DOCKER_SITE)))
 	$(eval RELEASE_DOCKER_AUTH := $(DOCKER_REGISTRY_$(RELEASE_DOCKER_SITE)_USER))
 	$(eval RELEASE_DOCKER_AUTH_VAR := RELEASE_SECRET_AUTH_$(RELEASE_SECRET_PROFILE_$(RELEASE_DOCKER_SITE))_DOCKER)
 	$(eval RELEASE_DOCKER_AUTH_SET := $(if $(strip $(RELEASE_DOCKER_AUTH)),yes,no))
 	$(eval RELEASE_DOCKER_AUTH_FORMAT := $(if $(findstring :,$(RELEASE_DOCKER_AUTH)),user:password,invalid))
-	@printf "  %-24s : %s\n" "Docker site" "$(RELEASE_DOCKER_SITE)"; \
-	printf "  %-24s : %s\n" "Registry" "$(if $(RELEASE_DOCKER_REGISTRY),$(RELEASE_DOCKER_REGISTRY),not configured)"; \
-	printf "  %-24s : %s\n" "Credential var" "$(RELEASE_DOCKER_AUTH_VAR)"; \
-	printf "  %-24s : %s\n" "Credential set" "$(RELEASE_DOCKER_AUTH_SET)"; \
+	@printf "  %24s : %s\n" "Docker site" "$(RELEASE_DOCKER_SITE)"; \
+	printf "  %24s : %s\n" "Registry" "$(if $(RELEASE_DOCKER_REGISTRY),$(RELEASE_DOCKER_REGISTRY),not configured)"; \
+	printf "  %24s : %s\n" "Credential var" "$(RELEASE_DOCKER_AUTH_VAR)"; \
+	printf "  %24s : %s\n" "Credential set" "$(RELEASE_DOCKER_AUTH_SET)"; \
+	site_status=0; \
 	if [ -z "$(RELEASE_DOCKER_REGISTRY)" ]; then \
 		echo "ERROR: Docker registry $(RELEASE_DOCKER_SITE) is not configured."; \
-		exit 1; \
+		site_status=1; \
 	fi; \
 	if [ "$(RELEASE_DOCKER_AUTH_SET)" = "yes" ]; then \
-		printf "  %-24s : %s\n" "Credential format" "$(RELEASE_DOCKER_AUTH_FORMAT)"; \
+		printf "  %24s : %s\n" "Credential format" "$(RELEASE_DOCKER_AUTH_FORMAT)"; \
 		if [ "$(RELEASE_DOCKER_AUTH_FORMAT)" != "user:password" ]; then \
 			echo "ERROR: Docker credential for $(RELEASE_DOCKER_SITE) must use user:password format."; \
-			exit 1; \
+			site_status=1; \
 		fi; \
-	elif [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
-		echo "ERROR: Docker credential for $(RELEASE_DOCKER_SITE) is not configured."; \
-		exit 1; \
 	else \
-		echo "WARN: Docker credential for $(RELEASE_DOCKER_SITE) is not configured."; \
+		echo "ERROR: Docker credential for $(RELEASE_DOCKER_SITE) is not configured."; \
+		site_status=1; \
 	fi; \
-	if [ "$(RELEASE_CONFIG_CHECK_DOCKER_LOGIN)" = "yes" ]; then \
+	if [ "$$site_status" -eq 0 ] && [ "$(RELEASE_CONFIG_CHECK_DOCKER_LOGIN)" = "yes" ]; then \
 		docker_config="$${HOME}/.docker/config.json"; \
 		docker_config_has_registry() { \
 			cfg="$$1"; \
@@ -113,24 +127,21 @@ check-release-config-strict:
 			fi; \
 		}; \
 		if [ ! -f "$$docker_config" ]; then \
-			if [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
-				echo "ERROR: Docker login config is missing: $$docker_config"; \
-				exit 1; \
-			else \
-				echo "WARN: Docker login config is missing: $$docker_config"; \
-			fi; \
+			echo "ERROR: Docker login config is missing: $$docker_config"; \
+			site_status=1; \
 		elif docker_config_has_registry "$$docker_config" "$(RELEASE_DOCKER_REGISTRY)"; then \
-			printf "  %-24s : %s\n" "Docker login" "present"; \
-		elif [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
-			echo "ERROR: Docker login for $(RELEASE_DOCKER_SITE) is missing: $(RELEASE_DOCKER_REGISTRY)."; \
-			exit 1; \
+			printf "  %24s : %s\n" "Docker login" "present"; \
 		else \
-			echo "WARN: Docker login for $(RELEASE_DOCKER_SITE) was not found in ~/.docker/config.json."; \
+			echo "ERROR: Docker login for $(RELEASE_DOCKER_SITE) is missing: $(RELEASE_DOCKER_REGISTRY)."; \
+			site_status=1; \
 		fi; \
+	fi; \
+	if [ "$$site_status" -ne 0 ]; then \
+		if [ -n "$(PUSH_CONFIG_STATUS_FILE)" ]; then printf '%s\n' "$$site_status" >> "$(PUSH_CONFIG_STATUS_FILE)"; else exit "$$site_status"; fi; \
 	fi; \
 	echo ""
 
-.check-release-debian-site:
+.check-push-debian-site:
 	$(eval RELEASE_DEBIAN_SITE := $(call uppercase,$(SITE)))
 	$(eval RELEASE_DEBIAN_CHANNEL := $(if $(strip $(DEBIAN_RELEASE_CHANNEL)),$(call uppercase,$(DEBIAN_RELEASE_CHANNEL)),$(RELEASE_DEBIAN_SITE)))
 	$(eval RELEASE_DEBIAN_HOST := $(DEBIAN_REPO_HOST_$(RELEASE_DEBIAN_SITE)))
@@ -140,58 +151,61 @@ check-release-config-strict:
 	$(eval RELEASE_DEBIAN_AUTH_VAR := RELEASE_SECRET_AUTH_$(RELEASE_SECRET_PROFILE_$(RELEASE_DEBIAN_SITE))_DEBIAN)
 	$(eval RELEASE_DEBIAN_USER_SET := $(if $(strip $(RELEASE_DEBIAN_USER)),yes,no))
 	$(eval RELEASE_DEBIAN_AUTH_FORMAT := $(if $(findstring :,$(RELEASE_DEBIAN_USER)),user:password,invalid))
-	@printf "  %-24s : %s\n" "Debian site" "$(RELEASE_DEBIAN_SITE)"; \
-	printf "  %-24s : %s\n" "Repo host" "$(if $(RELEASE_DEBIAN_HOST),$(RELEASE_DEBIAN_HOST),not configured)"; \
-	printf "  %-24s : %s\n" "Repo path" "$(if $(RELEASE_DEBIAN_PATH),$(RELEASE_DEBIAN_PATH),not configured)"; \
-	printf "  %-24s : %s\n" "Subrepo" "$(if $(RELEASE_DEBIAN_SUBREPO),$(RELEASE_DEBIAN_SUBREPO),not configured)"; \
-	printf "  %-24s : %s\n" "Credential var" "$(RELEASE_DEBIAN_AUTH_VAR)"; \
-	printf "  %-24s : %s\n" "Credential set" "$(RELEASE_DEBIAN_USER_SET)"; \
+	@printf "  %24s : %s\n" "Debian site" "$(RELEASE_DEBIAN_SITE)"; \
+	printf "  %24s : %s\n" "Repo host" "$(if $(RELEASE_DEBIAN_HOST),$(RELEASE_DEBIAN_HOST),not configured)"; \
+	printf "  %24s : %s\n" "Repo path" "$(if $(RELEASE_DEBIAN_PATH),$(RELEASE_DEBIAN_PATH),not configured)"; \
+	printf "  %24s : %s\n" "Subrepo" "$(if $(RELEASE_DEBIAN_SUBREPO),$(RELEASE_DEBIAN_SUBREPO),not configured)"; \
+	printf "  %24s : %s\n" "Credential var" "$(RELEASE_DEBIAN_AUTH_VAR)"; \
+	printf "  %24s : %s\n" "Credential set" "$(RELEASE_DEBIAN_USER_SET)"; \
+	site_status=0; \
 	if [ -z "$(RELEASE_DEBIAN_HOST)" ]; then \
 		echo "ERROR: Debian repo $(RELEASE_DEBIAN_SITE) host is not configured."; \
-		exit 1; \
+		site_status=1; \
 	fi; \
 	if [ -z "$(RELEASE_DEBIAN_PATH)" ]; then \
 		echo "ERROR: Debian repo $(RELEASE_DEBIAN_SITE) path is not configured."; \
-		exit 1; \
+		site_status=1; \
 	fi; \
 	if [ -z "$(RELEASE_DEBIAN_SUBREPO)" ]; then \
 		echo "ERROR: Debian repo subrelease $(RELEASE_DEBIAN_CHANNEL) is not configured."; \
-		exit 1; \
+		site_status=1; \
 	fi; \
 	if [ "$(RELEASE_DEBIAN_USER_SET)" = "yes" ]; then \
-		printf "  %-24s : %s\n" "Credential format" "$(RELEASE_DEBIAN_AUTH_FORMAT)"; \
+		printf "  %24s : %s\n" "Credential format" "$(RELEASE_DEBIAN_AUTH_FORMAT)"; \
 		if [ "$(RELEASE_DEBIAN_AUTH_FORMAT)" != "user:password" ]; then \
 			echo "ERROR: Debian credential for $(RELEASE_DEBIAN_SITE) must use user:password format."; \
-			exit 1; \
+			site_status=1; \
 		fi; \
-	elif [ "$(RELEASE_CONFIG_STRICT)" = "yes" ]; then \
-		echo "ERROR: Debian credential for $(RELEASE_DEBIAN_SITE) is not configured."; \
-		exit 1; \
 	else \
-		echo "WARN: Debian credential for $(RELEASE_DEBIAN_SITE) is not configured."; \
+		echo "ERROR: Debian credential for $(RELEASE_DEBIAN_SITE) is not configured."; \
+		site_status=1; \
+	fi; \
+	if [ "$$site_status" -ne 0 ]; then \
+		if [ -n "$(PUSH_CONFIG_STATUS_FILE)" ]; then printf '%s\n' "$$site_status" >> "$(PUSH_CONFIG_STATUS_FILE)"; else exit "$$site_status"; fi; \
 	fi; \
 	echo ""
 
 plan-push:
 	@set -e; \
 	plan_status=0; \
-	$(MAKE) -s plan-push-docker || plan_status=$$?; \
-	$(MAKE) -s plan-push-debian || plan_status=$$?; \
+	aggregate_status_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push.XXXXXX")"; \
+	trap 'rm -f "$$aggregate_status_file"' EXIT; \
+	$(MAKE) -s .check-push-config PUSH_CONFIG_STATUS_FILE="$$aggregate_status_file"; \
+	$(MAKE) -s plan-push-docker PUSH_PLAN_SKIP_CONFIG=yes PUSH_PLAN_STATUS_FILE="$$aggregate_status_file"; \
+	$(MAKE) -s plan-push-debian PUSH_PLAN_SKIP_CONFIG=yes PUSH_PLAN_STATUS_FILE="$$aggregate_status_file"; \
+	if [ -s "$$aggregate_status_file" ]; then plan_status=1; fi; \
 	exit "$$plan_status"
-
-# `plan-push` is a readiness gate by default: it still never uploads, but it
-# must prove concrete artifact identities and configured destinations. Use the
-# preview target only when a non-failing topology printout is useful before
-# artifacts exist.
-plan-push-preview:
-	@$(MAKE) -s plan-push PUSH_PLAN_STRICT=no
-
-plan-push-readiness:
-	@$(MAKE) -s plan-push PUSH_PLAN_STRICT=yes PUSH_PLAN_CHECK_LOCAL_IMAGES=yes
 
 plan-push-docker:
 	@set -e; \
 	plan_status=0; \
+	if [ "$(PUSH_PLAN_SKIP_CONFIG)" != "yes" ]; then \
+		config_status_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-docker-config.XXXXXX")"; \
+		trap 'rm -f "$$config_status_file"' EXIT; \
+		$(MAKE) -s .check-push-common PUSH_CONFIG_STATUS_FILE="$$config_status_file"; \
+		$(MAKE) -s .check-push-docker-config PUSH_CONFIG_STATUS_FILE="$$config_status_file"; \
+		if [ -s "$$config_status_file" ]; then plan_status=1; fi; \
+	fi; \
 	if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
 		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
 		plan_status=1; \
@@ -211,64 +225,76 @@ plan-push-docker:
 		[ -n "$$plan_version" ] || plan_version="(manifest docker lane unavailable)"; \
 		plan_status=1; \
 	fi; \
-	printf "## Docker Publish Plan\n"; \
-	printf "  %-24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"; \
-	printf "  %-24s : %s\n" "Images" "$(DOCKER_IMAGES)"; \
-	printf "  %-24s : %s\n" "Version tag" "$$plan_version"; \
-	printf "  %-24s : %s\n" "Latest tag" "$(DOCKER_PUSH_LATEST)"; \
-	printf "  %-24s : %s\n" "No-upload guarantee" "no docker tag/push is executed"; \
+	site_status_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-docker.XXXXXX")"; \
+	trap 'rm -f "$$site_status_file"' EXIT; \
+	printf ">> Docker Publish Plan\n"; \
+	printf "  %24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"; \
+	printf "  %24s : %s\n" "Images" "$(DOCKER_IMAGES)"; \
+	printf "  %24s : %s\n" "Version tag" "$$plan_version"; \
+	printf "  %24s : %s\n" "Latest tag" "$(DOCKER_PUSH_LATEST)"; \
+	printf "  %24s : %s\n" "No-upload guarantee" "no docker tag/push is executed"; \
 	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
 	for site in $(DOCKER_REGISTRY_SITES); do \
-		$(MAKE) -s .plan-push-docker-site SITE=$$site DOCKER_PUSH_PLAN_VERSION="$$plan_version" || plan_status=$$?; \
+		$(MAKE) -s .plan-push-docker-site SITE=$$site DOCKER_PUSH_PLAN_VERSION="$$plan_version" PUSH_PLAN_STATUS_FILE="$$site_status_file"; \
 	done; \
-	if [ "$(PUSH_PLAN_STRICT)" = "yes" ] && [ "$$plan_status" -ne 0 ]; then \
+	if [ -s "$$site_status_file" ]; then plan_status=1; fi; \
+	if [ "$$plan_status" -ne 0 ]; then \
 		echo "ERROR: Docker publish plan is not release-ready."; \
-		exit "$$plan_status"; \
+		if [ -n "$(PUSH_PLAN_STATUS_FILE)" ]; then printf '%s\n' "$$plan_status" >> "$(PUSH_PLAN_STATUS_FILE)"; else exit "$$plan_status"; fi; \
 	fi
 
 .plan-push-docker-site:
 	$(eval PUSH_PLAN_DOCKER_SITE := $(call uppercase,$(SITE)))
 	$(eval PUSH_PLAN_DOCKER_REGISTRY := $(DOCKER_REGISTRY_$(PUSH_PLAN_DOCKER_SITE)))
 	$(eval PUSH_PLAN_DOCKER_PREFIX := $(if $(DOCKER_SUBREPO),$(PUSH_PLAN_DOCKER_REGISTRY)/$(DOCKER_SUBREPO),$(PUSH_PLAN_DOCKER_REGISTRY)))
-	@printf "  %-24s : %s\n" "Docker site" "$(PUSH_PLAN_DOCKER_SITE)"; \
-	printf "  %-24s : %s\n" "Registry" "$(if $(PUSH_PLAN_DOCKER_REGISTRY),$(PUSH_PLAN_DOCKER_REGISTRY),not configured)"; \
+	@printf "  %24s : %s\n" "Docker site" "$(PUSH_PLAN_DOCKER_SITE)"; \
+	printf "  %24s : %s\n" "Registry" "$(if $(PUSH_PLAN_DOCKER_REGISTRY),$(PUSH_PLAN_DOCKER_REGISTRY),not configured)"; \
 	site_status=0; \
 	if [ -z "$(PUSH_PLAN_DOCKER_REGISTRY)" ]; then site_status=1; fi; \
 	plan_version="$(DOCKER_PUSH_PLAN_VERSION)"; \
 	for image in $(DOCKER_IMAGES); do \
 		if [ "$${plan_version#\(}" != "$$plan_version" ]; then \
-			printf "  %-24s : %s\n" "Would push" "$$image (version unavailable)"; \
+			printf "  %24s : %s\n" "Would push" "$$image (version unavailable)"; \
 			site_status=1; \
 			continue; \
 		fi; \
 		if [ -z "$(PUSH_PLAN_DOCKER_REGISTRY)" ]; then \
-			printf "  %-24s : %s\n" "Would push" "$$image (destination unavailable)"; \
+			printf "  %24s : %s\n" "Would push" "$$image (destination unavailable)"; \
 			continue; \
 		fi; \
-		printf "  %-24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:$$plan_version"; \
+		printf "  %24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:$$plan_version"; \
 		if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
-			printf "  %-24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:latest"; \
+			printf "  %24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:latest"; \
 		fi; \
 		if [ "$(PUSH_PLAN_CHECK_LOCAL_IMAGES)" = "yes" ]; then \
 			inspect_output=$$(mktemp); \
 			if docker image inspect "$$image:$$plan_version" > "$$inspect_output" 2>&1; then \
-				printf "  %-24s : %s\n" "$$image:$$plan_version" "local image present"; \
+				printf "  %24s : %s\n" "$$image:$$plan_version" "local image present"; \
 			else \
-				printf "  %-24s : %s\n" "$$image:$$plan_version" "local image missing"; \
+				printf "  %24s : %s\n" "$$image:$$plan_version" "local image missing"; \
 				if [ -s "$$inspect_output" ]; then sed 's/^/  Docker Error: /' "$$inspect_output"; fi; \
 				site_status=1; \
 			fi; \
 			rm -f "$$inspect_output"; \
 		else \
-			printf "  %-24s : %s\n" "$$image:$$plan_version" "local image check skipped (set PUSH_PLAN_CHECK_LOCAL_IMAGES=yes)"; \
+			printf "  %24s : %s\n" "$$image:$$plan_version" "local image check skipped (PUSH_PLAN_CHECK_LOCAL_IMAGES=no)"; \
 		fi; \
 	done; \
 	echo ""; \
-	if [ "$(PUSH_PLAN_STRICT)" = "yes" ] && [ "$$site_status" -ne 0 ]; then exit "$$site_status"; fi
+	if [ "$$site_status" -ne 0 ]; then \
+		if [ -n "$(PUSH_PLAN_STATUS_FILE)" ]; then printf '%s\n' "$$site_status" >> "$(PUSH_PLAN_STATUS_FILE)"; else exit "$$site_status"; fi; \
+	fi
 
 plan-push-debian:
 	@set -e; \
 	plan_status=0; \
+	if [ "$(PUSH_PLAN_SKIP_CONFIG)" != "yes" ]; then \
+		config_status_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-debian-config.XXXXXX")"; \
+		trap 'rm -f "$$config_status_file"' EXIT; \
+		$(MAKE) -s .check-push-common PUSH_CONFIG_STATUS_FILE="$$config_status_file"; \
+		$(MAKE) -s .check-push-debian-config PUSH_CONFIG_STATUS_FILE="$$config_status_file"; \
+		if [ -s "$$config_status_file" ]; then plan_status=1; fi; \
+	fi; \
 	if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
 		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
 		plan_status=1; \
@@ -288,18 +314,21 @@ plan-push-debian:
 		[ -n "$$plan_version" ] || plan_version="(manifest debian lane unavailable)"; \
 		plan_status=1; \
 	fi; \
-	printf "## Debian Publish Plan\n"; \
-	printf "  %-24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
-	printf "  %-24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"; \
-	printf "  %-24s : %s\n" "Package version" "$$plan_version"; \
-	printf "  %-24s : %s\n" "No-upload guarantee" "no curl upload/publish is executed"; \
+	site_status_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-debian.XXXXXX")"; \
+	trap 'rm -f "$$site_status_file"' EXIT; \
+	printf ">> Debian Publish Plan\n"; \
+	printf "  %24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
+	printf "  %24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"; \
+	printf "  %24s : %s\n" "Package version" "$$plan_version"; \
+	printf "  %24s : %s\n" "No-upload guarantee" "no curl upload/publish is executed"; \
 	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
 	for site in $(DEBIAN_REPO_SITES); do \
-		$(MAKE) -s .plan-push-debian-site SITE=$$site DEBIAN_PUSH_PLAN_VERSION="$$plan_version" || plan_status=$$?; \
+		$(MAKE) -s .plan-push-debian-site SITE=$$site DEBIAN_PUSH_PLAN_VERSION="$$plan_version" PUSH_PLAN_STATUS_FILE="$$site_status_file"; \
 	done; \
-	if [ "$(PUSH_PLAN_STRICT)" = "yes" ] && [ "$$plan_status" -ne 0 ]; then \
+	if [ -s "$$site_status_file" ]; then plan_status=1; fi; \
+	if [ "$$plan_status" -ne 0 ]; then \
 		echo "ERROR: Debian publish plan is not release-ready."; \
-		exit "$$plan_status"; \
+		if [ -n "$(PUSH_PLAN_STATUS_FILE)" ]; then printf '%s\n' "$$plan_status" >> "$(PUSH_PLAN_STATUS_FILE)"; else exit "$$plan_status"; fi; \
 	fi
 
 .plan-push-debian-site:
@@ -308,10 +337,10 @@ plan-push-debian:
 	$(eval PUSH_PLAN_DEBIAN_HOST := $(DEBIAN_REPO_HOST_$(PUSH_PLAN_DEBIAN_SITE)))
 	$(eval PUSH_PLAN_DEBIAN_PATH := $(DEBIAN_REPO_PATH_$(PUSH_PLAN_DEBIAN_SITE)))
 	$(eval PUSH_PLAN_DEBIAN_SUBREPO := $(DEBIAN_REPO_SUBREPO_$(PUSH_PLAN_DEBIAN_CHANNEL)))
-	@printf "  %-24s : %s\n" "Debian site" "$(PUSH_PLAN_DEBIAN_SITE)"; \
-	printf "  %-24s : %s\n" "Repo host" "$(if $(PUSH_PLAN_DEBIAN_HOST),$(PUSH_PLAN_DEBIAN_HOST),not configured)"; \
-	printf "  %-24s : %s\n" "Repo path" "$(if $(PUSH_PLAN_DEBIAN_PATH),$(PUSH_PLAN_DEBIAN_PATH),not configured)"; \
-	printf "  %-24s : %s\n" "Subrepo" "$(if $(PUSH_PLAN_DEBIAN_SUBREPO),$(PUSH_PLAN_DEBIAN_SUBREPO),not configured)"; \
+	@printf "  %24s : %s\n" "Debian site" "$(PUSH_PLAN_DEBIAN_SITE)"; \
+	printf "  %24s : %s\n" "Repo host" "$(if $(PUSH_PLAN_DEBIAN_HOST),$(PUSH_PLAN_DEBIAN_HOST),not configured)"; \
+	printf "  %24s : %s\n" "Repo path" "$(if $(PUSH_PLAN_DEBIAN_PATH),$(PUSH_PLAN_DEBIAN_PATH),not configured)"; \
+	printf "  %24s : %s\n" "Subrepo" "$(if $(PUSH_PLAN_DEBIAN_SUBREPO),$(PUSH_PLAN_DEBIAN_SUBREPO),not configured)"; \
 	site_status=0; \
 	if [ -z "$(PUSH_PLAN_DEBIAN_HOST)" ] || [ -z "$(PUSH_PLAN_DEBIAN_PATH)" ] || [ -z "$(PUSH_PLAN_DEBIAN_SUBREPO)" ]; then site_status=1; fi; \
 	plan_version="$(DEBIAN_PUSH_PLAN_VERSION)"; \
@@ -323,14 +352,14 @@ plan-push-debian:
 		done; \
 	fi; \
 	if [ -z "$$package_files" ]; then \
-		printf "  %-24s : %s\n" "Would upload" "(no matching local packages)"; \
+		printf "  %24s : %s\n" "Would upload" "(no matching local packages)"; \
 		site_status=1; \
 	fi; \
 	for file in $$package_files; do \
 		if [ -f "$$file" ]; then \
-			printf "  %-24s : %s\n" "Would upload" "$$file"; \
+			printf "  %24s : %s\n" "Would upload" "$$file"; \
 		else \
-			printf "  %-24s : %s\n" "Would upload" "$$file (missing locally)"; \
+			printf "  %24s : %s\n" "Would upload" "$$file (missing locally)"; \
 			site_status=1; \
 		fi; \
 	done; \
@@ -338,26 +367,28 @@ plan-push-debian:
 	for file in $$package_files; do \
 		[ -f "$$file" ] || continue; \
 		if ! pkg_name=$$($(DEBIAN_METADATA_CMD) --file "$$file" --field Package 2>&1); then \
-			printf "  %-24s : %s\n" "Package metadata" "$$file (invalid package)"; \
+			printf "  %24s : %s\n" "Package metadata" "$$file (invalid package)"; \
 			printf "%s\n" "$$pkg_name" | sed "s/^/  Debian Error: /"; \
 			metadata_failed=true; \
 			continue; \
 		fi; \
 		if ! pkg_version=$$($(DEBIAN_METADATA_CMD) --file "$$file" --field Version 2>&1); then \
-			printf "  %-24s : %s\n" "Package metadata" "$$file (missing version)"; \
+			printf "  %24s : %s\n" "Package metadata" "$$file (missing version)"; \
 			printf "%s\n" "$$pkg_version" | sed "s/^/  Debian Error: /"; \
 			metadata_failed=true; \
 			continue; \
 		fi; \
 		case " $(DEBIAN_SERVICES) " in \
 			*" $$pkg_name "*) : ;; \
-			*) printf "  %-24s : %s\n" "Package metadata" "$$file package $$pkg_name is not in DEBIAN_SERVICES"; metadata_failed=true ;; \
+			*) printf "  %24s : %s\n" "Package metadata" "$$file package $$pkg_name is not in DEBIAN_SERVICES"; metadata_failed=true ;; \
 		esac; \
 		if [ "$$pkg_version" != "$$plan_version" ]; then \
-			printf "  %-24s : %s\n" "Package metadata" "$$file version $$pkg_version, expected $$plan_version"; \
+			printf "  %24s : %s\n" "Package metadata" "$$file version $$pkg_version, expected $$plan_version"; \
 			metadata_failed=true; \
 		fi; \
 	done; \
 	if [ "$$metadata_failed" = "true" ]; then site_status=1; fi; \
 	echo ""; \
-	if [ "$(PUSH_PLAN_STRICT)" = "yes" ] && [ "$$site_status" -ne 0 ]; then exit "$$site_status"; fi
+	if [ "$$site_status" -ne 0 ]; then \
+		if [ -n "$(PUSH_PLAN_STATUS_FILE)" ]; then printf '%s\n' "$$site_status" >> "$(PUSH_PLAN_STATUS_FILE)"; else exit "$$site_status"; fi; \
+	fi

@@ -20,6 +20,10 @@ adopt the same design that SWAN now uses:
   targets and delegates procedural work to helper scripts;
 - generated `build/Manifest.yaml` owns artifact identity and lane status.
 
+Use `CheckPlanTargetMigration.md` with this guide when migrating `check*` and
+`plan*` targets. It covers the simplified public target set, removed target
+names, and ASN Framework row-provider configuration.
+
 The desired end state is that service Makefiles read like stable contracts.
 Procedural shell should live in reusable `service-utils` helpers unless it is
 truly service-specific.
@@ -207,7 +211,6 @@ Use:
 
 ```bash
 make check-vars
-make check-push-vars
 make plan-push
 ```
 
