@@ -15,6 +15,7 @@ DOCKER_LIST_LOCAL_LABEL ?= Services
 DOCKER_LIST_REQUIRE_REMOTE_AUTH ?= yes
 DOCKER_SUBREPO ?=
 DOCKER_CURL_TIMEOUT_FLAGS ?= --connect-timeout 10 --max-time 120 --retry 2 --retry-delay 2 --retry-connrefused
+SERVICE_UTILS_RECURSIVE_MAKE ?= $(MAKE)
 
 # The list/push recipes read credentials through shell variables such as
 # $${DOCKER_REGISTRY_CN_USER} so curl invocations do not contain make-expanded
@@ -48,13 +49,30 @@ push-docker-%: $(DOCKER_PUSH_CHECK_TARGETS)
 
 check-push-docker-sites:
 	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
+		echo ">> Docker Site Preflight: [FAIL]"; \
+		printf "  %15s : %s\n" "Selected sites" "<empty>"; \
 		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
 		exit 1; \
 	fi
-	@for site in $(DOCKER_REGISTRY_SITES); do \
-		$(MAKE) -s .check-docker-registry-site SITE=$$site; \
-	done
-	@echo "Docker publish site preflight passed: $(DOCKER_REGISTRY_SITES)"
+	@set +e; \
+	echo ">> Docker Site Preflight"; \
+	printf "  %15s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"; \
+	failed=0; \
+	for site in $(DOCKER_REGISTRY_SITES); do \
+		output="$$( $(SERVICE_UTILS_RECURSIVE_MAKE) -s .check-docker-registry-site SITE=$$site 2>&1 )"; \
+		status="$$?"; \
+		if [ "$$status" -ne 0 ]; then \
+			if [ -n "$$output" ]; then \
+				printf "%s\n" "$$output" | sed '/^make\[[0-9][0-9]*\]: \*\*\*/d;/^make: \*\*\*/d'; \
+			fi; \
+			failed=1; \
+		fi; \
+	done; \
+	if [ "$$failed" -ne 0 ]; then \
+		echo ">> Docker Site Preflight: [FAIL]"; \
+		exit 1; \
+	fi; \
+	echo ">> Docker Site Preflight: [PASS]"
 	@echo ""
 
 .check-docker-registry-site:

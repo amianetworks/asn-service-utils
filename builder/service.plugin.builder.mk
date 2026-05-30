@@ -28,6 +28,7 @@ SHELL := /bin/bash
 SERVICE_UTILS_OWN_BUILD_TARGETS ?= yes
 SERVICE_UTILS_OWN_CLEAN_TARGET ?= yes
 SERVICE_UTILS_OWN_SET_VERSION_TARGET ?= yes
+SERVICE_UTILS_RECURSIVE_MAKE ?= $(MAKE)
 
 ## `push-all` is Make-only artifact publication. Release validation and handoff
 ## remain outside the generic builder and should consume the published outputs.
@@ -288,7 +289,10 @@ build-fresh: clean prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian buil
 
 build-plugin: check proto-gen
 	@set -e; \
-	case "$$$$MAKEFLAGS" in *n*|*--just-print*|*--dry-run*|*--recon*) dry_run=1 ;; *) dry_run=0 ;; esac; \
+	dry_run=0; \
+	short_flags="$$$${MAKEFLAGS%% *} $$$${MFLAGS%% *}"; \
+	case "$$$$short_flags" in --*) ;; *n*) dry_run=1 ;; esac; \
+	case " $$$$MAKEFLAGS $$$$MFLAGS " in *" --just-print "*|*" --dry-run "*|*" --recon "*) dry_run=1 ;; esac; \
 	if [ "$$$$dry_run" = "1" ]; then \
 		version_build="DRY-RUN-VERSION"; \
 		echo ">> Build Plugin Version"; \
@@ -731,7 +735,18 @@ DEBIAN_BUILD_PRE_TARGETS ?=
 
 # Build Debian packages from existing plugin artifacts.
 build-debian: require-build-manifest check $(DEBIAN_BUILD_PRE_TARGETS) check-debian-inputs clean-debian
-	@set -e; \
+	@dry_run=0; \
+	short_flags="$${MAKEFLAGS%% *} $${MFLAGS%% *}"; \
+	case "$$short_flags" in --*) ;; *n*) dry_run=1 ;; esac; \
+	case " $$MAKEFLAGS $$MFLAGS " in *" --just-print "*|*" --dry-run "*|*" --recon "*) dry_run=1 ;; esac; \
+	if [ "$$dry_run" = "1" ]; then \
+			echo ">> Build Debian Packages"; \
+			printf "  %15s : %s\n" "Version" "DRY-RUN-VERSION"; \
+			printf "  %15s : %s\n" "Output" "$(DEBIAN_PATH)"; \
+			echo; \
+			exit 0; \
+	fi; \
+	set -e; \
 	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane docs $(BUILD_MANIFEST_COMMON_ARGS))"; \
 	$(MAKE) --no-print-directory service-build-debian VERSION_BUILD="$$version_build"; \
 	$(BUILD_MANIFEST_CMD) commit-lane \
@@ -763,7 +778,13 @@ clean-debian:
 	esac
 
 check-debian-inputs:
-	@$(MAKE) --no-print-directory -f $(SERVICE_BUILD_MAKEFILE) $(SERVICE_BUILD_CHECK_DEBIAN_TARGET)
+	@set +e; \
+	output="$$( $(SERVICE_UTILS_RECURSIVE_MAKE) --no-print-directory -s -f $(SERVICE_BUILD_MAKEFILE) $(SERVICE_BUILD_CHECK_DEBIAN_TARGET) 2>&1 )"; \
+	status="$$?"; \
+	if [ -n "$$output" ]; then \
+		printf "%s\n" "$$output" | sed '/^make\[[0-9][0-9]*\]: \*\*\*/d;/^make: \*\*\*/d'; \
+	fi; \
+	exit "$$status"
 
 DEBIAN_PUSH_CHECK_TARGETS ?= .check-debian-release-mode .check-debian-publish-packages
 DEBIAN_PUSH_VERSION ?= $(VERSION_BUILD)
@@ -1081,16 +1102,33 @@ build.plugin: .require-version-build-var
 	done
 
 check.deb:
-	@echo ">> Debian Inputs"
-	@set -e; \
-	for svc in $(DEBIAN_SERVICES); do \
-		$(MAKE) --no-print-directory check-deb-$$svc; \
-	done
-	@set -e; \
+	@dry_run=0; \
+	short_flags="$${MAKEFLAGS%% *} $${MFLAGS%% *}"; \
+	case "$$short_flags" in --*) ;; *n*) dry_run=1 ;; esac; \
+	case " $$MAKEFLAGS $$MFLAGS " in *" --just-print "*|*" --dry-run "*|*" --recon "*) dry_run=1 ;; esac; \
+	if [ "$$dry_run" = "1" ]; then \
+			echo ">> Debian Inputs"; \
+			printf "  %15s : %s\n" "Services" "$(DEBIAN_SERVICES)"; \
+			printf "  %15s : %s\n" "Mode" "dry-run"; \
+			echo; \
+			exit 0; \
+	fi; \
+	set -e; \
+	echo ">> Debian Inputs"; \
 	missing=0; \
+	for svc in $(DEBIAN_SERVICES); do \
+		if ! output="$$( $(SERVICE_UTILS_RECURSIVE_MAKE) --no-print-directory -s check-deb-$$svc 2>&1 )"; then \
+			if [ -n "$$output" ]; then \
+				printf "%s\n" "$$output" | sed '/^make\[[0-9][0-9]*\]: \*\*\*/d;/^make: \*\*\*/d'; \
+			fi; \
+			missing=1; \
+		elif [ -n "$$output" ]; then \
+			printf "%s\n" "$$output"; \
+		fi; \
+	done; \
 	for file in $(SERVICE_DEBIAN_REQUIRED_ARTIFACTS); do \
 		if [ ! -f "$$file" ]; then \
-			echo "Missing Debian input: $$file"; \
+			printf "  %15s : missing input %s\n" "Docs" "$$file"; \
 			missing=1; \
 		fi; \
 	done; \

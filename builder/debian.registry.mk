@@ -20,6 +20,7 @@ DEBIAN_CURL_TIMEOUT_FLAGS ?= --connect-timeout 10 --max-time 300
 DEBIAN_CURL_RETRY_FLAGS ?= --retry 2 --retry-delay 2 --retry-connrefused
 DEBIAN_CURL_READ_FLAGS ?= $(DEBIAN_CURL_TLS_FLAGS) $(DEBIAN_CURL_TIMEOUT_FLAGS) $(DEBIAN_CURL_RETRY_FLAGS)
 DEBIAN_CURL_MUTATION_FLAGS ?= $(DEBIAN_CURL_TLS_FLAGS) $(DEBIAN_CURL_TIMEOUT_FLAGS)
+SERVICE_UTILS_RECURSIVE_MAKE ?= $(MAKE)
 
 # The list/push recipes read credentials through shell variables such as
 # $${DEBIAN_REPO_USER_CN} so curl invocations do not contain make-expanded
@@ -68,13 +69,30 @@ push-debian-%: $(DEBIAN_PUSH_CHECK_TARGETS)
 
 check-push-debian-sites:
 	@if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
+		echo ">> Debian Site Preflight: [FAIL]"; \
+		printf "  %15s : %s\n" "Selected sites" "<empty>"; \
 		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
 		exit 1; \
 	fi
-	@for site in $(DEBIAN_REPO_SITES); do \
-		$(MAKE) -s .check-debian-repo SITE=$$site; \
-	done
-	@echo "Debian publish site preflight passed: $(DEBIAN_REPO_SITES)"
+	@set +e; \
+	echo ">> Debian Site Preflight"; \
+	printf "  %15s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
+	failed=0; \
+	for site in $(DEBIAN_REPO_SITES); do \
+		output="$$( $(SERVICE_UTILS_RECURSIVE_MAKE) -s .check-debian-repo SITE=$$site 2>&1 )"; \
+		status="$$?"; \
+		if [ "$$status" -ne 0 ]; then \
+			if [ -n "$$output" ]; then \
+				printf "%s\n" "$$output" | sed '/^make\[[0-9][0-9]*\]: \*\*\*/d;/^make: \*\*\*/d'; \
+			fi; \
+			failed=1; \
+		fi; \
+	done; \
+	if [ "$$failed" -ne 0 ]; then \
+		echo ">> Debian Site Preflight: [FAIL]"; \
+		exit 1; \
+	fi; \
+	echo ">> Debian Site Preflight: [PASS]"
 	@echo ""
 
 .check-debian-repo:

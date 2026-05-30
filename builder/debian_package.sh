@@ -65,11 +65,11 @@ require_common() {
     [ -n "$service_config" ] || service_config="debian/deb.$service_name.config"
     [ -n "$service_control" ] || service_control="debian/deb.$service_name.control"
     if [ ! -f "$service_config" ]; then
-        echo "Missing config: $service_config"
+        printf "  %15s : missing config %s\n" "$service_name" "$service_config"
         exit 1
     fi
     if [ ! -f "$service_control" ]; then
-        echo "Missing control: $service_control"
+        printf "  %15s : missing control %s\n" "$service_name" "$service_control"
         exit 1
     fi
 }
@@ -83,12 +83,12 @@ check_inputs() {
                 *" $src "*) continue ;;
             esac
             seen_missing="$seen_missing $src"
-            echo "Missing Debian input: $src"
+            printf "  %15s : missing input %s\n" "$service_name" "$src"
             missing=1
         fi
     done
     if [ "$missing" -ne 0 ]; then
-        echo "Build plugin artifacts before running make build-debian."
+        printf "  %15s : %s\n" "$service_name" "build plugin artifacts before make build-debian"
         exit 1
     fi
 }
