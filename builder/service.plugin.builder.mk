@@ -328,10 +328,10 @@ clean:
 		exit 0; \
 	fi; \
 	for path in $(SERVICE_CLEAN_DIRS); do \
-		case "$$path" in \
-			""|"."|"/"|*"/.."|*"/../"*|".."|"../"*) echo "ERROR: refusing unsafe clean path: '$$path'."; exit 2 ;; \
-			build|build/|build/*|./build|./build/|./build/*) rm -rf "$$path" ;; \
-			*) echo "ERROR: refusing clean path outside build/: $$path"; exit 2 ;; \
+		case "$$$$path" in \
+			""|"."|"/"|*"/.."|*"/../"*|".."|"../"*) echo "ERROR: refusing unsafe clean path: '$$$$path'."; exit 2 ;; \
+			build|build/|build/*|./build|./build/|./build/*) rm -rf "$$$$path" ;; \
+			*) echo "ERROR: refusing clean path outside build/: $$$$path"; exit 2 ;; \
 		esac; \
 	done
 endef
