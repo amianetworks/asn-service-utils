@@ -78,6 +78,10 @@ must provide the following service-local contract.
 `make/config.mk` or the equivalent service config must define:
 
 ```make
+SERVICE := <SERVICE>
+SERVICE_NAME := <service-name>
+PACKAGE := <service-go-module>
+
 VERSION := <service-version-family>
 BUILD := <maintainer-build-number>
 BUILD_MODE ?= dev
@@ -85,26 +89,33 @@ BUILD_NUM_DEV := <first-dev-build-number>
 
 DEV_BUILD_FILE ?= .DEV_BUILD_FILE
 BUILD_MANIFEST_FILE ?= build/Manifest.yaml
-BUILD_MANIFEST_CMD := bash service-utils/builder/build_manifest.sh
-BUILD_MANIFEST_SERVICE_ARGS := --schema <schema> --source-key <source-key> ...
-BUILD_MANIFEST_ARGS = $(BUILD_MANIFEST_SERVICE_ARGS)
-BUILD_MANIFEST_COMMON_EXTRA_ARGS = <docs-or-service-default-extra-args>
+BUILD_MANIFEST_SCHEMA := <service>.build.manifest.v1
+BUILD_MANIFEST_SOURCE_KEY := <service>_commit
+BUILD_MANIFEST_SOURCE_LABEL := <SERVICE>
 
 ASN_SERVICE_API_VERSION := <api-version>
 SERVICE_UTILS_DIR := service-utils
-BUILD_ENV_MAKEFILE := $(SERVICE_UTILS_DIR)/builder/service.plugin.builder.mk
-BUILD_ENV_ASN_VERSION_FILE := $(SERVICE_UTILS_DIR)/builder/ASN_VERSION
+
+SERVICE_MANAGER_DEBIAN_PACKAGE := $(SERVICE_NAME)-manager
+SERVICE_SN_DEBIAN_PACKAGE := $(SERVICE_NAME)-servicenode
+SERVICE_MANAGER_CLI_DEBIAN_PACKAGE := $(SERVICE_NAME)-manager-cli
+SERVICE_CLIENT_CLI_DEBIAN_PACKAGE := $(SERVICE_NAME)-client-cli
 
 BUILD_SVC_C_DIR := build/controller
 BUILD_SVC_SN_DIR := build/servicenode
 BUILD_SVC_CLIENTS_DIR := build/client
-DEBIAN_PATH := build/debian
-DEBIAN_SERVICES := <package names>
 DOCKER_IMAGES := <image names>
 DOCKER_IMAGE_BUILD_SPECS := <image:dockerfile pairs>
-PROTO_GEN_SPECS := <proto-source-glob:generated-output-dir pairs>
-PROTO_GEN_STATE_FILES := <files that invalidate default proto-gen stamp>
+PROTO_SOURCE_FILES := <proto-source-globs>
 ```
+
+The root Makefile owns the pre-include bootstrap defaults for
+`BUILD_ENV_MAKEFILE` and `BUILD_ENV_ASN_VERSION_FILE`. `service-utils` derives
+generic builder image paths, manifest argument wrappers, `DEBIAN_PATH`,
+`DEBIAN_SERVICES`, plugin artifact inventories, proto generation specs, and
+proto stamp inputs from the service identity, derived package/build names, and
+compact artifact specs above. Define those variables in service config only when
+a service intentionally breaks the standard ASN service layout.
 
 The root Makefile, or the equivalent non-config Make layer, should resolve
 `VERSION_BUILD` from the active `build/Manifest.yaml` only when the manifest
@@ -189,9 +200,8 @@ Service repositories should declare their artifact contents in config variables
 and let the shared builder run the reusable inner targets:
 
 ```make
-SERVICE_GO_BUILD_ARTIFACTS := MANAGER_PLUGIN SERVICENODE_PLUGIN
-SERVICE_GO_BUILD_OUT_MANAGER_PLUGIN := $(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so
-SERVICE_GO_BUILD_SRC_MANAGER_PLUGIN := $(SERVICE_C_SRC)/main.go
+SERVICE_GO_BUILD_SPECS := \
+	MANAGER_PLUGIN|manager-plugin|$(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so|$(SERVICE_C_SRC)/main.go|-
 SERVICE_ARTIFACT_COPY_SPECS := manager/config/*.conf:$(BUILD_SVC_C_DIR)
 SERVICE_DEBIAN_REQUIRED_ARTIFACTS := $(BUILD_DIR)/docs/release/ReleaseManifest.yaml
 SERVICE_DEBIAN_PACKAGE_COPY_SPECS := $(SERVICE_MANAGER_DEBIAN_PACKAGE):$(BUILD_DIR)/docs:var/www/$(SERVICE_NAME)/manager
@@ -227,7 +237,8 @@ Services may tune:
 
 ```make
 SERVICE_GO_CACHE_PACKAGES ?= ./...
-SERVICE_BUILDER_INPUT_FILES ?= go.mod go.sum $(BUILD_ENV_BASE_DOCKERFILE) $(BUILD_ENV_MAKEFILE) $(BUILD_ENV_ASN_VERSION_FILE)
+SERVICE_BUILDER_MAKEFILES ?= $(BUILD_ENV_MAKEFILE) $(wildcard $(SERVICE_UTILS_DIR)/builder/make/*.mk)
+SERVICE_BUILDER_INPUT_FILES ?= go.mod go.sum $(BUILD_ENV_BASE_DOCKERFILE) $(SERVICE_BUILDER_MAKEFILES) $(BUILD_ENV_ASN_VERSION_FILE)
 SERVICE_BUILDER_GOCACHE ?= $(CURDIR)/.cache/service-builder/go-build
 ```
 

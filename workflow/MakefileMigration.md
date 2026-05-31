@@ -14,10 +14,11 @@ adopt the same design that SWAN now uses:
 
 - root `Makefile` owns public entry points, help, workflow gateways, and the
   service-utils bootstrap door;
-- service `make/config.mk` owns service-specific product, artifact, docs,
-  package, image, and publish topology declarations;
-- `service-utils/builder/service.plugin.builder.mk` owns shared lifecycle
-  targets and delegates procedural work to helper scripts;
+- service `make/config.mk` is the single portable place for service-specific
+  product, artifact, docs, package, image, and publish topology declarations;
+- `service-utils/builder/service.plugin.builder.mk` is the public builder
+  include and loads focused `service-utils/builder/make/*.mk` fragments for
+  lifecycle, checks, source/proto, docs, packaging, Docker, and executor logic;
 - generated `build/Manifest.yaml` owns artifact identity and lane status.
 
 Use `CheckPlanTargetMigration.md` with this guide when migrating `check*` and
@@ -33,8 +34,8 @@ truly service-specific.
 | Layer | Owned by | Contains |
 |---|---|---|
 | Root command map | consuming service | `help`, `init`, workflow gateway, guarded service-utils include, small root utilities. |
-| Service contract config | consuming service | `VERSION`, `ASN_SERVICE_API_VERSION`, artifact inventories, docs staging, Debian/Docker topology, publish sites. |
-| Shared builder contract | `service-utils` | `prepare`, `check`, `build-plugin`, `stage-docs`, `build-debian`, `build-docker`, push/list targets, removed-target guidance. |
+| Service contract config | consuming service | Single declarative `make/config.mk` for `VERSION`, `ASN_SERVICE_API_VERSION`, artifact inventories, docs staging, Debian/Docker topology, publish sites. |
+| Shared builder contract | `service-utils` | `service.plugin.builder.mk` include index plus `builder/make/*.mk` fragments for `prepare`, `check`, `build-plugin`, `stage-docs`, `build-debian`, `build-docker`, push/list targets, removed-target guidance. |
 | Helper scripts | `service-utils/builder/*.sh` | Manifest mutation, builder-base freshness, proto tool staging/generation, publish variable checks, Debian package metadata/building. |
 | Generated evidence | consuming service build output | `build/Manifest.yaml`, `build/docs`, `build/debian`, local Docker images. |
 
@@ -65,10 +66,10 @@ only when the service needs initialization or realignment.
 
 2. Move service-specific declarations into `make/config.mk`.
 
-Keep this file declarative. It should describe service identity, versions,
-artifact inventories, docs contents, package/image names, publish topology, and
-project-local delegates. Avoid `$(shell ...)` for build identity and avoid large
-embedded recipes.
+Keep the config layer declarative and portable. `make/config.mk` should describe
+service identity, versions, artifact inventories, docs contents, package/image
+names, publish topology, and project-local delegates in one file. Avoid
+`$(shell ...)` for build identity and avoid embedded recipes.
 
 3. Keep the root `Makefile` small.
 
@@ -113,15 +114,9 @@ Removed names should fail with migration guidance:
 Use the shared targets by declaring service-specific inventories:
 
 ```make
-SERVICE_PLUGIN_REQUIRED_ARTIFACTS := \
-	$(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so \
-	$(BUILD_SVC_SN_DIR)/$(SERVICE_NAME).so
-SERVICE_PLUGIN_REQUIRED_GLOBS := $(BUILD_SVC_C_DIR)/*.conf $(BUILD_SVC_SN_DIR)/*.conf
-
-SERVICE_GO_BUILD_ARTIFACTS := MANAGER_PLUGIN SERVICENODE_PLUGIN
-SERVICE_GO_BUILD_FLAGS_MANAGER_PLUGIN = -buildmode=plugin $(SERVICE_C_GO_FLAGS)
-SERVICE_GO_BUILD_OUT_MANAGER_PLUGIN := $(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so
-SERVICE_GO_BUILD_SRC_MANAGER_PLUGIN := manager/main.go
+SERVICE_GO_BUILD_SPECS := \
+	MANAGER_PLUGIN|manager-plugin|$(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so|manager/main.go|- \
+	SERVICENODE_PLUGIN|servicenode-plugin|$(BUILD_SVC_SN_DIR)/$(SERVICE_NAME).so|servicenode/main.go|-
 
 SERVICE_ARTIFACT_COPY_SPECS := \
 	manager/config/*.conf:$(BUILD_SVC_C_DIR) \
@@ -131,41 +126,32 @@ SERVICE_DEBIAN_REQUIRED_ARTIFACTS := $(BUILD_DIR)/docs/release/ReleaseManifest.y
 SERVICE_DEBIAN_PACKAGE_COPY_SPECS := \
 	$(SERVICE_MANAGER_DEBIAN_PACKAGE):$(BUILD_DIR)/docs:var/www/$(SERVICE_NAME)/manager
 
-SERVICE_DOCKER_REQUIRED_ARTIFACTS := \
+SERVICE_DOCKER_REQUIRED_ARTIFACTS = \
 	$(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so \
 	$(DEBIAN_PATH)/$(SERVICE_SN_DEBIAN_PACKAGE)_@VERSION_BUILD@_amd64.deb
 SERVICE_DOCKER_REQUIRED_GLOBS := $(BUILD_SVC_C_DIR)/*.conf
 ```
 
+`service-utils` derives default `DEBIAN_PATH`, `DEBIAN_SERVICES`,
+`SERVICE_PLUGIN_REQUIRED_GLOBS`, and the Go-built portion of
+`SERVICE_PLUGIN_REQUIRED_ARTIFACTS` from the service naming/build-dir variables
+and `SERVICE_GO_BUILD_SPECS`. Services may use
+`SERVICE_PLUGIN_REQUIRED_EXTRA_ARTIFACTS` for non-Go generated files such as
+copied config. Override the full artifact list only for intentionally
+non-standard plugin layouts.
+
 6. Use manifest-owned build identity.
 
-The generic manifest helper is:
-
-```make
-BUILD_MANIFEST_CMD := bash $(SERVICE_UTILS_DIR)/builder/build_manifest.sh
-```
-
-Services should provide a schema/source identity and split service arguments
-from optional default docs arguments:
+Services should provide schema/source identity only:
 
 ```make
 BUILD_MANIFEST_SCHEMA := <service>.build.manifest.v1
 BUILD_MANIFEST_SOURCE_KEY := <service>_commit
 BUILD_MANIFEST_SOURCE_LABEL := <SERVICE>
-BUILD_MANIFEST_SERVICE_ARGS = \
-	--service-utils-dir "$(SERVICE_UTILS_DIR)" \
-	--schema "$(BUILD_MANIFEST_SCHEMA)" \
-	--source-key "$(BUILD_MANIFEST_SOURCE_KEY)" \
-	--source-label "$(BUILD_MANIFEST_SOURCE_LABEL)" \
-	--plugin-required-artifacts "$(SERVICE_PLUGIN_REQUIRED_ARTIFACTS)" \
-	--plugin-required-globs "$(SERVICE_PLUGIN_REQUIRED_GLOBS)"
-BUILD_MANIFEST_DEFAULT_DOCS_ARGS = \
-	--docs-required-artifacts "$(SERVICE_DOCS_REQUIRED_ARTIFACTS)" \
-	--docs-version-file "$(SERVICE_DOCS_VERSION_FILE)" \
-	--docs-version-key "$(SERVICE_DOCS_VERSION_KEY)"
-BUILD_MANIFEST_ARGS = $(BUILD_MANIFEST_SERVICE_ARGS)
-BUILD_MANIFEST_COMMON_EXTRA_ARGS = $(BUILD_MANIFEST_DEFAULT_DOCS_ARGS)
 ```
+
+`service-utils` derives `BUILD_MANIFEST_CMD`, service identity args, default docs
+args, `BUILD_MANIFEST_ARGS`, and `BUILD_MANIFEST_COMMON_EXTRA_ARGS`.
 
 Do not compute `VERSION_BUILD` from ad hoc shell in tracked service config.
 The shared builder resolves the active version from `build/Manifest.yaml` only
@@ -173,14 +159,14 @@ when the manifest matches the current `BUILD_MODE` and service `VERSION`.
 
 7. Adopt shared proto tooling when the service has protobuf generation.
 
-Declare specs and state files:
+Declare proto sources:
 
 ```make
-PROTO_GEN_SPECS := proto/foo.proto:proto proto/bar.proto:proto
-PROTO_GEN_STATE_FILES := Makefile $(BUILD_ENV_MAKEFILE) \
-	$(SERVICE_UTILS_DIR)/builder/proto_tools.sh \
-	$(PROTO_SOURCE_FILES) $(PROTO_GENERATED_FILES)
+PROTO_SOURCE_FILES := proto/foo.proto proto/bar.proto
 ```
+
+`service-utils` derives `PROTO_GENERATED_FILES`, `PROTO_GEN_SPECS`, and
+`PROTO_GEN_STATE_FILES`.
 
 Then use:
 
@@ -237,26 +223,23 @@ BUILD_DIR
 BUILD_SVC_C_DIR
 BUILD_SVC_SN_DIR
 BUILD_SVC_CLIENTS_DIR
-DEBIAN_PATH
-DEBIAN_SERVICES
 DOCKER_IMAGES
 DOCKER_IMAGE_BUILD_SPECS
-BUILD_ENV_MAKEFILE
-BUILD_ENV_ASN_VERSION_FILE
-BUILD_ENV_BASE_DOCKERFILE
-BUILD_ENV_DOCKERFILE
-BUILD_ENV_BASE_IMAGE
-BUILD_ENV_IMAGE
-BUILD_MANIFEST_CMD
-BUILD_MANIFEST_SERVICE_ARGS
-BUILD_MANIFEST_ARGS
-BUILD_MANIFEST_COMMON_EXTRA_ARGS
-SERVICE_PLUGIN_REQUIRED_ARTIFACTS
-SERVICE_GO_BUILD_ARTIFACTS
+BUILD_MANIFEST_SCHEMA
+BUILD_MANIFEST_SOURCE_KEY
+BUILD_MANIFEST_SOURCE_LABEL
+SERVICE_GO_BUILD_SPECS
 SERVICE_ARTIFACT_COPY_SPECS
 SERVICE_DEBIAN_REQUIRED_ARTIFACTS
 SERVICE_DOCKER_REQUIRED_ARTIFACTS
 ```
+
+The root Makefile supplies the pre-include `BUILD_ENV_MAKEFILE` and
+`BUILD_ENV_ASN_VERSION_FILE` bootstrap defaults.
+The shared builder supplies standard ASN-service defaults for generic builder
+image variables, manifest wrapper args, `DEBIAN_PATH`, `DEBIAN_SERVICES`,
+`SERVICE_PLUGIN_REQUIRED_ARTIFACTS`, `SERVICE_PLUGIN_REQUIRED_GLOBS`, and
+derived proto generation variables.
 
 Services with docs, clients, local API docs, or custom release topology should
 also define the relevant `SERVICE_DOCS_*`, `SERVICE_LOCAL_MAKE_*`,
