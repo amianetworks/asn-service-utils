@@ -21,9 +21,10 @@ require-build-manifest:
 	fi
 	@$(BUILD_MANIFEST_CMD) value --manifest "$(BUILD_MANIFEST_QUERY_FILE)" --key "$(BUILD_MANIFEST_KEY)" $(BUILD_MANIFEST_ARGS)
 
-# Build Debian packages from the manifest-owned plugin contract. The package
-# producer refreshes docs and validates package inputs while building.
-build-debian: require-build-manifest check clean-debian
+# Build Debian packages from the manifest-owned plugin contract. Consuming
+# services may add service-local producer prerequisites, such as docs staging,
+# through SERVICE_BUILD_DEBIAN_PREREQS instead of redefining this target.
+build-debian: $(SERVICE_BUILD_DEBIAN_PREREQS) require-build-manifest check clean-debian
 	@$(service_utils_shell_detect_dry_run); \
 	if [ "$$dry_run" = "1" ]; then \
 			echo ">> Build Debian Packages"; \

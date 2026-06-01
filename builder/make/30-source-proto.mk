@@ -8,9 +8,14 @@
 
 GOCACHE ?= $(CURDIR)/.cache/go-build
 export GOCACHE
+SERVICE_GOMODCACHE ?= $(CURDIR)/.cache/go-mod
+SERVICE_GO_PRIVATE ?=
+SERVICE_GO_PRIVATE_ENV = $(if $(strip $(SERVICE_GO_PRIVATE)),GOPRIVATE="$(SERVICE_GO_PRIVATE)")
+SERVICE_GO_ENV = GOCACHE="$(GOCACHE)" GOMODCACHE="$(SERVICE_GOMODCACHE)" $(SERVICE_GO_PRIVATE_ENV)
 GO_TEST_FLAGS ?=
 SERVICE_GO_CHECK_PACKAGES ?= ./...
 SERVICE_GO_FORMAT_PACKAGES ?= ./...
+SERVICE_GO_UPDATE_PACKAGES ?= ./...
 SERVICE_GOIMPORTS_PATHS ?= .
 SERVICE_GOIMPORTS_LOCAL ?= $(SERVICE_GO_PACKAGE)
 SERVICE_GOIMPORTS ?= goimports
@@ -32,16 +37,24 @@ deps-tidy:
 	@go mod tidy
 	@echo "deps-tidy completed"
 
-deps-update:
-	@echo "WARNING: deps-update performs broad dependency upgrades with go get -u."
+deps-update: .deps-update-standalone
+	@echo "WARNING: deps-update performs broad dependency upgrades with go get -u $(SERVICE_GO_UPDATE_PACKAGES)"
 	@echo "Run only with explicit approval."
+	@mkdir -p "$(GOCACHE)" "$(SERVICE_GOMODCACHE)"
 	@echo "running [go mod tidy]"
-	@go mod tidy
-	@echo "running [go get -u]"
-	@go get -u
+	@$(SERVICE_GO_ENV) go mod tidy
+	@echo "running [go get -u $(SERVICE_GO_UPDATE_PACKAGES)]"
+	@$(SERVICE_GO_ENV) go get -u $(SERVICE_GO_UPDATE_PACKAGES)
 	@echo "running [go mod tidy]"
-	@go mod tidy
+	@$(SERVICE_GO_ENV) go mod tidy
 	@echo "deps-update completed"
+
+.deps-update-standalone:
+	@if [ "$(words $(MAKECMDGOALS))" -ne 1 ]; then \
+		echo "ERROR: run deps-update as a standalone target."; \
+		echo "Usage: make deps-update"; \
+		exit 2; \
+	fi
 
 code-format:
 	@set -e; \

@@ -6,6 +6,110 @@
 ## Keep target recipes in the topic files. This file owns reusable defaults and
 ## low-level Make helpers consumed by the rest of the shared builder.
 
+## Shared builder target taxonomy.
+##
+## Public targets are the stable Make entry points consuming service repositories
+## can expect after including service.plugin.builder.mk. Public pattern targets
+## are stable selectors for configured publish/list sites. Internal targets are
+## implementation details for builder recipes and should not be copied into new
+## service Makefiles. Removed targets are compatibility shims that print the
+## supported replacement.
+SERVICE_UTILS_PUBLIC_TARGETS := \
+	prepare \
+	build \
+	build-all \
+	build-fresh \
+	clean \
+	check \
+	check-prepare \
+	check-vars \
+	check-build \
+	check-version \
+	go-test \
+	code-cleanup \
+	deps-tidy \
+	deps-update \
+	code-format \
+	code-check \
+	code-inspect \
+	proto-tools \
+	proto-tools-check \
+	proto-gen \
+	proto-gen-force \
+	build-plugin \
+	build-debian \
+	build-docker \
+	clean-debian \
+	clean-docker \
+	set-version \
+	plan-push \
+	plan-push-docker \
+	plan-push-debian \
+	push-all \
+	push-docker \
+	push-docker-cn \
+	push-docker-us \
+	push-debian \
+	push-debian-cn \
+	push-debian-us \
+	list-docker \
+	list-docker-local \
+	list-docker-cn \
+	list-docker-us \
+	list-debian \
+	list-debian-local \
+	list-debian-cn \
+	list-debian-us
+
+SERVICE_UTILS_PUBLIC_PATTERN_TARGETS := \
+	push-docker-% \
+	push-debian-% \
+	list-docker-% \
+	list-debian-%
+
+SERVICE_UTILS_COMPAT_TARGETS := \
+	build-init \
+	build-prepare \
+	debian \
+	docker
+
+SERVICE_UTILS_INTERNAL_TARGETS := \
+	service-utils-init \
+	.check-local-start \
+	.check-prepare-start \
+	.deps-update-standalone \
+	.service-docs-stage \
+	require-build-manifest \
+	.build-manifest-require-lane \
+	.build-manifest-value \
+	check-go-mod \
+	check-debian-inputs \
+	check-push-debian-sites \
+	check-push-docker-sites \
+	service-build-plugin \
+	service-build-debian \
+	service-build-from-scratch \
+	prepare-service-builder-base \
+	check-service-builder-base \
+	service-build-once \
+	service-build-once-docker-run \
+	service-build-once-docker-build \
+	build.plugin \
+	check.deb \
+	build.deb \
+	.require-version-build-var \
+	.check_service_utils_version_file \
+	.check_vars \
+	.check_build_vars \
+	.print-publish-profile-var \
+	.print-docker-push-var \
+	.print-debian-push-var \
+	.check-docker-release-mode \
+	.check-debian-release-mode \
+	.check-docker-publish-images \
+	.check-debian-publish-packages \
+	.check-docker-build-inputs
+
 uppercase = $(strip $(subst z,Z,$(subst y,Y,$(subst x,X,$(subst w,W,$(subst v,V,$(subst u,U,$(subst t,T,$(subst s,S,$(subst r,R,$(subst q,Q,$(subst p,P,$(subst o,O,$(subst n,N,$(subst m,M,$(subst l,L,$(subst k,K,$(subst j,J,$(subst i,I,$(subst h,H,$(subst g,G,$(subst f,F,$(subst e,E,$(subst d,D,$(subst c,C,$(subst b,B,$(subst a,A,$(1))))))))))))))))))))))))))))
 lowercase = $(strip $(subst Z,z,$(subst Y,y,$(subst X,x,$(subst W,w,$(subst V,v,$(subst U,u,$(subst T,t,$(subst S,s,$(subst R,r,$(subst Q,q,$(subst P,p,$(subst O,o,$(subst N,n,$(subst M,m,$(subst L,l,$(subst K,k,$(subst J,j,$(subst I,i,$(subst H,h,$(subst G,g,$(subst F,f,$(subst E,e,$(subst D,d,$(subst C,c,$(subst B,b,$(subst A,a,$(1))))))))))))))))))))))))))))
 
@@ -96,6 +200,9 @@ SERVICE_BUILD_DIRS ?= $(SERVICE_BUILD_CLEAN_DIRS)
 SERVICE_CLEAN_DIRS ?= build/
 CHECK_LOCAL_EXTRA_TARGETS ?=
 CHECK_PREPARE_EXTRA_TARGETS ?=
+# Set this in the consuming service before including service.plugin.builder.mk
+# when build-debian needs service-local producer prerequisites.
+SERVICE_BUILD_DEBIAN_PREREQS ?=
 SERVICE_GO_ARTIFACTS ?=
 SERVICE_FILE_ARTIFACTS ?=
 SERVICE_BUILD_ARTIFACTS = $(strip $(SERVICE_GO_ARTIFACTS) $(SERVICE_FILE_ARTIFACTS))
