@@ -334,7 +334,7 @@ copy_if_exists() {
     local dst="$2"
     case "$src" in
         workflow|workflow/*)
-            echo "service-docs-stage ERROR: workflow files are not Manager-served docs inputs: $src" >&2
+            echo "service-docs-stage ERROR: workflow files are not service-served docs inputs: $src" >&2
             exit 1
             ;;
     esac

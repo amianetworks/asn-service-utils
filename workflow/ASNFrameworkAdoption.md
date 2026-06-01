@@ -33,7 +33,7 @@ The important behavior changes are:
 | Build status | `check-version` printed the current and next version. | `check-build` validates the active manifest and still keeps `check-version` as an alias. |
 | DEV build number | A local `.BUILD_FILE` could be incremented before artifacts existed. | `DEV_BUILD_FILE` is committed only after successful plugin artifacts; `reserve-plugin-version` prevents concurrent duplicate DEV identities. |
 | Artifact identity | Debian and Docker targets could recompute or infer `VERSION_BUILD`. | `build/Manifest.yaml` owns the artifact version and lane status. |
-| Package/image order | Package and image targets could run without proving upstream artifacts. | `build-debian` requires plugin and docs lanes; `build-docker` requires the Debian lane. |
+| Package/image order | Package and image targets could run without a shared artifact contract. | Producers commit manifest lanes after validating their outputs; consumers require the lane and trust the manifest. |
 | Internal build targets | Internal `service-build-*` targets could be called without `VERSION_BUILD`. | Internal build steps require `VERSION_BUILD`; top-level targets pass the manifest-owned value. |
 | Builder base image check | Labels were the main freshness check. | Builder input hashes and offline Go dependency resolution are checked too. |
 | Executor | Dockerfile target execution was the normal path. | `docker-run` is the default; `docker-build` remains a migration fallback. |
@@ -201,6 +201,8 @@ The old lifecycle names are compatibility errors:
 
 Package and Docker targets should consume existing manifest-owned artifacts.
 They should not silently rebuild plugin artifacts or choose a new version.
+They should also avoid rechecking every upstream file; the producer that commits
+the manifest lane owns those artifact checks.
 Service repositories should declare their artifact contents in config variables
 and let the shared builder run the reusable inner targets:
 

@@ -1,7 +1,5 @@
 # Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
-#$(info service.plugin.builder.mk loaded)
-
 # Shared builder recipes use Bash arrays and pattern substitutions. Declare the
 # shell contract here so service repositories that include this file directly do
 # not inherit GNU Make's default /bin/sh by accident.

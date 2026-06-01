@@ -58,7 +58,8 @@ Commands:
                         Clear a matching DEV build reservation after failed build.
   commit-plugin         Validate plugin artifacts, then write build/Manifest.yaml.
   commit-lane           Refresh build/Manifest.yaml after docs/debian/docker succeeds.
-  require-lane          Require manifest mode, version, lane PASS, and artifacts.
+  require-lane          Require manifest mode, version, and lane PASS.
+  artifacts             Print manifest artifact paths for a committed lane.
   active-version-build  Print current manifest version_build when it matches mode/version.
   value                 Print a manifest value, such as version_build.
   check-build           Print the active and next local build identity.
@@ -217,11 +218,21 @@ EOF
 }
 
 set_check_display_values() {
-    active="$(yaml_value "$manifest_file" version_build || true)"
-    manifest_mode="$(yaml_value "$manifest_file" build_mode || true)"
+    active=""
+    manifest_mode=""
+    manifest_check_error=""
+    if [ -s "$manifest_file" ]; then
+        manifest_mode="$(yaml_value "$manifest_file" build_mode || true)"
+        if active="$(assert_manifest_identity 2>&1)"; then
+            :
+        else
+            manifest_check_error="$active"
+            active="$(yaml_value "$manifest_file" version_build || true)"
+        fi
+    fi
     next="$(next_plugin_version)"
     active_matches=no
-    if [ -n "$active" ] && [ "$manifest_mode" = "$mode_lower" ]; then
+    if [ -z "$manifest_check_error" ] && [ -n "$active" ] && [ "$manifest_mode" = "$mode_lower" ]; then
         case "$active" in
             "$version".*) active_matches=yes ;;
         esac
@@ -232,10 +243,14 @@ set_check_display_values() {
     display_built_version="<none>"
     if [ "$active_matches" = "yes" ]; then
         display_built_version="$active"
+    elif [ -n "$manifest_check_error" ]; then
+        display_built_version="<stale>"
     fi
     display_next_build="$next"
     display_version_build="$next"
-    if [ -n "$active" ] && [ "$manifest_mode" = "$mode_lower" ]; then
+    if [ -n "$manifest_check_error" ]; then
+        display_version_build="<stale>"
+    elif [ -n "$active" ] && [ "$manifest_mode" = "$mode_lower" ]; then
         display_version_build="$active"
     fi
 }
@@ -628,6 +643,11 @@ write_manifest() {
     generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     source_commit="$(git_ref_or_unknown "$PROJECT_ROOT" "$source_label")"
     [ -n "$service_utils_ref" ] || service_utils_ref="$(git_ref_or_unknown "$service_utils_dir" "service-utils")"
+    [ -n "$asn_service_api_version" ] || asn_service_api_version="$(yaml_value "$manifest_file" source.asn_service_api_version || true)"
+    [ -n "$asn_version" ] || asn_version="$(yaml_value "$manifest_file" source.asn_version || true)"
+    [ -n "$dep_version_asn" ] || dep_version_asn="$(yaml_value "$manifest_file" source.dep_version_asn || true)"
+    [ -n "$go_version" ] || go_version="$(yaml_value "$manifest_file" source.go_version || true)"
+    [ -n "$dep_version_go" ] || dep_version_go="$(yaml_value "$manifest_file" source.dep_version_go || true)"
 
     plugin_status="$(plugin_lane_status "$plugin_artifacts")"
     if lane_is_committed docs; then
@@ -657,7 +677,10 @@ write_manifest() {
         printf 'source:\n'
         printf '  %s: %s\n' "$source_key" "$(yaml_quote "$source_commit")"
         printf '  asn_service_api_version: %s\n' "$(yaml_quote "$asn_service_api_version")"
+        printf '  asn_version: %s\n' "$(yaml_quote "$asn_version")"
         printf '  dep_version_asn: %s\n' "$(yaml_quote "$dep_version_asn")"
+        printf '  go_version: %s\n' "$(yaml_quote "$go_version")"
+        printf '  dep_version_go: %s\n' "$(yaml_quote "$dep_version_go")"
         printf '  service_utils_ref: %s\n' "$(yaml_quote "$service_utils_ref")"
         printf 'lanes:\n'
         printf '  plugin:\n'
@@ -689,8 +712,59 @@ lane_status_from_manifest() {
     yaml_value "$manifest_file" "lanes.$lane_name.status" || true
 }
 
+lane_artifacts_from_manifest() {
+    local lane_name="$1"
+    [ -s "$manifest_file" ] || return 0
+    awk -v lane_name="$lane_name" '
+        function trim(value) {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            return value
+        }
+        function unquote(value) {
+            value = trim(value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+                gsub(/\\"/, "\"", value)
+                gsub(/\\\\/, "\\", value)
+            }
+            return value
+        }
+        /^[^[:space:]][^:]*:/ {
+            top = $0
+            sub(/:.*/, "", top)
+            in_lanes = (top == "lanes")
+            in_lane = 0
+            in_artifacts = 0
+            next
+        }
+        in_lanes && /^  [^[:space:]][^:]*:/ {
+            lane = $0
+            sub(/^  /, "", lane)
+            sub(/:.*/, "", lane)
+            in_lane = (lane == lane_name)
+            in_artifacts = 0
+            next
+        }
+        in_lanes && in_lane && /^    artifacts:/ {
+            in_artifacts = 1
+            next
+        }
+        in_lanes && in_lane && in_artifacts && /^      - path:/ {
+            value = $0
+            sub(/^      - path:[[:space:]]*/, "", value)
+            print unquote(value)
+            next
+        }
+        in_lanes && in_lane && in_artifacts && /^    [^[:space:]][^:]*:/ {
+            in_artifacts = 0
+        }
+    ' "$manifest_file"
+}
+
 require_lane() {
     [ -n "$lane" ] || { echo "build_manifest ERROR: --lane is required" >&2; exit 2; }
+    lane_rank "$lane" >/dev/null
     version_build="$(assert_manifest_identity)"
     local status
     status="$(lane_status_from_manifest "$lane")"
@@ -698,22 +772,13 @@ require_lane() {
         echo "build_manifest ERROR: manifest lane '$lane' is '$status', expected PASS: $(relpath "$manifest_file")" >&2
         exit 1
     }
-    local tmpdir artifacts actual_status
-    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/service-build-manifest-check.XXXXXX")"
-    artifacts="$tmpdir/artifacts.txt"
-    case "$lane" in
-        plugin) actual_status="$(plugin_lane_status "$artifacts")" ;;
-        docs) actual_status="$(docs_lane_status "$artifacts")" ;;
-        debian) actual_status="$(debian_lane_status "$artifacts")" ;;
-        docker) actual_status="$(docker_lane_status "$artifacts")" ;;
-        *) echo "build_manifest ERROR: unsupported lane: $lane" >&2; rm -rf "$tmpdir"; exit 2 ;;
-    esac
-    rm -rf "$tmpdir"
-    [ "$actual_status" = "PASS" ] || {
-        echo "build_manifest ERROR: artifact check for lane '$lane' is '$actual_status' for $version_build." >&2
-        exit 1
-    }
     printf '%s\n' "$version_build"
+}
+
+lane_artifacts() {
+    [ -n "$lane" ] || { echo "build_manifest ERROR: --lane is required" >&2; exit 2; }
+    require_lane >/dev/null
+    lane_artifacts_from_manifest "$lane"
 }
 
 commit_dev_build_file() {
@@ -793,6 +858,9 @@ case "$command_name" in
     require-lane)
         require_lane
         ;;
+    artifacts)
+        lane_artifacts
+        ;;
     active-version-build)
         active_version_build
         ;;
@@ -819,6 +887,11 @@ EOF
         fi
         printf ">> Build Identity\n"
         render_rows "$rows"
+        if [ -n "$manifest_check_error" ]; then
+            printf '\n'
+            printf '%s\n' "$manifest_check_error" | sed 's/^/  Manifest: /'
+            exit 1
+        fi
         printf '\n'
         ;;
     check-version)

@@ -212,27 +212,28 @@ check-push-docker-sites:
 	printf "  %15s : %s\n" "Subrepo" "$(if $(DOCKER_SUBREPO),$(DOCKER_SUBREPO),(none))"; \
 	printf "  %15s : %s\n" "Version Tag" "$$push_version"; \
 	printf "  %15s : %s\n" "Latest Tag" "$(DOCKER_PUSH_LATEST)"; \
-	echo ""; \
-	for image in $(DOCKER_IMAGES); do \
-		inspect_output=$$(mktemp); \
-		if docker image inspect "$$image:$$push_version" > "$$inspect_output" 2>&1; then \
-			:; \
-		else \
-			echo "ERROR: local image $$image:$$push_version is missing. Run make build-docker first."; \
-			if [ -s "$$inspect_output" ]; then cat "$$inspect_output"; fi; \
-			rm -f "$$inspect_output"; \
+		echo ""; \
+		artifact_refs="$$( $(BUILD_MANIFEST_CMD) artifacts --lane docker $(BUILD_MANIFEST_COMMON_ARGS) )"; \
+		if [ -z "$$artifact_refs" ]; then \
+			echo "ERROR: manifest docker lane has no image artifacts."; \
 			exit 1; \
 		fi; \
-		rm -f "$$inspect_output"; \
-	done; \
-	for image in $(DOCKER_IMAGES); do \
-		publish_docker_ref "$$image" "$$push_version" "$$push_version"; \
-	done; \
-	if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
-		for image in $(DOCKER_IMAGES); do \
-			publish_docker_ref "$$image" "latest" "$$push_version"; \
+		for ref in $$artifact_refs; do \
+			image="$${ref%:*}"; \
+			source_tag="$${ref##*:}"; \
+			if [ "$$image" = "$$ref" ] || [ -z "$$image" ] || [ -z "$$source_tag" ]; then \
+				echo "ERROR: invalid manifest Docker image ref: $$ref"; \
+				exit 2; \
+			fi; \
+			publish_docker_ref "$$image" "$$push_version" "$$source_tag"; \
 		done; \
-	fi; \
+		if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
+			for ref in $$artifact_refs; do \
+				image="$${ref%:*}"; \
+				source_tag="$${ref##*:}"; \
+				publish_docker_ref "$$image" "latest" "$$source_tag"; \
+			done; \
+		fi; \
 	if [ -n "$$curl_config_file" ]; then rm -f "$$curl_config_file"; trap - EXIT INT TERM; fi
 
 .push-docker-image:

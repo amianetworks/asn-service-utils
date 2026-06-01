@@ -106,7 +106,9 @@ prepare: .check_service_utils_version_file prepare-service-builder-base
 # - CHECK_VERSION_ROWS and CHECK_BUILD_ROWS replace the default identity rows.
 # - CHECK_VERSION_EXTRA_ROWS and CHECK_BUILD_EXTRA_ROWS append rows to the
 #   active identity sections.
-service_utils_check_prepare_targets := check-version check-go-mod check-build check-service-builder-base
+service_utils_manifest_producer_targets := check-version check-go-mod check-service-builder-base
+service_utils_check_prepare_targets := $(service_utils_manifest_producer_targets) check-build $(CHECK_PREPARE_EXTRA_TARGETS)
+service_utils_check_targets := check-prepare $(CHECK_LOCAL_EXTRA_TARGETS)
 CHECK_BUILD_EXTRA_ROWS ?=
 CHECK_VERSION_EXTRA_ROWS ?=
 export CHECK_BUILD_ROWS CHECK_VERSION_ROWS CHECK_BUILD_EXTRA_ROWS CHECK_VERSION_EXTRA_ROWS
@@ -120,12 +122,13 @@ service-utils-init: .check_service_utils_version_file .check_build_vars update_s
 # remain outside the generic builder and should consume the published outputs.
 push-all: push-docker push-debian
 
-check: .check-local-start check-prepare
+check: .check-local-start $(service_utils_check_targets)
 	@echo ">> Local Check: [PASS]"
 
 .check-local-start:
 	@echo ">> Local Check"; \
 	printf "  %15s : %s\n" "Scope" "version identity, manifest state, Go module compatibility, builder image"; \
+	if [ -n "$(strip $(CHECK_LOCAL_EXTRA_TARGETS))" ]; then printf "  %15s : %s\n" "Extra Targets" "$(strip $(CHECK_LOCAL_EXTRA_TARGETS))"; fi; \
 	echo ""
 
 check-prepare: .check-prepare-start $(service_utils_check_prepare_targets)
@@ -148,7 +151,7 @@ build-fresh: clean prepare build-plugin build-debian build-docker
 	@find ./build -maxdepth 1 -print
 	@echo
 
-build-plugin: check proto-gen
+build-plugin: $(service_utils_manifest_producer_targets) proto-gen
 	@set -e; \
 	$(service_utils_shell_detect_dry_run_eval); \
 	if [ "$$$$dry_run" = "1" ]; then \

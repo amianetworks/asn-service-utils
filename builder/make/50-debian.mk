@@ -21,8 +21,9 @@ require-build-manifest:
 	fi
 	@$(BUILD_MANIFEST_CMD) value --manifest "$(BUILD_MANIFEST_QUERY_FILE)" --key "$(BUILD_MANIFEST_KEY)" $(BUILD_MANIFEST_ARGS)
 
-# Build Debian packages from existing plugin artifacts.
-build-debian: require-build-manifest check check-debian-inputs clean-debian
+# Build Debian packages from the manifest-owned plugin contract. The package
+# producer refreshes docs and validates package inputs while building.
+build-debian: require-build-manifest check clean-debian
 	@$(service_utils_shell_detect_dry_run); \
 	if [ "$$dry_run" = "1" ]; then \
 			echo ">> Build Debian Packages"; \
@@ -85,26 +86,6 @@ DEBIAN_PUSH_VERSION ?= $(VERSION_BUILD)
 	elif [ "$$selected_version" != "$$version_build" ]; then \
 		echo "check_publish_inputs ERROR: selected debian version '$$selected_version' does not match manifest version '$$version_build'." >&2; \
 		echo "Manifest: $(BUILD_MANIFEST_FILE)" >&2; \
-		exit 1; \
-	fi; \
-	missing=""; latest=""; \
-	for service in $(DEBIAN_SERVICES); do \
-		file="$(DEBIAN_PACKAGE_DIR)/$${service}_$${selected_version}_amd64.deb"; \
-		if [ ! -f "$$file" ]; then \
-			missing="$${missing}$${missing:+ }$${service}_$${selected_version}_amd64.deb"; \
-			local_latest=""; \
-			if [ -d "$(DEBIAN_PACKAGE_DIR)" ]; then \
-				local_latest="$$(find "$(DEBIAN_PACKAGE_DIR)" -maxdepth 1 -type f -name "$${service}_*_amd64.deb" -print | sort -r | head -n 1)"; \
-			fi; \
-			if [ -n "$$local_latest" ]; then local_latest="$$(basename "$$local_latest")"; else local_latest="$${service}_(none)"; fi; \
-			latest="$${latest}$${latest:+ }$$local_latest"; \
-		fi; \
-	done; \
-	if [ -n "$$missing" ]; then \
-		echo ">> Debian Publish Package Check: [FAIL]"; \
-		printf "  %15s : %s (%s)\n" "Version" "$$selected_version" "from $(BUILD_MANIFEST_FILE)"; \
-		printf "  %15s : %s\n" "Missing" "$$missing"; \
-		printf "  %15s : %s\n" "Latest" "$$latest"; \
 		exit 1; \
 	fi
 

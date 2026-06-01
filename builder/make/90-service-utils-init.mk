@@ -1,14 +1,6 @@
 # Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
-# Debug purpose
-.PHONY: show-prepare init_service_utils update_service_utils
-
-show-prepare:
-	@echo "Current working directory: ${PWD}"
-	@echo "Starting $(BUILD_ENV_BASE_IMAGE_REF)"
-	docker run --rm --platform linux/amd64 --name $(BUILD_ENV_BASE_IMAGE) $(BUILD_ENV_BASE_IMAGE_REF) ls -l /
-
-	@echo " Ran the container once to show the artifacts."
+.PHONY: init_service_utils update_service_utils
 
 #------------------------------------------------------------------------------#
 init_service_utils:

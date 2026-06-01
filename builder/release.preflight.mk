@@ -8,7 +8,6 @@
 # running approval-gated publish or deployment commands.
 
 RELEASE_CONFIG_CHECK_DOCKER_LOGIN ?= yes
-PUSH_PLAN_CHECK_LOCAL_IMAGES ?= yes
 
 .PHONY: \
 	.check-push-config .check-push-common .check-push-docker-config .check-push-debian-config \
@@ -225,16 +224,28 @@ plan-push-docker:
 		plan_status=1; \
 	fi; \
 	site_status_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-docker.XXXXXX")"; \
-	trap 'rm -f "$$site_status_file"' EXIT; \
+	artifact_refs_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-docker-artifacts.XXXXXX")"; \
+	trap 'rm -f "$$site_status_file" "$$artifact_refs_file"' EXIT; \
+	artifact_error=""; \
+	if [ -z "$$plan_version_error" ]; then \
+		if ! artifact_error="$$( $(BUILD_MANIFEST_CMD) artifacts --lane docker $(BUILD_MANIFEST_COMMON_ARGS) > "$$artifact_refs_file" 2>&1 )"; then \
+			plan_version_error="$$artifact_error"; \
+			plan_status=1; \
+		elif [ ! -s "$$artifact_refs_file" ]; then \
+			plan_version_error="manifest docker lane has no artifacts"; \
+			plan_status=1; \
+		fi; \
+	fi; \
+	artifact_refs="$$(tr '\n' ' ' < "$$artifact_refs_file" | sed 's/[[:space:]]*$$//')"; \
 	printf ">> Docker Publish Plan\n"; \
 	printf "  %24s : %s\n" "Selected registries" "$(DOCKER_REGISTRIES)"; \
-	printf "  %24s : %s\n" "Images" "$(DOCKER_IMAGES)"; \
+	printf "  %24s : %s\n" "Images" "$${artifact_refs:-"(manifest unavailable)"}"; \
 	printf "  %24s : %s\n" "Version tag" "$$plan_version"; \
 	printf "  %24s : %s\n" "Latest tag" "$(DOCKER_PUSH_LATEST)"; \
 	printf "  %24s : %s\n" "No-upload guarantee" "no docker tag/push is executed"; \
 	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
 	for site in $(DOCKER_REGISTRIES); do \
-		$(MAKE) -s .plan-push-docker-site SITE=$$site DOCKER_PUSH_PLAN_VERSION="$$plan_version" PUSH_PLAN_STATUS_FILE="$$site_status_file"; \
+		$(MAKE) -s .plan-push-docker-site SITE=$$site DOCKER_PUSH_PLAN_VERSION="$$plan_version" DOCKER_PUSH_PLAN_ARTIFACTS_FILE="$$artifact_refs_file" PUSH_PLAN_STATUS_FILE="$$site_status_file"; \
 	done; \
 	if [ -s "$$site_status_file" ]; then plan_status=1; fi; \
 	if [ "$$plan_status" -ne 0 ]; then \
@@ -251,34 +262,30 @@ plan-push-docker:
 	site_status=0; \
 	if [ -z "$(PUSH_PLAN_DOCKER_REGISTRY)" ]; then site_status=1; fi; \
 	plan_version="$(DOCKER_PUSH_PLAN_VERSION)"; \
-	for image in $(DOCKER_IMAGES); do \
-		if [ "$${plan_version#\(}" != "$$plan_version" ]; then \
-			printf "  %24s : %s\n" "Would push" "$$image (version unavailable)"; \
-			site_status=1; \
-			continue; \
-		fi; \
-		if [ -z "$(PUSH_PLAN_DOCKER_REGISTRY)" ]; then \
-			printf "  %24s : %s\n" "Would push" "$$image (destination unavailable)"; \
-			continue; \
-		fi; \
-		printf "  %24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:$$plan_version"; \
-		if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
-			printf "  %24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:latest"; \
-		fi; \
-		if [ "$(PUSH_PLAN_CHECK_LOCAL_IMAGES)" = "yes" ]; then \
-			inspect_output=$$(mktemp); \
-			if docker image inspect "$$image:$$plan_version" > "$$inspect_output" 2>&1; then \
-				printf "  %24s : %s\n" "$$image:$$plan_version" "local image present"; \
-			else \
-				printf "  %24s : %s\n" "$$image:$$plan_version" "local image missing"; \
-				if [ -s "$$inspect_output" ]; then sed 's/^/  Docker Error: /' "$$inspect_output"; fi; \
+	artifact_refs_file="$(DOCKER_PUSH_PLAN_ARTIFACTS_FILE)"; \
+	if [ ! -s "$$artifact_refs_file" ]; then \
+		printf "  %24s : %s\n" "Would push" "(manifest docker artifacts unavailable)"; \
+		site_status=1; \
+	else \
+		while IFS= read -r ref || [ -n "$$ref" ]; do \
+			[ -n "$$ref" ] || continue; \
+			image="$${ref%:*}"; \
+			image_tag="$${ref##*:}"; \
+			if [ "$$image" = "$$ref" ] || [ -z "$$image" ] || [ -z "$$image_tag" ]; then \
+				printf "  %24s : %s\n" "Would push" "$$ref (invalid manifest image ref)"; \
 				site_status=1; \
+				continue; \
 			fi; \
-			rm -f "$$inspect_output"; \
-		else \
-			printf "  %24s : %s\n" "$$image:$$plan_version" "local image check skipped (PUSH_PLAN_CHECK_LOCAL_IMAGES=no)"; \
-		fi; \
-	done; \
+			if [ -z "$(PUSH_PLAN_DOCKER_REGISTRY)" ]; then \
+				printf "  %24s : %s\n" "Would push" "$$ref (destination unavailable)"; \
+				continue; \
+			fi; \
+			printf "  %24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:$$image_tag"; \
+			if [ "$(DOCKER_PUSH_LATEST)" = "yes" ]; then \
+				printf "  %24s : %s\n" "Would push" "$(PUSH_PLAN_DOCKER_PREFIX)/$$image:latest"; \
+			fi; \
+		done < "$$artifact_refs_file"; \
+	fi; \
 	echo ""; \
 	if [ "$$site_status" -ne 0 ]; then \
 		if [ -n "$(PUSH_PLAN_STATUS_FILE)" ]; then printf '%s\n' "$$site_status" >> "$(PUSH_PLAN_STATUS_FILE)"; else exit "$$site_status"; fi; \
@@ -314,15 +321,28 @@ plan-push-debian:
 		plan_status=1; \
 	fi; \
 	site_status_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-debian.XXXXXX")"; \
-	trap 'rm -f "$$site_status_file"' EXIT; \
+	package_refs_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-debian-artifacts.XXXXXX")"; \
+	trap 'rm -f "$$site_status_file" "$$package_refs_file"' EXIT; \
+	artifact_error=""; \
+	if [ -z "$$plan_version_error" ]; then \
+		if ! artifact_error="$$( $(BUILD_MANIFEST_CMD) artifacts --lane debian $(BUILD_MANIFEST_COMMON_ARGS) > "$$package_refs_file" 2>&1 )"; then \
+			plan_version_error="$$artifact_error"; \
+			plan_status=1; \
+		elif [ ! -s "$$package_refs_file" ]; then \
+			plan_version_error="manifest debian lane has no artifacts"; \
+			plan_status=1; \
+		fi; \
+	fi; \
+	package_refs="$$(tr '\n' ' ' < "$$package_refs_file" | sed 's/[[:space:]]*$$//')"; \
 	printf ">> Debian Publish Plan\n"; \
 	printf "  %24s : %s\n" "Selected repositories" "$(DEBIAN_REPOSITORIES)"; \
 	printf "  %24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"; \
 	printf "  %24s : %s\n" "Package version" "$$plan_version"; \
+	printf "  %24s : %s\n" "Packages" "$${package_refs:-"(manifest unavailable)"}"; \
 	printf "  %24s : %s\n" "No-upload guarantee" "no curl upload/publish is executed"; \
 	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
 	for site in $(DEBIAN_REPOSITORIES); do \
-		$(MAKE) -s .plan-push-debian-site SITE=$$site DEBIAN_PUSH_PLAN_VERSION="$$plan_version" PUSH_PLAN_STATUS_FILE="$$site_status_file"; \
+		$(MAKE) -s .plan-push-debian-site SITE=$$site DEBIAN_PUSH_PLAN_VERSION="$$plan_version" DEBIAN_PUSH_PLAN_ARTIFACTS_FILE="$$package_refs_file" PUSH_PLAN_STATUS_FILE="$$site_status_file"; \
 	done; \
 	if [ -s "$$site_status_file" ]; then plan_status=1; fi; \
 	if [ "$$plan_status" -ne 0 ]; then \
@@ -341,51 +361,16 @@ plan-push-debian:
 	printf "  %24s : %s\n" "Subrepo" "$(if $(PUSH_PLAN_DEBIAN_SUBREPO),$(PUSH_PLAN_DEBIAN_SUBREPO),not configured)"; \
 	site_status=0; \
 	if [ -z "$(PUSH_PLAN_DEBIAN_HOST)" ] || [ -z "$(PUSH_PLAN_DEBIAN_PATH)" ] || [ -z "$(PUSH_PLAN_DEBIAN_SUBREPO)" ] || [ "$(PUSH_PLAN_DEBIAN_SUBREPO)" = "unknown" ]; then site_status=1; fi; \
-	plan_version="$(DEBIAN_PUSH_PLAN_VERSION)"; \
-	package_files="$(DEBIAN_PACKAGE_FILES)"; \
-	if [ -z "$$package_files" ] && [ "$${plan_version#\(}" = "$$plan_version" ] && [ -d "$(DEBIAN_PACKAGE_DIR)" ]; then \
-		for service in $(DEBIAN_SERVICES); do \
-			files=$$(find "$(DEBIAN_PACKAGE_DIR)" -maxdepth 1 -type f -name "$${service}_$${plan_version}_amd64.deb" -print | sort); \
-			if [ -n "$$files" ]; then package_files="$$package_files $$files"; fi; \
-		done; \
-	fi; \
-	if [ -z "$$package_files" ]; then \
-		printf "  %24s : %s\n" "Would upload" "(no matching local packages)"; \
+	package_refs_file="$(DEBIAN_PUSH_PLAN_ARTIFACTS_FILE)"; \
+	if [ ! -s "$$package_refs_file" ]; then \
+		printf "  %24s : %s\n" "Would upload" "(manifest debian artifacts unavailable)"; \
 		site_status=1; \
-	fi; \
-	for file in $$package_files; do \
-		if [ -f "$$file" ]; then \
+	else \
+		while IFS= read -r file || [ -n "$$file" ]; do \
+			[ -n "$$file" ] || continue; \
 			printf "  %24s : %s\n" "Would upload" "$$file"; \
-		else \
-			printf "  %24s : %s\n" "Would upload" "$$file (missing locally)"; \
-			site_status=1; \
-		fi; \
-	done; \
-	metadata_failed=false; \
-	for file in $$package_files; do \
-		[ -f "$$file" ] || continue; \
-		if ! pkg_name=$$($(DEBIAN_METADATA_CMD) --file "$$file" --field Package 2>&1); then \
-			printf "  %24s : %s\n" "Package metadata" "$$file (invalid package)"; \
-			printf "%s\n" "$$pkg_name" | sed "s/^/  Debian Error: /"; \
-			metadata_failed=true; \
-			continue; \
-		fi; \
-		if ! pkg_version=$$($(DEBIAN_METADATA_CMD) --file "$$file" --field Version 2>&1); then \
-			printf "  %24s : %s\n" "Package metadata" "$$file (missing version)"; \
-			printf "%s\n" "$$pkg_version" | sed "s/^/  Debian Error: /"; \
-			metadata_failed=true; \
-			continue; \
-		fi; \
-		case " $(DEBIAN_SERVICES) " in \
-			*" $$pkg_name "*) : ;; \
-			*) printf "  %24s : %s\n" "Package metadata" "$$file package $$pkg_name is not in DEBIAN_SERVICES"; metadata_failed=true ;; \
-		esac; \
-		if [ "$$pkg_version" != "$$plan_version" ]; then \
-			printf "  %24s : %s\n" "Package metadata" "$$file version $$pkg_version, expected $$plan_version"; \
-			metadata_failed=true; \
-		fi; \
-	done; \
-	if [ "$$metadata_failed" = "true" ]; then site_status=1; fi; \
+		done < "$$package_refs_file"; \
+	fi; \
 	echo ""; \
 	if [ "$$site_status" -ne 0 ]; then \
 		if [ -n "$(PUSH_PLAN_STATUS_FILE)" ]; then printf '%s\n' "$$site_status" >> "$(PUSH_PLAN_STATUS_FILE)"; else exit "$$site_status"; fi; \

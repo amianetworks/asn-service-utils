@@ -39,15 +39,15 @@ SERVICE_BUILD_DIR_C ?= $(BUILD_DIR)/controller
 SERVICE_BUILD_DIR_SN ?= $(BUILD_DIR)/servicenode
 SERVICE_BUILD_DIR_CLIENT ?= $(BUILD_DIR)/client
 DEBIAN_PATH ?= $(BUILD_DIR)/debian
-DEBIAN_SERVICES ?= $(strip \
+SERVICE_DEBIAN_PACKAGES ?= $(strip \
 	$(SERVICE_PACKAGE_C) \
 	$(SERVICE_PACKAGE_SN) \
 	$(SERVICE_PACKAGE_C_CLI) \
 	$(SERVICE_PACKAGE_CLIENT))
-override DOCKER_IMAGES = $(strip $(SERVICE_DOCKER_IMAGE_C) $(SERVICE_DOCKER_IMAGE_SN))
-SERVICE_PLUGIN_REQUIRED_GLOBS ?= \
-	$(SERVICE_BUILD_DIR_C)/*.conf \
-	$(SERVICE_BUILD_DIR_SN)/*.conf
+DEBIAN_SERVICES ?= $(SERVICE_DEBIAN_PACKAGES)
+SERVICE_DOCKER_COMPONENTS ?= C SN
+SERVICE_DOCKER_IMAGES ?= $(strip $(SERVICE_DOCKER_IMAGE_C) $(SERVICE_DOCKER_IMAGE_SN))
+DOCKER_IMAGES ?= $(SERVICE_DOCKER_IMAGES)
 
 BUILD_MANIFEST_SCHEMA ?= service.build.manifest.v1
 BUILD_MANIFEST_SOURCE_KEY ?= source_commit
@@ -67,11 +67,23 @@ BUILD_MANIFEST_ARGS ?= $(BUILD_MANIFEST_SERVICE_ARGS)
 BUILD_MANIFEST_LANE ?=
 BUILD_MANIFEST_QUERY_FILE ?= $(BUILD_MANIFEST_FILE)
 BUILD_MANIFEST_KEY ?=
-BUILD_MANIFEST_CORE_ARGS ?= --manifest "$(BUILD_MANIFEST_FILE)" --mode "$(BUILD_MODE)" --version "$(VERSION)" --build "$(BUILD)" --debian-dir "$(DEBIAN_PATH)" --debian-services "$(DEBIAN_SERVICES)" --docker-images "$(DOCKER_IMAGES)"
+BUILD_MANIFEST_CORE_ARGS ?= \
+	--manifest "$(BUILD_MANIFEST_FILE)" \
+	--mode "$(BUILD_MODE)" \
+	--version "$(VERSION)" \
+	--build "$(BUILD)" \
+	--debian-dir "$(DEBIAN_PATH)" \
+	--debian-services "$(DEBIAN_SERVICES)" \
+	--docker-images "$(DOCKER_IMAGES)" \
+	--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
+	--asn-version "$(ASN_VERSION)" \
+	--dep-version-asn "$(DEP_VERSION_ASN)" \
+	--go-version "$(GO_VERSION)" \
+	--dep-version-go "$(DEP_VERSION_GO)"
 BUILD_MANIFEST_COMMON_EXTRA_ARGS ?= $(BUILD_MANIFEST_DEFAULT_DOCS_ARGS)
 BUILD_MANIFEST_COMMON_ARGS ?= $(BUILD_MANIFEST_CORE_ARGS) --docs-dir "$(CURDIR)/build/docs" $(BUILD_MANIFEST_ARGS) $(BUILD_MANIFEST_COMMON_EXTRA_ARGS)
 BUILD_MANIFEST_RESERVE_ARGS ?= --version "$(VERSION)" --mode "$(BUILD_MODE)" --build "$(BUILD)" --dev-start "$(BUILD_DEV)" --dev-file "$(DEV_BUILD_FILE)" --manifest "$(BUILD_MANIFEST_FILE)" $(BUILD_MANIFEST_ARGS)
-BUILD_MANIFEST_COMMIT_PLUGIN_ARGS ?= $(BUILD_MANIFEST_COMMON_ARGS) --dev-start "$(BUILD_DEV)" --dev-file "$(DEV_BUILD_FILE)" --asn-service-api-version "$(ASN_SERVICE_API_VERSION)" --dep-version-asn "$(DEP_VERSION_ASN)"
+BUILD_MANIFEST_COMMIT_PLUGIN_ARGS ?= $(BUILD_MANIFEST_COMMON_ARGS) --dev-start "$(BUILD_DEV)" --dev-file "$(DEV_BUILD_FILE)"
 BUILD_MANIFEST_STAGE_DOCS_EXTRA_ARGS ?= $(BUILD_MANIFEST_ARGS)
 BUILD_MANIFEST_STAGE_DOCS_ARGS ?= $(BUILD_MANIFEST_CORE_ARGS) --docs-dir "$(STAGE_DOCS_DIR)" $(BUILD_MANIFEST_STAGE_DOCS_EXTRA_ARGS) --docs-required-artifacts "$(STAGE_DOCS_DIR)/release/ReleaseManifest.yaml $(STAGE_DOCS_DIR)/release/DocsChecksums.tsv $(STAGE_DOCS_DIR)/index.html" --docs-version-file "$(STAGE_DOCS_DIR)/release/ReleaseManifest.yaml" --docs-version-key "$(SERVICE_DOCS_VERSION_KEY)"
 # Build identity is shared builder state. If the caller did not pass
@@ -82,6 +94,8 @@ VERSION_BUILD ?=
 SERVICE_BUILD_CLEAN_DIRS ?=
 SERVICE_BUILD_DIRS ?= $(SERVICE_BUILD_CLEAN_DIRS)
 SERVICE_CLEAN_DIRS ?= build/
+CHECK_LOCAL_EXTRA_TARGETS ?=
+CHECK_PREPARE_EXTRA_TARGETS ?=
 SERVICE_GO_ARTIFACTS ?=
 SERVICE_FILE_ARTIFACTS ?=
 SERVICE_BUILD_ARTIFACTS = $(strip $(SERVICE_GO_ARTIFACTS) $(SERVICE_FILE_ARTIFACTS))
@@ -93,13 +107,16 @@ service_go_artifact_validate = $(if $(strip $(1)),,$(error invalid SERVICE_GO_AR
 service_file_artifact_source = $(word 1,$($(1)))
 service_file_artifact_dest = $(word 2,$($(1)))
 service_file_artifact_output = $(if $(findstring *,$(call service_file_artifact_source,$(1))),,$(call service_file_artifact_dest,$(1))/$(notdir $(call service_file_artifact_source,$(1))))
+service_file_artifact_glob = $(if $(findstring *,$(call service_file_artifact_source,$(1))),$(call service_file_artifact_dest,$(1))/$(notdir $(call service_file_artifact_source,$(1))))
 service_file_artifact_validate = $(if $(strip $(1)),,$(error invalid SERVICE_FILE_ARTIFACTS entry: empty artifact id))$(if $(strip $($(1))),,$(error $(1) is required))$(if $(strip $(call service_file_artifact_source,$(1))),,$(error $(1) source is required))$(if $(strip $(call service_file_artifact_dest,$(1))),,$(error $(1) destination is required))
 $(foreach artifact,$(SERVICE_GO_ARTIFACTS),$(call service_go_artifact_validate,$(artifact)))
 $(foreach artifact,$(SERVICE_FILE_ARTIFACTS),$(call service_file_artifact_validate,$(artifact)))
 SERVICE_BUILD_GO_OUTPUTS = $(strip $(foreach artifact,$(SERVICE_GO_ARTIFACTS),$(call service_go_artifact_output,$(artifact))))
 SERVICE_BUILD_FILE_OUTPUTS = $(strip $(foreach artifact,$(SERVICE_FILE_ARTIFACTS),$(call service_file_artifact_output,$(artifact))))
+SERVICE_BUILD_FILE_GLOBS = $(strip $(foreach artifact,$(SERVICE_FILE_ARTIFACTS),$(call service_file_artifact_glob,$(artifact))))
 SERVICE_BUILD_ARTIFACT_TARGETS := $(addprefix .service-build-artifact-,$(SERVICE_BUILD_ARTIFACTS))
 SERVICE_PLUGIN_REQUIRED_ARTIFACTS ?= $(strip $(SERVICE_BUILD_GO_OUTPUTS) $(SERVICE_BUILD_FILE_OUTPUTS))
+SERVICE_PLUGIN_REQUIRED_GLOBS ?= $(SERVICE_BUILD_FILE_GLOBS)
 SERVICE_GO_CACHE_SPECS ?=
 service_go_cache_spec = $(if $($(1)),$($(1)),$(1))
 SERVICE_GO_CACHE_PACKAGES ?= $(or $(strip $(foreach spec,$(SERVICE_GO_CACHE_SPECS),$(call service_go_cache_spec,$(spec)))),./...)

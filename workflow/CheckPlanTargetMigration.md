@@ -218,26 +218,13 @@ It checks:
 - selected credential variables without printing secrets;
 - Docker login config when enabled;
 - manifest lane identity;
-- local Docker images by default;
-- Debian package file existence and metadata.
+- manifest-declared Docker and Debian artifact coordinates.
 
 Lane-specific commands are still public:
 
 ```text
 make plan-push-docker
 make plan-push-debian
-```
-
-Set this default unless a repository has a clear reason to override it:
-
-```make
-PUSH_PLAN_CHECK_LOCAL_IMAGES ?= yes
-```
-
-For a topology-only diagnostic while migrating, temporarily run:
-
-```bash
-make plan-push-docker PUSH_PLAN_CHECK_LOCAL_IMAGES=no
 ```
 
 Do not reintroduce `plan-push-preview`.
@@ -251,7 +238,7 @@ make help
 make check-vars
 make check-version
 make check
-make plan-push-docker PUSH_PLAN_CHECK_LOCAL_IMAGES=no
+make plan-push-docker
 make plan-push-debian
 ```
 

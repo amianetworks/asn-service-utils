@@ -93,8 +93,8 @@ The root should:
 | `check` | Validate build variables, build identity, go.mod compatibility, and builder readiness. |
 | `build-plugin` | Reserve the manifest-owned version and build plugin/service artifacts. |
 | `build-docs` | Service-local public target that generates service docs and calls the shared internal docs staging helper. |
-| `build-debian` | Build Debian packages from existing plugin/docs artifacts. |
-| `build-docker` | Build Docker images from existing Debian/package inputs. |
+| `build-debian` | Build Debian packages from the manifest-owned plugin/docs contract. |
+| `build-docker` | Build Docker images from the manifest-owned Debian lane. |
 | `build` | Run the full local artifact build in order. |
 | `plan-push` | Preview selected publish destinations without publishing. |
 | `push-docker-*`, `push-debian-*` | Publish only after explicit approval. |
@@ -140,7 +140,7 @@ SERVICE_DOCKERFILE_SN ?= docker/$(SERVICE_NAME)-servicenode.dockerfile
 ```
 
 `service-utils` derives default `DEBIAN_PATH`, `DEBIAN_SERVICES`,
-`DOCKER_IMAGES`, `DOCKER_IMAGE_BUILD_SPECS`, `SERVICE_PLUGIN_REQUIRED_GLOBS`,
+`SERVICE_DOCKER_COMPONENTS`, `DOCKER_IMAGES`, `SERVICE_PLUGIN_REQUIRED_GLOBS`,
 and the Go-built portion of `SERVICE_PLUGIN_REQUIRED_ARTIFACTS` from the service
 naming/build-dir variables, the `SERVICE_P_*` specs listed in
 `SERVICE_GO_ARTIFACTS`, and the file specs listed in `SERVICE_FILE_ARTIFACTS`.
@@ -245,7 +245,7 @@ The root Makefile supplies the pre-include `BUILD_ENV_MAKEFILE` and
 `BUILD_ENV_ASN_VERSION_FILE` bootstrap defaults.
 The shared builder supplies standard ASN-service defaults for generic builder
 image variables, manifest wrapper args, `DEBIAN_PATH`, `DEBIAN_SERVICES`,
-`DOCKER_IMAGES`, `DOCKER_IMAGE_BUILD_SPECS`,
+`SERVICE_DOCKER_COMPONENTS`, `DOCKER_IMAGES`,
 `SERVICE_PLUGIN_REQUIRED_ARTIFACTS`, `SERVICE_PLUGIN_REQUIRED_GLOBS`, and
 derived proto generation variables.
 

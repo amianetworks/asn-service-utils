@@ -223,18 +223,11 @@ define func_push_debs
 	echo ""; \
 	package_files="$(DEBIAN_PACKAGE_FILES)"; \
 	if [ -z "$$package_files" ]; then \
-		if [ -d "$(DEBIAN_PACKAGE_DIR)" ]; then \
-			for svc in $(DEBIAN_SERVICES); do \
-				files=$$(find "$(DEBIAN_PACKAGE_DIR)" -maxdepth 1 -type f -name "$${svc}_$${selected_version}_amd64.deb" -print | sort); \
-				if [ -n "$$files" ]; then package_files="$$package_files $$files"; fi; \
-			done; \
-		else \
-			echo "Debian package directory is missing: $(DEBIAN_PACKAGE_DIR)"; \
-		fi; \
+		package_files="$$( $(BUILD_MANIFEST_CMD) artifacts --lane debian $(BUILD_MANIFEST_COMMON_ARGS) )"; \
 	fi; \
 	if [ -z "$$package_files" ]; then \
 		echo "ERROR: no Debian package files found."; \
-		echo "Run make build-debian before $(DEBIAN_TARGET_HINT)."; \
+		echo "Run make build-debian before $(DEBIAN_TARGET_HINT), then use the manifest-owned Debian lane."; \
 		exit 1; \
 	fi; \
 	echo "- Locally built .deb files"; \

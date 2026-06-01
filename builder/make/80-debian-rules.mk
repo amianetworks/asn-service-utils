@@ -24,7 +24,7 @@ build-init build-prepare debian docker:
 
 ###
 # Generic deb packaging rule: deb-<service>
-deb-%: SERVICE_UTILS_DEBIAN_FORCE check-deb-%
+deb-%: SERVICE_UTILS_DEBIAN_FORCE
 	$(eval SERVICE_NAME := $*)
 	$(eval SERVICE_CONFIG := debian/deb.$(SERVICE_NAME).config)
 	$(eval SERVICE_CONTROL := debian/deb.$(SERVICE_NAME).control)

@@ -46,8 +46,8 @@ prepare-service-builder-base: .check_service_utils_version_file
 	@echo " - This base image is local build infrastructure only; do not push or share it."
 	@echo " - It installs the toolchain and downloads Go modules from the service go.mod/go.sum."
 	@echo " - Service source is not copied into the base image; build targets run later from the mounted workspace."
-	@echo " - MUST BE DONE everytime when service-api version changes."
-	@echo " - MUST BE DONE everytime when the service go.mod/go.sum or builder inputs change."
+	@echo " - Rebuild each time the service API version changes."
+	@echo " - Rebuild each time the service go.mod/go.sum or builder inputs change."
 	@echo " - Run \`docker images | grep asn\` to list the images."
 	@echo " - Run \`make build-plugin\` to build artifacts."
 	@echo " - Run \`make build-debian\` to build Debian packages from artifacts."
@@ -159,7 +159,6 @@ build.deb: .require-version-build-var
 		build|build/|build/*|./build|./build/|./build/*) rm -rf "$$path" ;; \
 		*) echo "ERROR: refusing Debian clean path outside build/: $$path"; exit 2 ;; \
 	esac
-	@$(MAKE) --no-print-directory check.deb
 	@echo "Building Debian packages for: $(DEBIAN_SERVICES)"
 	@set -e; \
 	for svc in $(DEBIAN_SERVICES); do \
@@ -176,7 +175,8 @@ service-build-from-scratch: prepare-service-builder-base service-build-plugin
 # Note: Actual artifact targets are built inside a container from the service
 # Makefile.
 # - Target 'build.plugin' builds .so and CLI artifacts.
-# - Target 'build.deb' builds .deb files after check.deb passes.
+# - Target 'build.deb' builds .deb files and lets package producers validate
+#   their inputs.
 # - No Docker images built here. Separate targets, build.docker*, are available.
 service-build-plugin: .require-version-build-var
 	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.plugin

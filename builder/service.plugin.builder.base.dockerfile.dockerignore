@@ -7,7 +7,7 @@ dist
 out
 workflow/runs
 workflow/tests/results
-deploy/SWAN/**/log
+deploy/**/log
 *.log
 *.tmp
 *.deb
