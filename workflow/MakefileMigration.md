@@ -49,10 +49,11 @@ declare the inputs in config and keep the recipe small.
 
 ```bash
 ASN_SERVICE_API_VERSION=26.6.6
+SERVICE_UTILS_REF="release/${ASN_SERVICE_API_VERSION}"
 git submodule update --init service-utils
 git -C service-utils fetch origin
-git -C service-utils checkout "v${ASN_SERVICE_API_VERSION}"
-git -C service-utils pull --ff-only origin "v${ASN_SERVICE_API_VERSION}"
+git -C service-utils checkout "${SERVICE_UTILS_REF}"
+git -C service-utils pull --ff-only origin "${SERVICE_UTILS_REF}"
 ```
 
 If the service root already has the refreshed bootstrap door, prefer:

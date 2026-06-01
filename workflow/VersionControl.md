@@ -73,6 +73,7 @@ Sources:
 Typical variable/package:
 
 - `ASN_SERVICE_API_VERSION`
+- `SERVICE_UTILS_REF`
 - `asn.amiasys.com/asn-service-api/v26`
 
 Meaning:
@@ -82,7 +83,8 @@ Meaning:
 
 Control rule:
 
-- The consuming service's configured `ASN_SERVICE_API_VERSION` expresses release intent and is used by `update_service_utils` to choose a `service-utils` checkout.
+- The consuming service's configured `ASN_SERVICE_API_VERSION` expresses release intent for the service API.
+- The consuming service's configured `SERVICE_UTILS_REF` is used by `update_service_utils` to choose a `service-utils` checkout.
 - The consuming service's `go.mod` controls the actual Go service API dependency used to compile that service.
 - `service-utils/go.mod` records the API dependency for the utility submodule itself. It is compatibility evidence, not the primary compile authority for the consuming service.
 - These API references should use the intended same ASN service API version unless there is a documented compatibility exception.
@@ -131,13 +133,13 @@ Intended behavior:
 - `service.plugin.builder.mk` target `update_service_utils` runs:
 
 ```make
-cd $(SERVICE_UTILS_DIR) && git fetch && git checkout v$(ASN_SERVICE_API_VERSION) && git pull
+cd $(SERVICE_UTILS_DIR) && git fetch && git checkout $(SERVICE_UTILS_REF) && git pull
 ```
 
 Meaning:
 
-- The intended active checkout for build work is derived from `ASN_SERVICE_API_VERSION`.
-- A consuming service's `.gitmodules` branch, current submodule checkout, and `v$(ASN_SERVICE_API_VERSION)` target may differ if the submodule was manually moved or if repository metadata is stale.
+- The intended active checkout for build work is selected by `SERVICE_UTILS_REF`, which usually derives from `ASN_SERVICE_API_VERSION`.
+- A consuming service's `.gitmodules` branch, current submodule checkout, and `SERVICE_UTILS_REF` target may differ if the submodule was manually moved or if repository metadata is stale.
 - The submodule may be in detached HEAD after an automated checkout of a version branch or tag.
 
 Control rule:
@@ -145,8 +147,8 @@ Control rule:
 - Before build or release work, record the intended `service-utils` checkout source:
   - the consuming service project's `.gitmodules` branch,
   - the current submodule branch/tag/commit,
-  - and the `v$(ASN_SERVICE_API_VERSION)` target used by `update_service_utils`.
-- If `.gitmodules`, current checkout, and `ASN_SERVICE_API_VERSION` disagree, document whether this is intentional before publishing artifacts.
+  - and the `SERVICE_UTILS_REF` target used by `update_service_utils`.
+- If `.gitmodules`, current checkout, and `SERVICE_UTILS_REF` disagree, document whether this is intentional before publishing artifacts.
 - Do not run `update_service_utils` casually: it performs networked git operations and can move the submodule checkout.
 
 ### Builder Toolchain Version
@@ -204,8 +206,11 @@ Consuming service make/config.mk
   +-- ASN_SERVICE_API_VERSION
   |     |
   |     +--> Go module dependency expectation
-  |     +--> service-utils checkout target v$(ASN_SERVICE_API_VERSION)
   |     +--> rebuild trigger for builder base image
+  |
+  +-- SERVICE_UTILS_REF
+  |     |
+  |     +--> service-utils checkout target, usually release/$(ASN_SERVICE_API_VERSION)
   |
   +-- BUILD_ENV_ASN_VERSION_FILE
         |
@@ -255,9 +260,9 @@ This means Docker runtime dependency versions should be driven by `DEP_VERSION_A
 
 ### service-utils Checkout
 
-The builder target `update_service_utils` attempts to check out `service-utils` to `v$(ASN_SERVICE_API_VERSION)`.
+The builder target `update_service_utils` attempts to check out `service-utils` to `$(SERVICE_UTILS_REF)`.
 
-This means changing `ASN_SERVICE_API_VERSION` can also change the builder/config/deployment templates used by the build.
+This means changing `SERVICE_UTILS_REF` can also change the builder/config/deployment templates used by the build.
 
 ## Required Compatibility Checks
 
@@ -265,7 +270,7 @@ Before build or release work, verify:
 
 1. The consuming service's configured `ASN_SERVICE_API_VERSION` matches the intended Go API version.
 2. The consuming service's `go.mod` uses the same intended ASN service API version.
-3. `service-utils` checkout state is intentional for the selected API version.
+3. `service-utils` checkout state is intentional for the selected `SERVICE_UTILS_REF`.
 4. `service-utils/go.mod` uses the same intended ASN service API version, or a documented compatible exception exists.
 5. `service-utils/builder/ASN_VERSION` `DEP_VERSION_ASN` is an intended compatible ASN Framework/runtime version.
 6. `service-utils/builder/ASN_VERSION` `DEP_VERSION_GO` is the intended service-builder Go toolchain version.

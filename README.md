@@ -38,12 +38,13 @@ The API version and `service-utils` checkout are normally paired. In the current
 
 ```make
 ASN_SERVICE_API_VERSION := <api-version>
+SERVICE_UTILS_REF := release/$(ASN_SERVICE_API_VERSION)
 ```
 
 and the builder helper can update this submodule with:
 
 ```make
-git checkout v$(ASN_SERVICE_API_VERSION)
+git checkout $(SERVICE_UTILS_REF)
 ```
 
 The ASN Framework/runtime version is separate. It is recorded in:

@@ -2,6 +2,8 @@
 
 .PHONY: init_service_utils update_service_utils
 
+SERVICE_UTILS_REF ?= release/$(ASN_SERVICE_API_VERSION)
+
 #------------------------------------------------------------------------------#
 init_service_utils:
 	@if [ -z "$(SERVICE_UTILS_DIR)" ]; then \
@@ -33,8 +35,13 @@ update_service_utils: init_service_utils
 		echo "ERROR: ASN_SERVICE_API_VERSION is not set."; \
 		exit 1; \
 	fi
-	@expected="v$(ASN_SERVICE_API_VERSION)"; \
-	if current=$$(git -C "$(SERVICE_UTILS_DIR)" symbolic-ref --quiet --short HEAD 2>&1); then :; \
+	@if [ -z "$(SERVICE_UTILS_REF)" ]; then \
+		echo "ERROR: SERVICE_UTILS_REF is not set."; \
+		exit 1; \
+	fi
+	@expected="$(SERVICE_UTILS_REF)"; \
+	current_is_branch=false; \
+	if current=$$(git -C "$(SERVICE_UTILS_DIR)" symbolic-ref --quiet --short HEAD 2>&1); then current_is_branch=true; \
 	elif current=$$(git -C "$(SERVICE_UTILS_DIR)" describe --tags --exact-match 2>&1); then :; \
 	else current=$$(git -C "$(SERVICE_UTILS_DIR)" rev-parse --short HEAD); fi; \
 	git_ssh_command=""; \
@@ -42,24 +49,24 @@ update_service_utils: init_service_utils
 	cd $(SERVICE_UTILS_DIR) && \
 	if [ -n "$$git_ssh_command" ]; then GIT_SSH_COMMAND="$$git_ssh_command" git fetch --prune origin; else git fetch --prune origin; fi && \
 	if [ "$$current" = "$$expected" ]; then \
-		if git show-ref --verify --quiet refs/remotes/origin/v$(ASN_SERVICE_API_VERSION); then \
-			if [ -n "$$git_ssh_command" ]; then GIT_SSH_COMMAND="$$git_ssh_command" git pull --ff-only origin v$(ASN_SERVICE_API_VERSION); else git pull --ff-only origin v$(ASN_SERVICE_API_VERSION); fi; \
+		if [ "$$current_is_branch" = "true" ] && git show-ref --verify --quiet "refs/remotes/origin/$$expected"; then \
+			if [ -n "$$git_ssh_command" ]; then GIT_SSH_COMMAND="$$git_ssh_command" git pull --ff-only origin "$$expected"; else git pull --ff-only origin "$$expected"; fi; \
 		else \
 			echo "service-utils ref $$current already selected (tag, no pull needed)."; \
 		fi; \
 	else \
 		echo "Selecting service-utils ref $$expected"; \
-		if git show-ref --verify --quiet refs/remotes/origin/v$(ASN_SERVICE_API_VERSION); then \
-				if git show-ref --verify --quiet refs/heads/v$(ASN_SERVICE_API_VERSION); then \
-					git checkout v$(ASN_SERVICE_API_VERSION); \
-					if [ -n "$$git_ssh_command" ]; then GIT_SSH_COMMAND="$$git_ssh_command" git pull --ff-only origin v$(ASN_SERVICE_API_VERSION); else git pull --ff-only origin v$(ASN_SERVICE_API_VERSION); fi; \
+		if git show-ref --verify --quiet "refs/remotes/origin/$$expected"; then \
+				if git show-ref --verify --quiet "refs/heads/$$expected"; then \
+					git checkout "$$expected"; \
+					if [ -n "$$git_ssh_command" ]; then GIT_SSH_COMMAND="$$git_ssh_command" git pull --ff-only origin "$$expected"; else git pull --ff-only origin "$$expected"; fi; \
 				else \
-					git checkout -b v$(ASN_SERVICE_API_VERSION) origin/v$(ASN_SERVICE_API_VERSION); \
+					git checkout -b "$$expected" "origin/$$expected"; \
 				fi; \
-		elif git show-ref --verify --quiet refs/tags/v$(ASN_SERVICE_API_VERSION); then \
-			git checkout v$(ASN_SERVICE_API_VERSION); \
+		elif git show-ref --verify --quiet "refs/tags/$$expected"; then \
+			git checkout "$$expected"; \
 		else \
-			echo "ERROR: service-utils ref v$(ASN_SERVICE_API_VERSION) was not found as an origin branch or tag."; \
+			echo "ERROR: service-utils ref $$expected was not found as an origin branch or tag."; \
 			exit 1; \
 		fi; \
 	fi
