@@ -2,19 +2,19 @@ module asn.amiasys.com
 
 go 1.26
 
-replace asn.amiasys.com/asn-service-api/v26 => github.com/amianetworks/asn-service-api/v26 v26.6.6
+replace asn.amiasys.com/asn-service-api/v26 => github.com/amianetworks/asn-service-api/v26 v26.7.0
 
 require (
-	asn.amiasys.com/asn-service-api/v26 v26.6.6
-	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.6.5
-	github.com/amianetworks/am.modules/v26 v26.6.1
+	asn.amiasys.com/asn-service-api/v26 v26.7.0
+	github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.7.0
+	github.com/amianetworks/am.modules/v26 v26.6.4
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/sys v0.44.0
+	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
@@ -97,9 +97,9 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/arch v0.27.0 // indirect
 	golang.org/x/crypto v0.51.0 // indirect
-	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 )

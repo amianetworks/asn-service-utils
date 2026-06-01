@@ -54,7 +54,7 @@ For every ASN Framework release:
 2. Verify `DEP_VERSION_ASN` matches the ASN Framework `VERSION`.
 3. Verify `DEP_VERSION_GO` matches the framework-supported `GO_VERSION`.
 4. Commit and publish the `service-utils` branch or tag that consuming services
-   will use, for example `v26.6.6`.
+   will use, for example `v26.7.0`.
 5. Communicate the compatible tuple:
 
 ```text
