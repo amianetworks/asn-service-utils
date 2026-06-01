@@ -3,20 +3,6 @@
 ##----------------------------------------------------------------------------##
 ## Debian Package handling ##
 
-uppercase = $(strip $(subst z,Z,$(subst y,Y,$(subst x,X,$(subst w,W,$(subst v,V,$(subst u,U,$(subst t,T,$(subst s,S,$(subst r,R,$(subst q,Q,$(subst p,P,$(subst o,O,$(subst n,N,$(subst m,M,$(subst l,L,$(subst k,K,$(subst j,J,$(subst i,I,$(subst h,H,$(subst g,G,$(subst f,F,$(subst e,E,$(subst d,D,$(subst c,C,$(subst b,B,$(subst a,A,$(1))))))))))))))))))))))))))))
-lowercase = $(strip $(subst Z,z,$(subst Y,y,$(subst X,x,$(subst W,w,$(subst V,v,$(subst U,u,$(subst T,t,$(subst S,s,$(subst R,r,$(subst Q,q,$(subst P,p,$(subst O,o,$(subst N,n,$(subst M,m,$(subst L,l,$(subst K,k,$(subst J,j,$(subst I,i,$(subst H,h,$(subst G,g,$(subst F,f,$(subst E,e,$(subst D,d,$(subst C,c,$(subst B,b,$(subst A,a,$(1))))))))))))))))))))))))))))
-
-define func_check_release_mode
-	@set -e; \
-	case "$(BUILD_MODE)" in \
-		dev|pro) : ;; \
-		*) echo "ERROR: BUILD_MODE must be dev or pro for publish targets, got '$(BUILD_MODE)'."; exit 2 ;; \
-	esac; \
-	case "$(RELEASE_CHANNEL)" in \
-		""|unknown) echo "ERROR: RELEASE_CHANNEL is not configured for BUILD_MODE=$(BUILD_MODE)."; exit 2 ;; \
-	esac
-endef
-
 require-build-manifest:
 	@version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane plugin $(BUILD_MANIFEST_COMMON_ARGS))"; \
 	: "$$version_build"
@@ -35,10 +21,8 @@ require-build-manifest:
 	fi
 	@$(BUILD_MANIFEST_CMD) value --manifest "$(BUILD_MANIFEST_QUERY_FILE)" --key "$(BUILD_MANIFEST_KEY)" $(BUILD_MANIFEST_ARGS)
 
-DEBIAN_BUILD_PRE_TARGETS ?=
-
 # Build Debian packages from existing plugin artifacts.
-build-debian: require-build-manifest check $(DEBIAN_BUILD_PRE_TARGETS) check-debian-inputs clean-debian
+build-debian: require-build-manifest check check-debian-inputs clean-debian
 	@$(service_utils_shell_detect_dry_run); \
 	if [ "$$dry_run" = "1" ]; then \
 			echo ">> Build Debian Packages"; \
@@ -48,7 +32,7 @@ build-debian: require-build-manifest check $(DEBIAN_BUILD_PRE_TARGETS) check-deb
 			exit 0; \
 	fi; \
 	set -e; \
-	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane docs $(BUILD_MANIFEST_COMMON_ARGS))"; \
+	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane plugin $(BUILD_MANIFEST_COMMON_ARGS))"; \
 	$(MAKE) --no-print-directory service-build-debian VERSION_BUILD="$$version_build"; \
 	$(BUILD_MANIFEST_CMD) commit-lane \
 		--lane debian \
@@ -80,14 +64,13 @@ clean-debian:
 
 check-debian-inputs:
 	@set +e; \
-	output="$$( $(SERVICE_UTILS_RECURSIVE_MAKE) --no-print-directory -s -f $(SERVICE_BUILD_MAKEFILE) $(SERVICE_BUILD_CHECK_DEBIAN_TARGET) 2>&1 )"; \
+	output="$$( $(MAKE) --no-print-directory -s check.deb 2>&1 )"; \
 	status="$$?"; \
 	if [ -n "$$output" ]; then \
 		printf "%s\n" "$$output" | sed '/^make\[[0-9][0-9]*\]: \*\*\*/d;/^make: \*\*\*/d'; \
 	fi; \
 	exit "$$status"
 
-DEBIAN_PUSH_CHECK_TARGETS ?= .check-debian-release-mode .check-debian-publish-packages
 DEBIAN_PUSH_VERSION ?= $(VERSION_BUILD)
 
 .check-debian-release-mode:

@@ -34,7 +34,7 @@ The default `docker-run` path uses:
 - the prepared builder base image, `$(BUILD_ENV_BASE_IMAGE_REF)`;
 - the current service checkout mounted at `$(SERVICE_BUILD_WORKDIR)`, default `/asn-service`;
 - the private Git SSH key mounted read-only at `$(SERVICE_BUILD_SECRET_TARGET)`, default `/run/secrets/sshkey`;
-- `make -f $(SERVICE_BUILD_MAKEFILE) $(BUILD_MAKE_TARGET)` as the in-container command.
+- `make -f Makefile $(BUILD_MAKE_TARGET)` as the in-container command.
 
 The prepared builder base image installs the toolchain and downloads Go modules from `go.*`. It does not copy the service source tree and does not run service compile targets such as `build.so`; that work belongs to the mounted workspace executor.
 
@@ -119,10 +119,6 @@ Use the project's workflow or release validation command when it has one.
 | `SERVICE_BUILD_EXECUTION_MODE` | `docker-run` | Select `docker-run` or temporary `docker-build` fallback. |
 | `SERVICE_BUILD_DOCKER_PLATFORM` | `linux/amd64` | Platform passed to Docker. |
 | `SERVICE_BUILD_WORKDIR` | `/asn-service` | In-container workspace mount path. |
-| `SERVICE_BUILD_MAKEFILE` | `Makefile` | Makefile used inside the mounted service checkout. |
-| `SERVICE_BUILD_PLUGIN_TARGET` | `build.plugin` | Inner target used by `make build-plugin`. |
-| `SERVICE_BUILD_DEBIAN_TARGET` | `build.deb` | Inner target used by `make build-debian`. |
-| `SERVICE_BUILD_CHECK_DEBIAN_TARGET` | `check.deb` | Inner target used by `make check-debian-inputs`. |
 | `SERVICE_BUILD_SECRET_TARGET` | `/run/secrets/sshkey` | In-container read-only private Git key path. |
 | `SERVICE_BUILD_DOCKER_RUN_ARGS` | empty | Extra `docker run` flags, such as additional mounts, env vars, proxy settings, or user mapping. |
 

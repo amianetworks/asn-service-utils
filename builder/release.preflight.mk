@@ -19,9 +19,9 @@ PUSH_PLAN_CHECK_LOCAL_IMAGES ?= yes
 .check-push-config:
 	@status_file="$$(mktemp "$${TMPDIR:-/tmp}/check-push-config.XXXXXX")"; \
 	trap 'rm -f "$$status_file"' EXIT; \
-	$(MAKE) -s .check-push-common PUSH_CONFIG_STATUS_FILE="$$status_file"; \
-	$(MAKE) -s .check-push-docker-config PUSH_CONFIG_STATUS_FILE="$$status_file"; \
-	$(MAKE) -s .check-push-debian-config PUSH_CONFIG_STATUS_FILE="$$status_file"; \
+	for target in .check-push-common .check-push-docker-config .check-push-debian-config; do \
+		$(MAKE) -s "$$target" PUSH_CONFIG_STATUS_FILE="$$status_file" || printf '%s\n' "$$?" >> "$$status_file"; \
+	done; \
 	if [ -s "$$status_file" ]; then \
 		if [ -n "$(PUSH_CONFIG_STATUS_FILE)" ]; then cat "$$status_file" >> "$(PUSH_CONFIG_STATUS_FILE)"; else exit 1; fi; \
 	else \
@@ -47,15 +47,15 @@ PUSH_PLAN_CHECK_LOCAL_IMAGES ?= yes
 	echo ""
 
 .check-push-docker-config:
-	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
-		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
-		exit 1; \
+	@if [ -z "$(strip $(DOCKER_REGISTRIES))" ]; then \
+		echo "ERROR: DOCKER_REGISTRIES is empty."; \
+		if [ -n "$(PUSH_CONFIG_STATUS_FILE)" ]; then printf '%s\n' 1 >> "$(PUSH_CONFIG_STATUS_FILE)"; exit 0; else exit 1; fi; \
 	fi
 	@printf ">> Docker Destinations\n"; \
-	printf "  %24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"
+	printf "  %24s : %s\n" "Selected registries" "$(DOCKER_REGISTRIES)"
 	@status_file="$$(mktemp "$${TMPDIR:-/tmp}/check-push-docker.XXXXXX")"; \
 	trap 'rm -f "$$status_file"' EXIT; \
-	for site in $(DOCKER_REGISTRY_SITES); do \
+	for site in $(DOCKER_REGISTRIES); do \
 		$(MAKE) -s .check-push-docker-site SITE=$$site PUSH_CONFIG_STATUS_FILE="$$status_file"; \
 	done; \
 	if [ -s "$$status_file" ]; then \
@@ -63,16 +63,16 @@ PUSH_PLAN_CHECK_LOCAL_IMAGES ?= yes
 	fi
 
 .check-push-debian-config:
-	@if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
-		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
-		exit 1; \
+	@if [ -z "$(strip $(DEBIAN_REPOSITORIES))" ]; then \
+		echo "ERROR: DEBIAN_REPOSITORIES is empty."; \
+		if [ -n "$(PUSH_CONFIG_STATUS_FILE)" ]; then printf '%s\n' 1 >> "$(PUSH_CONFIG_STATUS_FILE)"; exit 0; else exit 1; fi; \
 	fi
 	@printf ">> Debian Destinations\n"; \
-	printf "  %24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
+	printf "  %24s : %s\n" "Selected repositories" "$(DEBIAN_REPOSITORIES)"; \
 	printf "  %24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"
 	@status_file="$$(mktemp "$${TMPDIR:-/tmp}/check-push-debian.XXXXXX")"; \
 	trap 'rm -f "$$status_file"' EXIT; \
-	for site in $(DEBIAN_REPO_SITES); do \
+	for site in $(DEBIAN_REPOSITORIES); do \
 		$(MAKE) -s .check-push-debian-site SITE=$$site PUSH_CONFIG_STATUS_FILE="$$status_file"; \
 	done; \
 	if [ -s "$$status_file" ]; then \
@@ -143,11 +143,10 @@ PUSH_PLAN_CHECK_LOCAL_IMAGES ?= yes
 
 .check-push-debian-site:
 	$(eval RELEASE_DEBIAN_SITE := $(call uppercase,$(SITE)))
-	$(eval RELEASE_DEBIAN_CHANNEL := $(if $(strip $(DEBIAN_RELEASE_CHANNEL)),$(call uppercase,$(DEBIAN_RELEASE_CHANNEL)),$(RELEASE_DEBIAN_SITE)))
 	$(eval RELEASE_DEBIAN_HOST := $(DEBIAN_REPO_HOST_$(RELEASE_DEBIAN_SITE)))
 	$(eval RELEASE_DEBIAN_PATH := $(DEBIAN_REPO_PATH_$(RELEASE_DEBIAN_SITE)))
 	$(eval RELEASE_DEBIAN_USER := $(DEBIAN_REPO_USER_$(RELEASE_DEBIAN_SITE)))
-	$(eval RELEASE_DEBIAN_SUBREPO := $(DEBIAN_REPO_SUBREPO_$(RELEASE_DEBIAN_CHANNEL)))
+	$(eval RELEASE_DEBIAN_SUBREPO := $(strip $(DEBIAN_RELEASE_CHANNEL)))
 	$(eval RELEASE_DEBIAN_AUTH_VAR := RELEASE_SECRET_AUTH_$(RELEASE_SECRET_PROFILE_$(RELEASE_DEBIAN_SITE))_DEBIAN)
 	$(eval RELEASE_DEBIAN_USER_SET := $(if $(strip $(RELEASE_DEBIAN_USER)),yes,no))
 	$(eval RELEASE_DEBIAN_AUTH_FORMAT := $(if $(findstring :,$(RELEASE_DEBIAN_USER)),user:password,invalid))
@@ -166,8 +165,8 @@ PUSH_PLAN_CHECK_LOCAL_IMAGES ?= yes
 		echo "ERROR: Debian repo $(RELEASE_DEBIAN_SITE) path is not configured."; \
 		site_status=1; \
 	fi; \
-	if [ -z "$(RELEASE_DEBIAN_SUBREPO)" ]; then \
-		echo "ERROR: Debian repo subrelease $(RELEASE_DEBIAN_CHANNEL) is not configured."; \
+	if [ -z "$(RELEASE_DEBIAN_SUBREPO)" ] || [ "$(RELEASE_DEBIAN_SUBREPO)" = "unknown" ]; then \
+		echo "ERROR: DEBIAN_RELEASE_CHANNEL is not configured."; \
 		site_status=1; \
 	fi; \
 	if [ "$(RELEASE_DEBIAN_USER_SET)" = "yes" ]; then \
@@ -206,8 +205,8 @@ plan-push-docker:
 		$(MAKE) -s .check-push-docker-config PUSH_CONFIG_STATUS_FILE="$$config_status_file"; \
 		if [ -s "$$config_status_file" ]; then plan_status=1; fi; \
 	fi; \
-	if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
-		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
+	if [ -z "$(strip $(DOCKER_REGISTRIES))" ]; then \
+		echo "ERROR: DOCKER_REGISTRIES is empty."; \
 		plan_status=1; \
 	fi; \
 	plan_version="$(DOCKER_PUSH_VERSION)"; \
@@ -228,13 +227,13 @@ plan-push-docker:
 	site_status_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-docker.XXXXXX")"; \
 	trap 'rm -f "$$site_status_file"' EXIT; \
 	printf ">> Docker Publish Plan\n"; \
-	printf "  %24s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"; \
+	printf "  %24s : %s\n" "Selected registries" "$(DOCKER_REGISTRIES)"; \
 	printf "  %24s : %s\n" "Images" "$(DOCKER_IMAGES)"; \
 	printf "  %24s : %s\n" "Version tag" "$$plan_version"; \
 	printf "  %24s : %s\n" "Latest tag" "$(DOCKER_PUSH_LATEST)"; \
 	printf "  %24s : %s\n" "No-upload guarantee" "no docker tag/push is executed"; \
 	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
-	for site in $(DOCKER_REGISTRY_SITES); do \
+	for site in $(DOCKER_REGISTRIES); do \
 		$(MAKE) -s .plan-push-docker-site SITE=$$site DOCKER_PUSH_PLAN_VERSION="$$plan_version" PUSH_PLAN_STATUS_FILE="$$site_status_file"; \
 	done; \
 	if [ -s "$$site_status_file" ]; then plan_status=1; fi; \
@@ -295,8 +294,8 @@ plan-push-debian:
 		$(MAKE) -s .check-push-debian-config PUSH_CONFIG_STATUS_FILE="$$config_status_file"; \
 		if [ -s "$$config_status_file" ]; then plan_status=1; fi; \
 	fi; \
-	if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
-		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
+	if [ -z "$(strip $(DEBIAN_REPOSITORIES))" ]; then \
+		echo "ERROR: DEBIAN_REPOSITORIES is empty."; \
 		plan_status=1; \
 	fi; \
 	plan_version="$(DEBIAN_PUSH_VERSION)"; \
@@ -317,12 +316,12 @@ plan-push-debian:
 	site_status_file="$$(mktemp "$${TMPDIR:-/tmp}/plan-push-debian.XXXXXX")"; \
 	trap 'rm -f "$$site_status_file"' EXIT; \
 	printf ">> Debian Publish Plan\n"; \
-	printf "  %24s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
+	printf "  %24s : %s\n" "Selected repositories" "$(DEBIAN_REPOSITORIES)"; \
 	printf "  %24s : %s\n" "Release channel" "$(DEBIAN_RELEASE_CHANNEL)"; \
 	printf "  %24s : %s\n" "Package version" "$$plan_version"; \
 	printf "  %24s : %s\n" "No-upload guarantee" "no curl upload/publish is executed"; \
 	if [ -n "$$plan_version_error" ]; then printf "%s\n" "$$plan_version_error" | sed "s/^/  Manifest: /"; fi; \
-	for site in $(DEBIAN_REPO_SITES); do \
+	for site in $(DEBIAN_REPOSITORIES); do \
 		$(MAKE) -s .plan-push-debian-site SITE=$$site DEBIAN_PUSH_PLAN_VERSION="$$plan_version" PUSH_PLAN_STATUS_FILE="$$site_status_file"; \
 	done; \
 	if [ -s "$$site_status_file" ]; then plan_status=1; fi; \
@@ -333,16 +332,15 @@ plan-push-debian:
 
 .plan-push-debian-site:
 	$(eval PUSH_PLAN_DEBIAN_SITE := $(call uppercase,$(SITE)))
-	$(eval PUSH_PLAN_DEBIAN_CHANNEL := $(if $(strip $(DEBIAN_RELEASE_CHANNEL)),$(call uppercase,$(DEBIAN_RELEASE_CHANNEL)),$(PUSH_PLAN_DEBIAN_SITE)))
 	$(eval PUSH_PLAN_DEBIAN_HOST := $(DEBIAN_REPO_HOST_$(PUSH_PLAN_DEBIAN_SITE)))
 	$(eval PUSH_PLAN_DEBIAN_PATH := $(DEBIAN_REPO_PATH_$(PUSH_PLAN_DEBIAN_SITE)))
-	$(eval PUSH_PLAN_DEBIAN_SUBREPO := $(DEBIAN_REPO_SUBREPO_$(PUSH_PLAN_DEBIAN_CHANNEL)))
+	$(eval PUSH_PLAN_DEBIAN_SUBREPO := $(strip $(DEBIAN_RELEASE_CHANNEL)))
 	@printf "  %24s : %s\n" "Debian site" "$(PUSH_PLAN_DEBIAN_SITE)"; \
 	printf "  %24s : %s\n" "Repo host" "$(if $(PUSH_PLAN_DEBIAN_HOST),$(PUSH_PLAN_DEBIAN_HOST),not configured)"; \
 	printf "  %24s : %s\n" "Repo path" "$(if $(PUSH_PLAN_DEBIAN_PATH),$(PUSH_PLAN_DEBIAN_PATH),not configured)"; \
 	printf "  %24s : %s\n" "Subrepo" "$(if $(PUSH_PLAN_DEBIAN_SUBREPO),$(PUSH_PLAN_DEBIAN_SUBREPO),not configured)"; \
 	site_status=0; \
-	if [ -z "$(PUSH_PLAN_DEBIAN_HOST)" ] || [ -z "$(PUSH_PLAN_DEBIAN_PATH)" ] || [ -z "$(PUSH_PLAN_DEBIAN_SUBREPO)" ]; then site_status=1; fi; \
+	if [ -z "$(PUSH_PLAN_DEBIAN_HOST)" ] || [ -z "$(PUSH_PLAN_DEBIAN_PATH)" ] || [ -z "$(PUSH_PLAN_DEBIAN_SUBREPO)" ] || [ "$(PUSH_PLAN_DEBIAN_SUBREPO)" = "unknown" ]; then site_status=1; fi; \
 	plan_version="$(DEBIAN_PUSH_PLAN_VERSION)"; \
 	package_files="$(DEBIAN_PACKAGE_FILES)"; \
 	if [ -z "$$package_files" ] && [ "$${plan_version#\(}" = "$$plan_version" ] && [ -d "$(DEBIAN_PACKAGE_DIR)" ]; then \

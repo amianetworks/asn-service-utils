@@ -2,11 +2,9 @@
 
 # Shared Debian repository targets for ASN framework and services.
 
-DEBIAN_PUSH_CHECK_TARGETS ?=
-DEBIAN_INTERNAL_PUSH_CHECK_TARGETS ?= $(DEBIAN_PUSH_CHECK_TARGETS)
 DEBIAN_PUSH_VERSION ?= $(VERSION_BUILD)
-DEBIAN_REPO_SITES ?= $(DEBIAN_REPOS)
-DEBIAN_RELEASE_CHANNEL ?= $(RELEASE_CHANNEL)
+DEBIAN_REPOSITORIES ?=
+DEBIAN_RELEASE_CHANNEL ?= $(or $(DEBIAN_RELEASE_CHANNEL_$(BUILD_MODE)),unknown)
 DEBIAN_TARGET_HINT ?= 'make push-debian-cn', 'make push-debian-us', or 'make push-debian'
 DEBIAN_PACKAGE_DIR ?= $(DEBIAN_PATH)
 DEBIAN_LOCAL_PACKAGE_DIRS ?= $(DEBIAN_PACKAGE_DIR)
@@ -20,14 +18,13 @@ DEBIAN_CURL_TIMEOUT_FLAGS ?= --connect-timeout 10 --max-time 300
 DEBIAN_CURL_RETRY_FLAGS ?= --retry 2 --retry-delay 2 --retry-connrefused
 DEBIAN_CURL_READ_FLAGS ?= $(DEBIAN_CURL_TLS_FLAGS) $(DEBIAN_CURL_TIMEOUT_FLAGS) $(DEBIAN_CURL_RETRY_FLAGS)
 DEBIAN_CURL_MUTATION_FLAGS ?= $(DEBIAN_CURL_TLS_FLAGS) $(DEBIAN_CURL_TIMEOUT_FLAGS)
-SERVICE_UTILS_RECURSIVE_MAKE ?= $(MAKE)
 
 # The list/push recipes read credentials through shell variables such as
 # $${DEBIAN_REPO_USER_CN} so curl invocations do not contain make-expanded
-# secret values. Export the selected site variables because projects often
+# secret values. Export the selected repository variables because projects often
 # derive them from RELEASE_SECRET_* values in make/config.mk or ignored make/local.mk.
 debian_registry_uppercase = $(call uppercase,$(1))
-DEBIAN_REPO_USER_EXPORTS := $(foreach site,$(DEBIAN_REPO_SITES),DEBIAN_REPO_USER_$(call debian_registry_uppercase,$(site)))
+DEBIAN_REPO_USER_EXPORTS := $(foreach site,$(DEBIAN_REPOSITORIES),DEBIAN_REPO_USER_$(call debian_registry_uppercase,$(site)))
 export $(DEBIAN_REPO_USER_EXPORTS)
 
 func_check_variable = $(if $(value $(1)),,$(error $(1) is not set))
@@ -51,35 +48,35 @@ endef
 	push-debian push-debian-cn push-debian-us push-debian-% check-push-debian-sites \
 	list-debian list-debian-local list-debian-cn list-debian-us list-debian-%
 
-push-debian: $(DEBIAN_PUSH_CHECK_TARGETS) check-push-debian-sites
-	@for site in $(DEBIAN_REPO_SITES); do \
+push-debian: .check-debian-release-mode .check-debian-publish-packages check-push-debian-sites
+	@for site in $(DEBIAN_REPOSITORIES); do \
 		$(MAKE) -s .push-debian-site SITE=$$site; \
 	done
 
 # Site-specific targets are thin selectors. The aggregate target owns all
 # validation and push behavior, so site shortcuts cannot drift from it.
-push-debian-cn: $(DEBIAN_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s push-debian DEBIAN_REPO_SITES=CN
+push-debian-cn: .check-debian-release-mode .check-debian-publish-packages
+	@$(MAKE) -s push-debian DEBIAN_REPOSITORIES=CN
 
-push-debian-us: $(DEBIAN_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s push-debian DEBIAN_REPO_SITES=US
+push-debian-us: .check-debian-release-mode .check-debian-publish-packages
+	@$(MAKE) -s push-debian DEBIAN_REPOSITORIES=US
 
-push-debian-%: $(DEBIAN_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s push-debian DEBIAN_REPO_SITES=$(call uppercase,$*)
+push-debian-%: .check-debian-release-mode .check-debian-publish-packages
+	@$(MAKE) -s push-debian DEBIAN_REPOSITORIES=$(call uppercase,$*)
 
 check-push-debian-sites:
-	@if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
+	@if [ -z "$(strip $(DEBIAN_REPOSITORIES))" ]; then \
 		echo ">> Debian Site Preflight: [FAIL]"; \
-		printf "  %15s : %s\n" "Selected sites" "<empty>"; \
-		echo "ERROR: DEBIAN_REPO_SITES is empty."; \
+		printf "  %15s : %s\n" "Selected repositories" "<empty>"; \
+		echo "ERROR: DEBIAN_REPOSITORIES is empty."; \
 		exit 1; \
 	fi
 	@set +e; \
 	echo ">> Debian Site Preflight"; \
-	printf "  %15s : %s\n" "Selected sites" "$(DEBIAN_REPO_SITES)"; \
+	printf "  %15s : %s\n" "Selected repositories" "$(DEBIAN_REPOSITORIES)"; \
 	failed=0; \
-	for site in $(DEBIAN_REPO_SITES); do \
-		output="$$( $(SERVICE_UTILS_RECURSIVE_MAKE) -s .check-debian-repo SITE=$$site 2>&1 )"; \
+	for site in $(DEBIAN_REPOSITORIES); do \
+		output="$$( $(MAKE) -s .check-debian-repo SITE=$$site 2>&1 )"; \
 		status="$$?"; \
 		if [ "$$status" -ne 0 ]; then \
 			if [ -n "$$output" ]; then \
@@ -129,14 +126,13 @@ check-push-debian-sites:
 		echo "WARN: DEBIAN_ALLOW_INSECURE_TLS=yes approved for this command; TLS certificate verification is disabled."; \
 	fi
 
-.push-debian-site: $(DEBIAN_INTERNAL_PUSH_CHECK_TARGETS)
+.push-debian-site:
 	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
-	$(eval DEBIAN_CHANNEL := $(if $(strip $(DEBIAN_RELEASE_CHANNEL)),$(call uppercase,$(DEBIAN_RELEASE_CHANNEL)),$(DEBIAN_SITE)))
 	$(eval T_HOST := $(if ${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},__UNCONFIGURED__))
 	$(eval T_USER_VAR := DEBIAN_REPO_USER_$(DEBIAN_SITE))
 	$(eval T_USER_SET := $(if $(strip $(DEBIAN_REPO_USER_$(DEBIAN_SITE))),yes,no))
 	$(eval T_USER_FORMAT := $(if $(findstring :,$(DEBIAN_REPO_USER_$(DEBIAN_SITE))),user:password,invalid))
-	$(eval T_SUBREPO := $(if ${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},__UNCONFIGURED__))
+	$(eval T_SUBREPO := $(strip $(DEBIAN_RELEASE_CHANNEL)))
 	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ] || [ "$(T_USER_SET)" != "yes" ]; then \
 		echo "ERROR: Debian repo $(DEBIAN_SITE) is not fully configured."; \
 		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE), DEBIAN_REPO_USER_$(DEBIAN_SITE)."; \
@@ -146,8 +142,8 @@ check-push-debian-sites:
 		echo "ERROR: Debian repo credential for $(DEBIAN_SITE) must use user:password format."; \
 		exit 1; \
 	fi
-	@if [ "$(T_SUBREPO)" = "__UNCONFIGURED__" ]; then \
-		echo "ERROR: DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL) is not configured."; \
+	@if [ -z "$(T_SUBREPO)" ] || [ "$(T_SUBREPO)" = "unknown" ]; then \
+		echo "ERROR: DEBIAN_RELEASE_CHANNEL is not configured."; \
 		exit 1; \
 	fi
 	@echo ">> Debian Publish Target"
@@ -159,11 +155,11 @@ check-push-debian-sites:
 	$(call func_push_debs)
 
 list-debian: list-debian-local
-	@if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then \
-		echo "No Debian repository sites configured."; \
+	@if [ -z "$(strip $(DEBIAN_REPOSITORIES))" ]; then \
+		echo "No Debian repositories configured."; \
 		echo ""; \
 	else \
-		for site in $(DEBIAN_REPO_SITES); do \
+		for site in $(DEBIAN_REPOSITORIES); do \
 			$(MAKE) -s .list-debian-site SITE=$$site; \
 		done; \
 	fi
@@ -174,22 +170,21 @@ list-debian-local:
 # Site-specific list targets mirror the push selector model: they only set the
 # configured site list, while `list-debian` owns local and remote list behavior.
 list-debian-cn:
-	@$(MAKE) -s list-debian DEBIAN_REPO_SITES=CN
+	@$(MAKE) -s list-debian DEBIAN_REPOSITORIES=CN
 
 list-debian-us:
-	@$(MAKE) -s list-debian DEBIAN_REPO_SITES=US
+	@$(MAKE) -s list-debian DEBIAN_REPOSITORIES=US
 
 list-debian-%:
-	@$(MAKE) -s list-debian DEBIAN_REPO_SITES=$(call uppercase,$*)
+	@$(MAKE) -s list-debian DEBIAN_REPOSITORIES=$(call uppercase,$*)
 
 .list-debian-site:
 	$(eval DEBIAN_SITE := $(call uppercase,$(SITE)))
-	$(eval DEBIAN_CHANNEL := $(if $(strip $(DEBIAN_RELEASE_CHANNEL)),$(call uppercase,$(DEBIAN_RELEASE_CHANNEL)),$(DEBIAN_SITE)))
 	$(eval T_HOST := $(if ${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},${DEBIAN_REPO_HOST_$(DEBIAN_SITE)},__UNCONFIGURED__))
 	$(eval T_USER_VAR := DEBIAN_REPO_USER_$(DEBIAN_SITE))
 	$(eval T_USER_SET := $(if $(strip $(DEBIAN_REPO_USER_$(DEBIAN_SITE))),yes,no))
 	$(eval T_USER_FORMAT := $(if $(findstring :,$(DEBIAN_REPO_USER_$(DEBIAN_SITE))),user:password,invalid))
-	$(eval T_SUBREPO := $(if ${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},${DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL)},__UNCONFIGURED__))
+	$(eval T_SUBREPO := $(strip $(DEBIAN_RELEASE_CHANNEL)))
 	@if [ "$(T_HOST)" = "__UNCONFIGURED__" ]; then \
 		echo "Debian repo $(DEBIAN_SITE) is not configured."; \
 		echo "Required: DEBIAN_REPO_HOST_$(DEBIAN_SITE)."; \
@@ -207,12 +202,12 @@ list-debian-%:
 		if [ "$(DEBIAN_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 		echo ""; \
 	fi
-	@if [ "$(T_HOST)" != "__UNCONFIGURED__" ] && [ "$(T_USER_SET)" = "yes" ] && [ "$(T_SUBREPO)" = "__UNCONFIGURED__" ]; then \
-		echo "DEBIAN_REPO_SUBREPO_$(DEBIAN_CHANNEL) is not configured."; \
+	@if [ "$(T_HOST)" != "__UNCONFIGURED__" ] && [ "$(T_USER_SET)" = "yes" ] && { [ -z "$(T_SUBREPO)" ] || [ "$(T_SUBREPO)" = "unknown" ]; }; then \
+		echo "DEBIAN_RELEASE_CHANNEL is not configured."; \
 		if [ "$(DEBIAN_REQUIRE_REMOTE_AUTH)" = "yes" ]; then exit 1; fi; \
 		echo ""; \
 	fi
-	$(if $(and $(filter-out __UNCONFIGURED__,$(T_HOST)),$(filter yes,$(T_USER_SET)),$(filter user:password,$(T_USER_FORMAT)),$(filter-out __UNCONFIGURED__,$(T_SUBREPO))),$(call func_list_remote_debs),@:)
+	$(if $(and $(filter-out __UNCONFIGURED__,$(T_HOST)),$(filter yes,$(T_USER_SET)),$(filter user:password,$(T_USER_FORMAT)),$(filter-out unknown,$(T_SUBREPO))),$(call func_list_remote_debs),@:)
 
 define func_push_debs
 	$(call func_check_variable,T_HOST)

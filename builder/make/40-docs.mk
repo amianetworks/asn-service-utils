@@ -5,7 +5,7 @@
 ##
 ## Services declare docs content through SERVICE_DOCS_* variables; the shared
 ## target handles staging, release manifest metadata, checksums, and validation.
-stage-docs:
+.service-docs-stage:
 	@set -e; \
 	commit_manifest="$(if $(filter undefined,$(origin STAGE_DOCS_COMMIT_MANIFEST)),yes,$(STAGE_DOCS_COMMIT_MANIFEST))"; \
 	version_build="$(STAGE_DOCS_VERSION_BUILD)"; \
@@ -31,7 +31,7 @@ stage-docs:
 		--served-key "$(SERVICE_DOCS_SERVED_KEY)" \
 		--runtime-root-key "$(SERVICE_DOCS_RUNTIME_ROOT_KEY)" \
 		--runtime-root "$(SERVICE_DOCS_RUNTIME_ROOT)" \
-		--copy-specs "$(SERVICE_DOCS_STAGE_COPY_SPECS)" \
+		--docs-manifest "$(SERVICE_DOCS_STAGE_MANIFEST)" \
 		--index-links "$(SERVICE_DOCS_INDEX_LINKS)" \
 		--routes "$(SERVICE_DOCS_ROUTES)" \
 		--required-files "$$required_files" \
@@ -43,15 +43,11 @@ stage-docs:
 		$(BUILD_MANIFEST_CMD) commit-lane --lane docs --version-build "$$version_build" $(BUILD_MANIFEST_STAGE_DOCS_ARGS); \
 	fi
 
-define service_utils_owned_set_version_target
 set-version: check-build
 	@echo "Modify make/config.mk to update the version and build."
 	@echo "NOTE: Only CI/CD or maintainer should change the version with caution."
-endef
-$(if $(filter yes,$(SERVICE_UTILS_OWN_SET_VERSION_TARGET)),$(eval $(service_utils_owned_set_version_target)))
 
 increment-build:
 	@echo "ERROR: make increment-build has been removed."
-	@echo "$(SERVICE_ARTIFACT_BUILD_TARGET) now commits $(DEV_BUILD_FILE) only after artifacts build successfully."
+	@echo "build-plugin now commits $(DEV_BUILD_FILE) only after artifacts build successfully."
 	@exit 2
-

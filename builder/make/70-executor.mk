@@ -13,7 +13,6 @@
 
 BUILD_ENV_BASE_IMAGE_TAG ?= $(DEP_VERSION_ASN)
 BUILD_ENV_BASE_IMAGE_REF ?= $(BUILD_ENV_BASE_IMAGE):$(BUILD_ENV_BASE_IMAGE_TAG)
-SERVICE_GO_CACHE_PACKAGES ?= ./...
 SERVICE_BUILDER_GOCACHE ?= $(CURDIR)/.cache/service-builder/go-build
 SERVICE_BUILDER_HELPER_FILES ?= $(SERVICE_UTILS_DIR)/builder/builder_base_image.sh
 SERVICE_BUILDER_MAKEFILES ?= $(BUILD_ENV_MAKEFILE) $(wildcard $(SERVICE_UTILS_DIR)/builder/make/*.mk)
@@ -50,7 +49,7 @@ prepare-service-builder-base: .check_service_utils_version_file
 	@echo " - MUST BE DONE everytime when service-api version changes."
 	@echo " - MUST BE DONE everytime when the service go.mod/go.sum or builder inputs change."
 	@echo " - Run \`docker images | grep asn\` to list the images."
-	@echo " - Run \`make $(SERVICE_ARTIFACT_BUILD_TARGET)\` to build artifacts."
+	@echo " - Run \`make build-plugin\` to build artifacts."
 	@echo " - Run \`make build-debian\` to build Debian packages from artifacts."
 	@echo " - Run \`make build-docker\` to build standalone docker images, for non-plugin setup."
 	@echo ""
@@ -69,20 +68,43 @@ check-service-builder-base: .check_service_utils_version_file
 		--platform "$(SERVICE_BUILD_DOCKER_PLATFORM)" \
 		--workdir "$(SERVICE_BUILD_WORKDIR)"
 
-define service_go_build_target
-.service-go-build-$(1): .require-version-build-var
-	@if [ -z "$$(strip $$(SERVICE_GO_BUILD_OUT_$(1)))" ] || [ -z "$$(strip $$(SERVICE_GO_BUILD_SRC_$(1)))" ]; then \
-		echo "ERROR: SERVICE_GO_BUILD_OUT_$(1) and SERVICE_GO_BUILD_SRC_$(1) are required."; \
+define service_go_artifact_target
+.service-build-artifact-$(1): .require-version-build-var
+	@if [ -z "$$(strip $$(call service_go_artifact_output,$(1)))" ] || [ -z "$$(strip $$(call service_go_artifact_source,$(1)))" ]; then \
+		echo "ERROR: $(1) must be '<output> <source> <env-or-> <flags-or->'."; \
 		exit 2; \
 	fi
 	@echo "Building service artifact: $(1)"
-	@$$(SERVICE_GO_BUILD_ENV_$(1)) go build $$(SERVICE_GO_BUILD_FLAGS_$(1)) -o "$$(SERVICE_GO_BUILD_OUT_$(1))" $$(SERVICE_GO_BUILD_SRC_$(1))
+	@$$(call service_go_artifact_env,$(1)) go build $$(call service_go_artifact_flags,$(1)) -o "$$(call service_go_artifact_output,$(1))" $$(call service_go_artifact_source,$(1))
 endef
-$(foreach artifact,$(SERVICE_GO_BUILD_ARTIFACTS),$(eval $(call service_go_build_target,$(artifact))))
+$(foreach artifact,$(SERVICE_GO_ARTIFACTS),$(eval $(call service_go_artifact_target,$(artifact))))
+
+define service_file_artifact_target
+.service-build-artifact-$(1):
+	@src_pattern="$$(call service_file_artifact_source,$(1))"; \
+	dest="$$(call service_file_artifact_dest,$(1))"; \
+	if [ -z "$$$$src_pattern" ] || [ -z "$$$$dest" ]; then \
+		echo "ERROR: $(1) must be '<source-glob> <destination-dir>'."; \
+		exit 2; \
+	fi; \
+	echo "Building service artifact: $(1)"; \
+	mkdir -p "$$$$dest"; \
+	matched=0; \
+	for src in $$$$src_pattern; do \
+		[ -e "$$$$src" ] || continue; \
+		cp -R "$$$$src" "$$$$dest"/; \
+		matched=1; \
+	done; \
+	if [ "$$$$matched" -ne 1 ]; then \
+		echo "ERROR: $(1) source matched nothing: $$$$src_pattern"; \
+		exit 1; \
+	fi
+endef
+$(foreach artifact,$(SERVICE_FILE_ARTIFACTS),$(eval $(call service_file_artifact_target,$(artifact))))
 
 build.plugin: .require-version-build-var
-	@if [ -z "$(strip $(SERVICE_GO_BUILD_ARTIFACTS))" ]; then \
-		echo "ERROR: SERVICE_GO_BUILD_ARTIFACTS is empty."; \
+	@if [ -z "$(strip $(SERVICE_BUILD_ARTIFACTS))" ]; then \
+		echo "ERROR: SERVICE_BUILD_ARTIFACTS is empty."; \
 		exit 2; \
 	fi
 	$(call service_utils_assert_build_paths,$(SERVICE_BUILD_CLEAN_DIRS),SERVICE_BUILD_CLEAN_DIRS)
@@ -99,27 +121,7 @@ build.plugin: .require-version-build-var
 	@if [ -n "$(strip $(SERVICE_BUILD_DIRS))" ]; then \
 		mkdir -p $(SERVICE_BUILD_DIRS); \
 	fi
-	@$(MAKE) --no-print-directory $(SERVICE_GO_BUILD_TARGETS)
-	@set -e; \
-	for spec in $(SERVICE_ARTIFACT_COPY_SPECS); do \
-		src_pattern="$${spec%%:*}"; \
-		dest="$${spec#*:}"; \
-		if [ "$$src_pattern" = "$$spec" ] || [ -z "$$dest" ]; then \
-			echo "ERROR: invalid SERVICE_ARTIFACT_COPY_SPECS item '$$spec'; expected source-glob:destination."; \
-			exit 2; \
-		fi; \
-		mkdir -p "$$dest"; \
-		matched=0; \
-		for src in $$src_pattern; do \
-			[ -e "$$src" ] || continue; \
-			cp -R "$$src" "$$dest"/; \
-			matched=1; \
-		done; \
-		if [ "$$matched" -ne 1 ]; then \
-			echo "ERROR: SERVICE_ARTIFACT_COPY_SPECS source matched nothing: $$src_pattern"; \
-			exit 1; \
-		fi; \
-	done
+	@$(MAKE) --no-print-directory $(SERVICE_BUILD_ARTIFACT_TARGETS)
 
 check.deb:
 	@$(service_utils_shell_detect_dry_run); \
@@ -134,19 +136,13 @@ check.deb:
 	echo ">> Debian Inputs"; \
 	missing=0; \
 	for svc in $(DEBIAN_SERVICES); do \
-		if ! output="$$( $(SERVICE_UTILS_RECURSIVE_MAKE) --no-print-directory -s check-deb-$$svc 2>&1 )"; then \
+		if ! output="$$( $(MAKE) --no-print-directory -s check-deb-$$svc 2>&1 )"; then \
 			if [ -n "$$output" ]; then \
 				printf "%s\n" "$$output" | sed '/^make\[[0-9][0-9]*\]: \*\*\*/d;/^make: \*\*\*/d'; \
 			fi; \
 			missing=1; \
 		elif [ -n "$$output" ]; then \
 			printf "%s\n" "$$output"; \
-		fi; \
-	done; \
-	for file in $(SERVICE_DEBIAN_REQUIRED_ARTIFACTS); do \
-		if [ ! -f "$$file" ]; then \
-			printf "  %15s : missing input %s\n" "Docs" "$$file"; \
-			missing=1; \
 		fi; \
 	done; \
 	if [ "$$missing" -ne 0 ]; then \
@@ -170,46 +166,6 @@ build.deb: .require-version-build-var
 		echo ">>> Building $$svc..."; \
 		$(MAKE) --no-print-directory deb-$$svc; \
 	done
-	@set -e; \
-	for spec in $(SERVICE_DEBIAN_PACKAGE_COPY_SPECS); do \
-		package="$${spec%%:*}"; \
-		rest="$${spec#*:}"; \
-		src="$${rest%%:*}"; \
-		dest="$${rest#*:}"; \
-		if [ "$$package" = "$$spec" ] || [ "$$src" = "$$rest" ] || [ -z "$$package" ] || [ -z "$$src" ] || [ -z "$$dest" ]; then \
-			echo "ERROR: invalid SERVICE_DEBIAN_PACKAGE_COPY_SPECS item '$$spec'; expected package:source:destination."; \
-			exit 2; \
-		fi; \
-		if [ ! -e "$$src" ]; then \
-			echo "ERROR: Debian package copy source is missing: $$src"; \
-			exit 1; \
-		fi; \
-		case "$$package" in ""|"."|".."|*"/"*) echo "ERROR: unsafe Debian package name in SERVICE_DEBIAN_PACKAGE_COPY_SPECS item '$$spec'."; exit 2 ;; esac; \
-		case "$$dest" in ""|"."|".."|/*|../*|*/../*|*/..) echo "ERROR: unsafe Debian package destination in SERVICE_DEBIAN_PACKAGE_COPY_SPECS item '$$spec'."; exit 2 ;; esac; \
-		package_root="$(DEBIAN_PATH)/$$package"; \
-			if [ ! -d "$$package_root" ]; then \
-				echo "ERROR: Debian package staging root is missing: $$package_root"; \
-				exit 1; \
-			fi; \
-			build_abs="$$(cd build && pwd -P)"; \
-			package_root_abs="$$(cd "$$package_root" && pwd -P)"; \
-			case "$$package_root_abs/" in "$$build_abs"/*) : ;; *) echo "ERROR: Debian package root escapes real build directory: $$package_root"; exit 2 ;; esac; \
-			root_parent="$$(dirname "$$package_root/$$dest")"; \
-		mkdir -p "$$root_parent"; \
-		root_parent_abs="$$(cd "$$root_parent" && pwd -P)"; \
-		root_abs="$$root_parent_abs/$$(basename "$$dest")"; \
-		case "$$root_abs/" in "$$package_root_abs"/*) : ;; *) echo "ERROR: Debian package destination escapes package root: $$dest"; exit 2 ;; esac; \
-		echo "Staging $$src into $$package:$$dest"; \
-		rm -rf "$$root_abs"; \
-		mkdir -p "$$root_abs"; \
-		if [ -d "$$src" ]; then \
-			cp -R "$$src"/. "$$root_abs"/; \
-		else \
-			cp -R "$$src" "$$root_abs"/; \
-		fi; \
-		dpkg-deb --build "$(DEBIAN_PATH)/$$package" "$(DEBIAN_PATH)/$${package}_$(VERSION_BUILD)_amd64.deb"; \
-		echo "Repacked: $(DEBIAN_PATH)/$${package}_$(VERSION_BUILD)_amd64.deb"; \
-	done
 
 # Rebuild the base image, then build plugin artifacts with the normal builder.
 service-build-from-scratch: prepare-service-builder-base service-build-plugin
@@ -217,20 +173,21 @@ service-build-from-scratch: prepare-service-builder-base service-build-plugin
 	@echo ""
 
 # Build the plugins.
-# Note: Actual targets are built inside a container using $(SERVICE_BUILD_MAKEFILE).
-# - Target '$(SERVICE_BUILD_PLUGIN_TARGET)' is executed to build .so and CLI artifacts.
-# - Target '$(SERVICE_BUILD_DEBIAN_TARGET)' is executed by 'make build-debian' to build .deb files.
+# Note: Actual artifact targets are built inside a container from the service
+# Makefile.
+# - Target 'build.plugin' builds .so and CLI artifacts.
+# - Target 'build.deb' builds .deb files after check.deb passes.
 # - No Docker images built here. Separate targets, build.docker*, are available.
 service-build-plugin: .require-version-build-var
-	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=$(SERVICE_BUILD_PLUGIN_TARGET)
+	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.plugin
 
 service-build-debian: .require-version-build-var
-	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=$(SERVICE_BUILD_DEBIAN_TARGET)
+	@$(MAKE) --no-print-directory service-build-once BUILD_MAKE_TARGET=build.deb
 
 .require-version-build-var:
 	@if [ -z "$(strip $(VERSION_BUILD))" ]; then \
 		echo "ERROR: VERSION_BUILD is not set for this internal build step."; \
-		echo "Use make $(SERVICE_ARTIFACT_BUILD_TARGET), make build-debian, or make build-docker so build/Manifest.yaml owns the version."; \
+		echo "Use make build-plugin, make build-debian, or make build-docker so build/Manifest.yaml owns the version."; \
 		exit 2; \
 	fi
 
@@ -290,7 +247,7 @@ service-build-once-docker-run: .require-version-build-var
 		--env GOCACHE=/root/.cache/go-build \
 		--workdir $(SERVICE_BUILD_WORKDIR) \
 		$(BUILD_ENV_BASE_IMAGE_REF) \
-		make -f $(SERVICE_BUILD_MAKEFILE) $(BUILD_MAKE_TARGET) BUILD_MODE="$(BUILD_MODE)" VERSION_BUILD="$(VERSION_BUILD)"
+		make -f Makefile $(BUILD_MAKE_TARGET) BUILD_MODE="$(BUILD_MODE)" VERSION_BUILD="$(VERSION_BUILD)"
 	@echo ""
 	@echo "Successfully ran builder target $(BUILD_MAKE_TARGET) in $(BUILD_ENV_BASE_IMAGE_REF)."
 	@echo ""
@@ -323,7 +280,6 @@ service-build-once-docker-build: .require-version-build-var
 		--build-arg BUILD_MODE=$(BUILD_MODE) \
 		--build-arg VERSION_BUILD=$(VERSION_BUILD) \
 		--build-arg MAKE_TARGET=$(BUILD_MAKE_TARGET) \
-		--build-arg SERVICE_BUILD_MAKEFILE=$(SERVICE_BUILD_MAKEFILE) \
 		--secret id=sshkey,src=$$PRIVATE_GIT_SSH_KEY_FILE \
 		-f $(BUILD_ENV_DOCKERFILE) -t $(BUILD_ENV_IMAGE):latest .
 	@echo "Successfully built $(BUILD_ENV_IMAGE):latest."

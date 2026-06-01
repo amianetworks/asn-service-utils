@@ -13,13 +13,13 @@ stage_dir="$PROJECT_ROOT/build/docs"
 report_file=""
 service_name="${SERVICE_NAME:-service}"
 service_title="${SERVICE:-$service_name}"
-version_key="${SERVICE_DOCS_VERSION_KEY:-version_build}"
-version_label="${SERVICE_DOCS_VERSION_LABEL:-Version Build}"
-source_key="${SERVICE_DOCS_SOURCE_KEY:-source_commit}"
-served_key="${SERVICE_DOCS_SERVED_KEY:-docs_served_by_manager}"
-runtime_root_key="${SERVICE_DOCS_RUNTIME_ROOT_KEY:-docs_runtime_root}"
-runtime_root="${SERVICE_DOCS_RUNTIME_ROOT:-/var/www/$service_name}"
-copy_specs="${SERVICE_DOCS_STAGE_COPY_SPECS:-}"
+version_key="${SERVICE_DOCS_VERSION_KEY:-}"
+version_label="${SERVICE_DOCS_VERSION_LABEL:-}"
+source_key="${SERVICE_DOCS_SOURCE_KEY:-}"
+served_key="${SERVICE_DOCS_SERVED_KEY:-}"
+runtime_root_key="${SERVICE_DOCS_RUNTIME_ROOT_KEY:-}"
+runtime_root="${SERVICE_DOCS_RUNTIME_ROOT:-}"
+docs_manifest="${SERVICE_DOCS_STAGE_MANIFEST:-$PROJECT_ROOT/docs/service-docs.tsv}"
 index_links="${SERVICE_DOCS_INDEX_LINKS:-}"
 routes="${SERVICE_DOCS_ROUTES:-}"
 required_files="${SERVICE_DOCS_STAGE_REQUIRED_FILES:-}"
@@ -50,7 +50,7 @@ Options:
   --served-key KEY
   --runtime-root-key KEY
   --runtime-root PATH
-  --copy-specs "SRC:DEST ..."
+  --docs-manifest FILE
   --index-links "PATH=Label_with_underscores ..."
   --routes "/docs/ /docs/api/ ..."
   --required-files "PATH ..."
@@ -69,27 +69,27 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         --mode)
             shift
-            [ "$#" -gt 0 ] || { echo "stage-docs ERROR: --mode requires DEV or PRO" >&2; exit 1; }
+            [ "$#" -gt 0 ] || { echo "service-docs-stage ERROR: --mode requires DEV or PRO" >&2; exit 1; }
             release_mode="$1"
             ;;
         --manifest)
             shift
-            [ "$#" -gt 0 ] || { echo "stage-docs ERROR: --manifest requires a path" >&2; exit 1; }
+            [ "$#" -gt 0 ] || { echo "service-docs-stage ERROR: --manifest requires a path" >&2; exit 1; }
             build_manifest="$1"
             ;;
         --version-build)
             shift
-            [ "$#" -gt 0 ] || { echo "stage-docs ERROR: --version-build requires a value" >&2; exit 1; }
+            [ "$#" -gt 0 ] || { echo "service-docs-stage ERROR: --version-build requires a value" >&2; exit 1; }
             version_build_override="$1"
             ;;
         --stage-dir)
             shift
-            [ "$#" -gt 0 ] || { echo "stage-docs ERROR: --stage-dir requires a path" >&2; exit 1; }
+            [ "$#" -gt 0 ] || { echo "service-docs-stage ERROR: --stage-dir requires a path" >&2; exit 1; }
             stage_dir="$1"
             ;;
         --report-file)
             shift
-            [ "$#" -gt 0 ] || { echo "stage-docs ERROR: --report-file requires a path" >&2; exit 1; }
+            [ "$#" -gt 0 ] || { echo "service-docs-stage ERROR: --report-file requires a path" >&2; exit 1; }
             report_file="$1"
             ;;
         --service-name) shift; service_name="${1:-}" ;;
@@ -100,7 +100,7 @@ while [ "$#" -gt 0 ]; do
         --served-key) shift; served_key="${1:-}" ;;
         --runtime-root-key) shift; runtime_root_key="${1:-}" ;;
         --runtime-root) shift; runtime_root="${1:-}" ;;
-        --copy-specs) shift; copy_specs="${1:-}" ;;
+        --docs-manifest) shift; docs_manifest="${1:-}" ;;
         --index-links) shift; index_links="${1:-}" ;;
         --routes) shift; routes="${1:-}" ;;
         --required-files) shift; required_files="${1:-}" ;;
@@ -116,7 +116,7 @@ while [ "$#" -gt 0 ]; do
             usage
             exit 0
             ;;
-        *) echo "stage-docs ERROR: unknown option: $1" >&2; usage >&2; exit 1 ;;
+        *) echo "service-docs-stage ERROR: unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
     shift
 done
@@ -124,9 +124,31 @@ done
 mode_upper="$(printf '%s' "$release_mode" | tr '[:lower:]' '[:upper:]')"
 case "$mode_upper" in
     DEV|PRO) ;;
-    *) echo "stage-docs ERROR: --mode requires DEV or PRO" >&2; exit 1 ;;
+    *) echo "service-docs-stage ERROR: --mode requires DEV or PRO" >&2; exit 1 ;;
 esac
 mode_lower="$(printf '%s' "$mode_upper" | tr '[:upper:]' '[:lower:]')"
+
+[ -n "$version_key" ] || version_key="${service_name}_version_build"
+[ -n "$version_label" ] || version_label="$service_title Version Build"
+[ -n "$source_key" ] || source_key="${service_name}_source_commit"
+[ -n "$served_key" ] || served_key="docs_served_by_service"
+[ -n "$runtime_root_key" ] || runtime_root_key="docs_runtime_root"
+[ -n "$runtime_root" ] || runtime_root="/var/www/$service_name"
+
+if [ -z "$package_channel" ]; then
+    case "$mode_lower" in
+        pro) package_channel="stable apt subrepo after selected publish intent" ;;
+        *) package_channel="dev apt subrepo after selected publish intent" ;;
+    esac
+fi
+[ -n "$docker_image_intent" ] || docker_image_intent="Exact version tag selected by release mode; latest is a PRO publish concern."
+[ -n "$documentation_channel" ] || documentation_channel="Release docs tree inside the exact selected package and Docker image."
+if [ -z "$rollback_requirement" ]; then
+    case "$mode_lower" in
+        pro) rollback_requirement="Required before customer/operator release: previous known-good version, packages, images, and data compatibility notes." ;;
+        *) rollback_requirement="Required before shared DEV handoff when published artifacts are used; local-build validation records no remote rollback action." ;;
+    esac
+fi
 
 case "$build_manifest" in
     /*) build_manifest_path="$build_manifest" ;;
@@ -184,18 +206,18 @@ version_build() {
         return 0
     fi
     if [ ! -s "$build_manifest_path" ]; then
-        echo "stage-docs ERROR: missing build manifest: ${build_manifest_path#$PROJECT_ROOT/}" >&2
+        echo "service-docs-stage ERROR: missing build manifest: ${build_manifest_path#$PROJECT_ROOT/}" >&2
         echo "Run 'make build-plugin' or 'make build' first." >&2
         exit 1
     fi
     value="$(build_manifest_value version_build || true)"
     [ -n "$value" ] || {
-        echo "stage-docs ERROR: build manifest does not contain version_build: ${build_manifest_path#$PROJECT_ROOT/}" >&2
+        echo "service-docs-stage ERROR: build manifest does not contain version_build: ${build_manifest_path#$PROJECT_ROOT/}" >&2
         exit 1
     }
     manifest_mode="$(build_manifest_value build_mode || true)"
     if [ -n "$manifest_mode" ] && [ "$manifest_mode" != "$mode_lower" ]; then
-        echo "stage-docs ERROR: build manifest mode is '$manifest_mode', expected '$mode_lower': ${build_manifest_path#$PROJECT_ROOT/}" >&2
+        echo "service-docs-stage ERROR: build manifest mode is '$manifest_mode', expected '$mode_lower': ${build_manifest_path#$PROJECT_ROOT/}" >&2
         exit 1
     fi
     printf '%s\n' "$value"
@@ -237,22 +259,23 @@ path_is_under() {
 prepare_managed_dir() {
     local label="$1"
     local raw="$2"
-    local target project_root workspace_root build_root result_root
+    local target project_root workspace_root build_root cache_root result_root
 
     case "$raw" in
         ""|"/")
-            echo "stage-docs ERROR: refusing unsafe $label directory: ${raw:-<empty>}" >&2
+            echo "service-docs-stage ERROR: refusing unsafe $label directory: ${raw:-<empty>}" >&2
             return 1
             ;;
     esac
 
     target="$(abs_path "$raw")" || {
-        echo "stage-docs ERROR: unable to resolve $label directory: $raw" >&2
+        echo "service-docs-stage ERROR: unable to resolve $label directory: $raw" >&2
         return 1
     }
     project_root="$(abs_path "$PROJECT_ROOT")"
     workspace_root="$(abs_path "$PROJECT_ROOT/..")"
     build_root="$(abs_path "$PROJECT_ROOT/build")"
+    cache_root="$(abs_path "$PROJECT_ROOT/.cache")"
     result_root=""
     if [ -n "${WORKFLOW_RESULT_DIR:-}" ]; then
         result_root="$(abs_path "$WORKFLOW_RESULT_DIR")"
@@ -261,13 +284,14 @@ prepare_managed_dir() {
     if [ "$target" = "$project_root" ] ||
         [ "$target" = "$workspace_root" ] ||
         [ "$target" = "$build_root" ] ||
+        [ "$target" = "$cache_root" ] ||
         { [ -n "$result_root" ] && [ "$target" = "$result_root" ]; }; then
-        echo "stage-docs ERROR: refusing unsafe $label directory: $target" >&2
+        echo "service-docs-stage ERROR: refusing unsafe $label directory: $target" >&2
         return 1
     fi
 
     if path_is_under "$project_root" "$target"; then
-        echo "stage-docs ERROR: refusing ancestor $label directory: $target" >&2
+        echo "service-docs-stage ERROR: refusing ancestor $label directory: $target" >&2
         return 1
     fi
 
@@ -276,11 +300,15 @@ prepare_managed_dir() {
             printf '%s\n' "$target"
             return 0
         fi
+        if path_is_under "$target" "$cache_root"; then
+            printf '%s\n' "$target"
+            return 0
+        fi
         if [ -n "$result_root" ] && path_is_under "$target" "$result_root"; then
             printf '%s\n' "$target"
             return 0
         fi
-        echo "stage-docs ERROR: refusing $label directory inside product source: $target" >&2
+        echo "service-docs-stage ERROR: refusing $label directory inside product source: $target" >&2
         return 1
     fi
 
@@ -304,15 +332,43 @@ label_text() {
 copy_if_exists() {
     local src="$1"
     local dst="$2"
-    if [ -e "$PROJECT_ROOT/$src" ]; then
-        mkdir -p "$(dirname "$dst")"
-        if [ -d "$PROJECT_ROOT/$src" ]; then
-            mkdir -p "$dst"
-            cp -R "$PROJECT_ROOT/$src"/. "$dst/"
-        else
-            cp "$PROJECT_ROOT/$src" "$dst"
-        fi
+    case "$src" in
+        workflow|workflow/*)
+            echo "service-docs-stage ERROR: workflow files are not Manager-served docs inputs: $src" >&2
+            exit 1
+            ;;
+    esac
+    if [ ! -e "$PROJECT_ROOT/$src" ]; then
+        echo "service-docs-stage ERROR: missing docs source: $src" >&2
+        exit 1
     fi
+    mkdir -p "$(dirname "$dst")"
+    if [ -d "$PROJECT_ROOT/$src" ]; then
+        mkdir -p "$dst"
+        cp -R "$PROJECT_ROOT/$src"/. "$dst/"
+    else
+        cp "$PROJECT_ROOT/$src" "$dst"
+    fi
+}
+
+docs_manifest_entries() {
+    local manifest="$1"
+    local src dst extra
+    [ -n "$manifest" ] || return 0
+    if [ ! -f "$manifest" ]; then
+        echo "service-docs-stage ERROR: missing docs staging manifest: ${manifest#$PROJECT_ROOT/}" >&2
+        exit 1
+    fi
+    while read -r src dst extra; do
+        case "$src" in
+            ""|\#*) continue ;;
+        esac
+        if [ -z "$dst" ] || [ -n "${extra:-}" ]; then
+            echo "service-docs-stage ERROR: invalid docs staging manifest row: $src ${dst:-} ${extra:-}" >&2
+            exit 1
+        fi
+        printf '%s:%s\n' "$src" "$dst"
+    done < "$manifest"
 }
 
 write_main_index() {
@@ -433,7 +489,7 @@ write_checksums() {
         : "$sha256sum_path"
         checksum_cmd=(sha256sum)
     else
-        echo "stage-docs ERROR: shasum or sha256sum is required to stage docs" >&2
+        echo "service-docs-stage ERROR: shasum or sha256sum is required to stage docs" >&2
         exit 1
     fi
     {
@@ -475,26 +531,36 @@ validate_required_files() {
     local file missing=0
     for file in $required_files; do
         if [ ! -s "$stage_dir/$file" ]; then
-            echo "stage-docs ERROR: missing required staged docs file: $file" >&2
+            echo "service-docs-stage ERROR: missing required staged docs file: $file" >&2
             missing=1
         fi
     done
     [ "$missing" -eq 0 ]
 }
 
+case "$docs_manifest" in
+    ""|/*) ;;
+    *) docs_manifest="$PROJECT_ROOT/$docs_manifest" ;;
+esac
+
 stage_dir="$(prepare_managed_dir "docs stage" "$stage_dir")"
 rm -rf "$stage_dir"
 mkdir -p "$stage_dir/release"
 
-for spec in $copy_specs; do
-    src="${spec%%:*}"
-    dst="${spec#*:}"
+docs_entries_file="$(mktemp "${TMPDIR:-/tmp}/service-docs-stage-entries.XXXXXX")"
+docs_manifest_entries "$docs_manifest" > "$docs_entries_file"
+while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    src="${entry%%:*}"
+    dst="${entry#*:}"
     if [ -z "$src" ] || [ -z "$dst" ] || [ "$src" = "$dst" ]; then
-        echo "stage-docs ERROR: invalid copy spec: $spec" >&2
+        echo "service-docs-stage ERROR: invalid docs staging manifest entry: $entry" >&2
+        rm -f "$docs_entries_file"
         exit 1
     fi
     copy_if_exists "$src" "$stage_dir/$dst"
-done
+done < "$docs_entries_file"
+rm -f "$docs_entries_file"
 
 version="$(version_build)"
 generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"

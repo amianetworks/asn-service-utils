@@ -16,15 +16,12 @@ shift
 build_mode="${BUILD_MODE:-dev}"
 version="${VERSION:-}"
 maintainer_build="${BUILD:-}"
-dev_start="${BUILD_NUM_DEV:-100}"
+dev_start="${BUILD_DEV:-100}"
 dev_file="$PROJECT_ROOT/.DEV_BUILD_FILE"
 dev_lock_dir="$PROJECT_ROOT/.DEV_BUILD_FILE.lock"
 manifest_file="$PROJECT_ROOT/build/Manifest.yaml"
 version_build="${VERSION_BUILD:-}"
 lane=""
-manager_build_dir="$PROJECT_ROOT/build/controller"
-servicenode_build_dir="$PROJECT_ROOT/build/servicenode"
-client_build_dir="$PROJECT_ROOT/build/client"
 docs_dir="$PROJECT_ROOT/build/docs"
 debian_dir="$PROJECT_ROOT/build/debian"
 debian_services="${DEBIAN_SERVICES:-}"
@@ -47,6 +44,7 @@ go_version="${GO_VERSION:-}"
 dep_version_go="${DEP_VERSION_GO:-}"
 service_utils_ref=""
 service_name=""
+manifest_commit_lane="docker"
 
 usage() {
     cat <<'EOF'
@@ -56,6 +54,8 @@ Commands:
   next-plugin-version   Print the version_build that build-plugin should stamp.
   reserve-plugin-version
                         Reserve and print the DEV version_build for build-plugin.
+  clear-reserved-plugin-version
+                        Clear a matching DEV build reservation after failed build.
   commit-plugin         Validate plugin artifacts, then write build/Manifest.yaml.
   commit-lane           Refresh build/Manifest.yaml after docs/debian/docker succeeds.
   require-lane          Require manifest mode, version, lane PASS, and artifacts.
@@ -76,9 +76,6 @@ while [ "$#" -gt 0 ]; do
         --manifest) shift; manifest_file="${1:-}" ;;
         --version-build) shift; version_build="${1:-}" ;;
         --lane) shift; lane="${1:-}" ;;
-        --manager-build-dir) shift; manager_build_dir="${1:-}" ;;
-        --servicenode-build-dir) shift; servicenode_build_dir="${1:-}" ;;
-        --client-build-dir) shift; client_build_dir="${1:-}" ;;
         --docs-dir) shift; docs_dir="${1:-}" ;;
         --debian-dir) shift; debian_dir="${1:-}" ;;
         --debian-services) shift; debian_services="${1:-}" ;;
@@ -119,9 +116,6 @@ project_path() {
 dev_file="$(project_path "$dev_file")"
 dev_lock_dir="$(project_path "$dev_lock_dir")"
 manifest_file="$(project_path "$manifest_file")"
-manager_build_dir="$(project_path "$manager_build_dir")"
-servicenode_build_dir="$(project_path "$servicenode_build_dir")"
-client_build_dir="$(project_path "$client_build_dir")"
 docs_dir="$(project_path "$docs_dir")"
 debian_dir="$(project_path "$debian_dir")"
 service_utils_dir="$(project_path "$service_utils_dir")"
@@ -272,6 +266,24 @@ have_command() {
     [ -n "$found" ]
 }
 
+lane_rank() {
+    case "$1" in
+        plugin) printf '1\n' ;;
+        docs) printf '2\n' ;;
+        debian) printf '3\n' ;;
+        docker) printf '4\n' ;;
+        *) echo "build_manifest ERROR: unsupported lane: $1" >&2; exit 2 ;;
+    esac
+}
+
+lane_is_committed() {
+    local requested="$1"
+    local requested_rank commit_rank
+    requested_rank="$(lane_rank "$requested")"
+    commit_rank="$(lane_rank "$manifest_commit_lane")"
+    [ "$requested_rank" -le "$commit_rank" ]
+}
+
 dev_build_file_value() {
     local key="$1"
     if [ -s "$dev_file" ]; then
@@ -390,7 +402,7 @@ assert_manifest_identity() {
         echo "Run 'make build-plugin' or 'make build' first." >&2
         exit 1
     }
-    local manifest_mode manifest_version expected
+    local manifest_mode manifest_version manifest_source current_source expected
     manifest_mode="$(yaml_value "$manifest_file" build_mode || true)"
     manifest_version="$(yaml_value "$manifest_file" version_build || true)"
     [ "$manifest_mode" = "$mode_lower" ] || {
@@ -416,6 +428,13 @@ assert_manifest_identity() {
             echo "build_manifest ERROR: PRO manifest version_build is '$manifest_version', expected '$expected'." >&2
             exit 1
         }
+    fi
+    manifest_source="$(yaml_value "$manifest_file" "source.$source_key" || true)"
+    current_source="$(git_ref_or_unknown "$PROJECT_ROOT" "$source_label")"
+    if [ -n "$manifest_source" ] && [ "$manifest_source" != "unknown" ] && [ "$current_source" != "unknown" ] && [ "$manifest_source" != "$current_source" ]; then
+        echo "build_manifest ERROR: manifest source $source_key is '$manifest_source', expected current '$current_source': $(relpath "$manifest_file")" >&2
+        echo "Run 'make build-plugin' before reusing downstream artifacts." >&2
+        exit 1
     fi
     printf '%s\n' "$manifest_version"
 }
@@ -611,9 +630,24 @@ write_manifest() {
     [ -n "$service_utils_ref" ] || service_utils_ref="$(git_ref_or_unknown "$service_utils_dir" "service-utils")"
 
     plugin_status="$(plugin_lane_status "$plugin_artifacts")"
-    docs_status="$(docs_lane_status "$docs_artifacts")"
-    debian_status="$(debian_lane_status "$debian_artifacts")"
-    docker_status="$(docker_lane_status "$docker_artifacts")"
+    if lane_is_committed docs; then
+        docs_status="$(docs_lane_status "$docs_artifacts")"
+    else
+        : > "$docs_artifacts"
+        docs_status="MISSING"
+    fi
+    if lane_is_committed debian; then
+        debian_status="$(debian_lane_status "$debian_artifacts")"
+    else
+        : > "$debian_artifacts"
+        debian_status="MISSING"
+    fi
+    if lane_is_committed docker; then
+        docker_status="$(docker_lane_status "$docker_artifacts")"
+    else
+        : > "$docker_artifacts"
+        docker_status="MISSING"
+    fi
 
     {
         printf 'schema: %s\n' "$(yaml_quote "$manifest_schema")"
@@ -705,12 +739,33 @@ commit_dev_build_file() {
     write_dev_build_file "$new_last" "$keep_reserved"
 }
 
+clear_reserved_plugin_version() {
+    [ "$mode_lower" = "dev" ] || return 0
+    [ -n "$version_build" ] || { echo "build_manifest ERROR: --version-build is required" >&2; exit 2; }
+    local build_number current_last current_reserved
+    build_number="$(build_number_from_version "$version_build")"
+    case "$build_number" in
+        ''|*[!0-9]*) echo "build_manifest ERROR: invalid DEV version_build: $version_build" >&2; exit 1 ;;
+    esac
+    acquire_dev_build_lock
+    current_last="$(dev_build_file_value LAST_DEV_BUILD || true)"
+    current_last="$(normalize_dev_build_number "$current_last" || printf '%s\n' "$dev_start")"
+    current_reserved="$(dev_build_file_value RESERVED_DEV_BUILD || true)"
+    current_reserved="$(normalize_dev_build_number "$current_reserved" || true)"
+    if [ "$current_reserved" = "$build_number" ]; then
+        write_dev_build_file "$current_last"
+    fi
+}
+
 case "$command_name" in
     next-plugin-version)
         next_plugin_version
         ;;
     reserve-plugin-version)
         reserve_plugin_version
+        ;;
+    clear-reserved-plugin-version)
+        clear_reserved_plugin_version
         ;;
     commit-plugin)
         [ -n "$version_build" ] || version_build="$(next_plugin_version)"
@@ -721,6 +776,7 @@ case "$command_name" in
             echo "build_manifest ERROR: plugin artifacts are incomplete; not updating $(relpath "$manifest_file") or $(relpath "$dev_file")." >&2
             exit 1
         }
+        manifest_commit_lane="plugin"
         write_manifest
         commit_dev_build_file
         printf '%s\n' "$version_build"
@@ -728,6 +784,7 @@ case "$command_name" in
     commit-lane)
         [ -n "$lane" ] || { echo "build_manifest ERROR: --lane is required" >&2; exit 2; }
         [ -n "$version_build" ] || version_build="$(assert_manifest_identity)"
+        manifest_commit_lane="$lane"
         write_manifest
         require_lane_output="$(require_lane)"
         : "$require_lane_output"

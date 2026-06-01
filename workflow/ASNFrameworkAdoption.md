@@ -80,42 +80,47 @@ must provide the following service-local contract.
 ```make
 SERVICE := <SERVICE>
 SERVICE_NAME := <service-name>
-PACKAGE := <service-go-module>
+SERVICE_GO_PACKAGE := <service-go-module>
+SERVICE_GO_SOURCE_C ?= controller
+SERVICE_GO_SOURCE_SN ?= servicenode
+SERVICE_GO_SOURCE_CLIENT ?= client
 
 VERSION := <service-version-family>
 BUILD := <maintainer-build-number>
 BUILD_MODE ?= dev
-BUILD_NUM_DEV := <first-dev-build-number>
+BUILD_DEV := <first-dev-build-number>
 
 DEV_BUILD_FILE ?= .DEV_BUILD_FILE
 BUILD_MANIFEST_FILE ?= build/Manifest.yaml
-BUILD_MANIFEST_SCHEMA := <service>.build.manifest.v1
-BUILD_MANIFEST_SOURCE_KEY := <service>_commit
-BUILD_MANIFEST_SOURCE_LABEL := <SERVICE>
+BUILD_DIR := build
 
 ASN_SERVICE_API_VERSION := <api-version>
 SERVICE_UTILS_DIR := service-utils
 
-SERVICE_MANAGER_DEBIAN_PACKAGE := $(SERVICE_NAME)-manager
-SERVICE_SN_DEBIAN_PACKAGE := $(SERVICE_NAME)-servicenode
-SERVICE_MANAGER_CLI_DEBIAN_PACKAGE := $(SERVICE_NAME)-manager-cli
-SERVICE_CLIENT_CLI_DEBIAN_PACKAGE := $(SERVICE_NAME)-client-cli
+SERVICE_BUILD_DIR_C ?= $(BUILD_DIR)/controller
+SERVICE_BUILD_DIR_SN ?= $(BUILD_DIR)/servicenode
+SERVICE_BUILD_DIR_CLIENT ?= $(BUILD_DIR)/client
 
-BUILD_SVC_C_DIR := build/controller
-BUILD_SVC_SN_DIR := build/servicenode
-BUILD_SVC_CLIENTS_DIR := build/client
-DOCKER_IMAGES := <image names>
-DOCKER_IMAGE_BUILD_SPECS := <image:dockerfile pairs>
+SERVICE_PACKAGE_C ?= $(SERVICE_NAME)-controller
+SERVICE_PACKAGE_SN ?= $(SERVICE_NAME)-servicenode
+SERVICE_PACKAGE_C_CLI ?= $(SERVICE_NAME)-controller-cli
+SERVICE_PACKAGE_CLIENT ?= $(SERVICE_NAME)-client-cli
+
+SERVICE_DOCKER_IMAGE_C ?= $(SERVICE_PACKAGE_C)
+SERVICE_DOCKER_IMAGE_SN ?= $(SERVICE_PACKAGE_SN)
+SERVICE_DOCKERFILE_C ?= docker/$(SERVICE_NAME)-controller.dockerfile
+SERVICE_DOCKERFILE_SN ?= docker/$(SERVICE_NAME)-servicenode.dockerfile
 PROTO_SOURCE_FILES := <proto-source-globs>
 ```
 
 The root Makefile owns the pre-include bootstrap defaults for
 `BUILD_ENV_MAKEFILE` and `BUILD_ENV_ASN_VERSION_FILE`. `service-utils` derives
-generic builder image paths, manifest argument wrappers, `DEBIAN_PATH`,
-`DEBIAN_SERVICES`, plugin artifact inventories, proto generation specs, and
-proto stamp inputs from the service identity, derived package/build names, and
-compact artifact specs above. Define those variables in service config only when
-a service intentionally breaks the standard ASN service layout.
+generic builder image paths, manifest schema/source defaults, manifest argument
+wrappers, `DEBIAN_PATH`, `DEBIAN_SERVICES`, plugin artifact inventories, proto
+generation specs, and proto stamp inputs from the service identity, derived
+package/build names, and compact artifact specs above. Define those variables in
+service config only when a service intentionally breaks the standard ASN service
+layout.
 
 The root Makefile, or the equivalent non-config Make layer, should resolve
 `VERSION_BUILD` from the active `build/Manifest.yaml` only when the manifest
@@ -200,25 +205,24 @@ Service repositories should declare their artifact contents in config variables
 and let the shared builder run the reusable inner targets:
 
 ```make
-SERVICE_GO_BUILD_SPECS := \
-	MANAGER_PLUGIN|manager-plugin|$(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so|$(SERVICE_C_SRC)/main.go|-
-SERVICE_ARTIFACT_COPY_SPECS := manager/config/*.conf:$(BUILD_SVC_C_DIR)
-SERVICE_DEBIAN_REQUIRED_ARTIFACTS := $(BUILD_DIR)/docs/release/ReleaseManifest.yaml
-SERVICE_DEBIAN_PACKAGE_COPY_SPECS := $(SERVICE_MANAGER_DEBIAN_PACKAGE):$(BUILD_DIR)/docs:var/www/$(SERVICE_NAME)/manager
-SERVICE_DOCS_STAGE_COPY_SPECS := docs/api:api docs/design:design
-SERVICE_DOCS_STAGE_REQUIRED_FILES := index.html release/ReleaseManifest.yaml
+SERVICE_GO_ARTIFACTS := SERVICE_P_CONTROLLER
+SERVICE_P_CONTROLLER := $(SERVICE_BUILD_DIR_C)/$(SERVICE_NAME).so $(SERVICE_GO_SOURCE_C)/main.go - -buildmode=plugin $(SERVICE_GO_FLAGS_C)
+SERVICE_FILE_ARTIFACTS := SERVICE_FILE_CONTROLLER_CONFIG
+SERVICE_FILE_CONTROLLER_CONFIG := controller/config/*.conf $(SERVICE_BUILD_DIR_C)
+SERVICE_GO_CACHE_SPECS := SERVICE_CACHE_CONTROLLER
+SERVICE_CACHE_CONTROLLER := ./$(SERVICE_GO_SOURCE_C)
+SERVICE_DOCS_STAGE_MANIFEST ?= docs/service-docs.tsv
 SERVICE_DOCS_VERSION_KEY := <service_docs_version_key>
 SERVICE_DOCS_SOURCE_KEY := <service_source_commit_key>
 SERVICE_DOCS_RUNTIME_ROOT := /var/www/$(SERVICE_NAME)
-DEBIAN_BUILD_PRE_TARGETS ?= stage-docs
-DOCKER_BUILD_PRE_TARGETS ?= stage-docs
 ```
 
-`build.plugin`, `check.deb`, `build.deb`, and `stage-docs` are shared
-service-utils functions. Do not add service-specific private Make targets or
-project-local scripts for those mechanics unless the service has a genuinely
-non-generic artifact boundary. Service-owned config should list docs content,
-required files, and metadata keys; the shared target should perform staging,
+`build.plugin`, `check.deb`, `build.deb`, and the internal docs staging helper
+are shared service-utils functions. Do not add service-specific private Make
+targets or project-local scripts for those mechanics unless the service has a
+genuinely non-generic artifact boundary. Service-owned docs manifests should list docs
+content; config should keep only service-specific docs metadata overrides that
+the generic builder cannot derive. The shared target should perform staging,
 checksums, release manifest metadata, and manifest lane updates.
 
 ## Builder Base Image Adoption
@@ -236,7 +240,9 @@ The prepared builder base image is now stricter. Its freshness check includes:
 Services may tune:
 
 ```make
-SERVICE_GO_CACHE_PACKAGES ?= ./...
+SERVICE_GO_CACHE_SPECS := SERVICE_CACHE_CONTROLLER SERVICE_CACHE_SERVICENODE
+SERVICE_CACHE_CONTROLLER := ./$(SERVICE_GO_SOURCE_C)
+SERVICE_CACHE_SERVICENODE := ./$(SERVICE_GO_SOURCE_SN)
 SERVICE_BUILDER_MAKEFILES ?= $(BUILD_ENV_MAKEFILE) $(wildcard $(SERVICE_UTILS_DIR)/builder/make/*.mk)
 SERVICE_BUILDER_INPUT_FILES ?= go.mod go.sum $(BUILD_ENV_BASE_DOCKERFILE) $(SERVICE_BUILDER_MAKEFILES) $(BUILD_ENV_ASN_VERSION_FILE)
 SERVICE_BUILDER_GOCACHE ?= $(CURDIR)/.cache/service-builder/go-build

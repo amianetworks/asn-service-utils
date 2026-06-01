@@ -35,7 +35,7 @@ truly service-specific.
 |---|---|---|
 | Root command map | consuming service | `help`, `init`, workflow gateway, guarded service-utils include, small root utilities. |
 | Service contract config | consuming service | Single declarative `make/config.mk` for `VERSION`, `ASN_SERVICE_API_VERSION`, artifact inventories, docs staging, Debian/Docker topology, publish sites. |
-| Shared builder contract | `service-utils` | `service.plugin.builder.mk` include index plus `builder/make/*.mk` fragments for `prepare`, `check`, `build-plugin`, `stage-docs`, `build-debian`, `build-docker`, push/list targets, removed-target guidance. |
+| Shared builder contract | `service-utils` | `service.plugin.builder.mk` include index plus `builder/make/*.mk` fragments for `prepare`, `check`, `build-plugin`, internal docs staging, `build-debian`, `build-docker`, push/list targets, removed-target guidance. |
 | Helper scripts | `service-utils/builder/*.sh` | Manifest mutation, builder-base freshness, proto tool staging/generation, publish variable checks, Debian package metadata/building. |
 | Generated evidence | consuming service build output | `build/Manifest.yaml`, `build/docs`, `build/debian`, local Docker images. |
 
@@ -92,7 +92,7 @@ The root should:
 | `prepare` | Build or refresh the local builder base image. |
 | `check` | Validate build variables, build identity, go.mod compatibility, and builder readiness. |
 | `build-plugin` | Reserve the manifest-owned version and build plugin/service artifacts. |
-| `stage-docs` | Stage service-served docs and commit docs lane evidence. |
+| `build-docs` | Service-local public target that generates service docs and calls the shared internal docs staging helper. |
 | `build-debian` | Build Debian packages from existing plugin/docs artifacts. |
 | `build-docker` | Build Docker images from existing Debian/package inputs. |
 | `build` | Run the full local artifact build in order. |
@@ -114,44 +114,53 @@ Removed names should fail with migration guidance:
 Use the shared targets by declaring service-specific inventories:
 
 ```make
-SERVICE_GO_BUILD_SPECS := \
-	MANAGER_PLUGIN|manager-plugin|$(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so|manager/main.go|- \
-	SERVICENODE_PLUGIN|servicenode-plugin|$(BUILD_SVC_SN_DIR)/$(SERVICE_NAME).so|servicenode/main.go|-
+SERVICE_GO_ARTIFACTS := SERVICE_P_CONTROLLER SERVICE_P_SERVICENODE
 
-SERVICE_ARTIFACT_COPY_SPECS := \
-	manager/config/*.conf:$(BUILD_SVC_C_DIR) \
-	servicenode/config/*.conf:$(BUILD_SVC_SN_DIR)
+SERVICE_P_CONTROLLER := $(SERVICE_BUILD_DIR_C)/$(SERVICE_NAME).so $(SERVICE_GO_SOURCE_C)/main.go - -buildmode=plugin $(SERVICE_GO_FLAGS_C)
+SERVICE_P_SERVICENODE := $(SERVICE_BUILD_DIR_SN)/$(SERVICE_NAME).so $(SERVICE_GO_SOURCE_SN)/main.go - -buildmode=plugin $(SERVICE_GO_FLAGS_SN)
 
-SERVICE_DEBIAN_REQUIRED_ARTIFACTS := $(BUILD_DIR)/docs/release/ReleaseManifest.yaml
-SERVICE_DEBIAN_PACKAGE_COPY_SPECS := \
-	$(SERVICE_MANAGER_DEBIAN_PACKAGE):$(BUILD_DIR)/docs:var/www/$(SERVICE_NAME)/manager
+SERVICE_FILE_ARTIFACTS := \
+	SERVICE_FILE_CONTROLLER_CONFIG \
+	SERVICE_FILE_SERVICENODE_CONFIG
 
-SERVICE_DOCKER_REQUIRED_ARTIFACTS = \
-	$(BUILD_SVC_C_DIR)/$(SERVICE_NAME).so \
-	$(DEBIAN_PATH)/$(SERVICE_SN_DEBIAN_PACKAGE)_@VERSION_BUILD@_amd64.deb
-SERVICE_DOCKER_REQUIRED_GLOBS := $(BUILD_SVC_C_DIR)/*.conf
+SERVICE_FILE_CONTROLLER_CONFIG := controller/config/*.conf $(SERVICE_BUILD_DIR_C)
+SERVICE_FILE_SERVICENODE_CONFIG := servicenode/config/*.conf $(SERVICE_BUILD_DIR_SN)
+
+SERVICE_GO_CACHE_SPECS := SERVICE_CACHE_CONTROLLER SERVICE_CACHE_SERVICENODE
+SERVICE_CACHE_CONTROLLER := ./$(SERVICE_GO_SOURCE_C)
+SERVICE_CACHE_SERVICENODE := ./$(SERVICE_GO_SOURCE_SN)
+
+## Debian package configs may include directories; directory sources are staged
+## into the destination root.
+## Example deb.<service>.config item:
+##   build/docs:var/www/$(SERVICE_NAME)/controller
+
+SERVICE_DOCKERFILE_C ?= docker/$(SERVICE_NAME)-controller.dockerfile
+SERVICE_DOCKERFILE_SN ?= docker/$(SERVICE_NAME)-servicenode.dockerfile
 ```
 
 `service-utils` derives default `DEBIAN_PATH`, `DEBIAN_SERVICES`,
-`SERVICE_PLUGIN_REQUIRED_GLOBS`, and the Go-built portion of
-`SERVICE_PLUGIN_REQUIRED_ARTIFACTS` from the service naming/build-dir variables
-and `SERVICE_GO_BUILD_SPECS`. Services may use
-`SERVICE_PLUGIN_REQUIRED_EXTRA_ARTIFACTS` for non-Go generated files such as
-copied config. Override the full artifact list only for intentionally
-non-standard plugin layouts.
+`DOCKER_IMAGES`, `DOCKER_IMAGE_BUILD_SPECS`, `SERVICE_PLUGIN_REQUIRED_GLOBS`,
+and the Go-built portion of `SERVICE_PLUGIN_REQUIRED_ARTIFACTS` from the service
+naming/build-dir variables, the `SERVICE_P_*` specs listed in
+`SERVICE_GO_ARTIFACTS`, and the file specs listed in `SERVICE_FILE_ARTIFACTS`.
+Override the full artifact list only for
+intentionally non-standard plugin layouts.
 
 6. Use manifest-owned build identity.
 
-Services should provide schema/source identity only:
+Services normally inherit the generic manifest schema/source defaults from
+`service-utils`:
 
 ```make
-BUILD_MANIFEST_SCHEMA := <service>.build.manifest.v1
-BUILD_MANIFEST_SOURCE_KEY := <service>_commit
-BUILD_MANIFEST_SOURCE_LABEL := <SERVICE>
+BUILD_MANIFEST_SCHEMA ?= service.build.manifest.v1
+BUILD_MANIFEST_SOURCE_KEY ?= source_commit
+BUILD_MANIFEST_SOURCE_LABEL ?= service
 ```
 
 `service-utils` derives `BUILD_MANIFEST_CMD`, service identity args, default docs
-args, `BUILD_MANIFEST_ARGS`, and `BUILD_MANIFEST_COMMON_EXTRA_ARGS`.
+args, `BUILD_MANIFEST_ARGS`, and `BUILD_MANIFEST_COMMON_EXTRA_ARGS`. Override
+these only when a service intentionally owns a different manifest contract.
 
 Do not compute `VERSION_BUILD` from ad hoc shell in tracked service config.
 The shared builder resolves the active version from `build/Manifest.yaml` only
@@ -183,8 +192,8 @@ stamps, and generation loops.
 Keep non-secret topology in tracked config:
 
 ```make
-DOCKER_REGISTRY_SITES ?= CN US
-DEBIAN_REPO_SITES ?= CN
+DOCKER_REGISTRIES ?= CN US
+DEBIAN_REPOSITORIES ?= CN
 RELEASE_SECRET_PROFILE_CN ?= ASN_CN
 DOCKER_REGISTRY_CN ?= registry.example.cn
 DEBIAN_REPO_HOST_CN ?= https://apt.example.cn/api
@@ -210,41 +219,42 @@ Every migrated service should define or intentionally inherit:
 ```text
 SERVICE
 SERVICE_NAME
-PACKAGE
+SERVICE_GO_PACKAGE
 SERVICE_UTILS_DIR
 ASN_SERVICE_API_VERSION
 VERSION
 BUILD
 BUILD_MODE
-BUILD_NUM_DEV
+BUILD_DEV
 DEV_BUILD_FILE
 BUILD_MANIFEST_FILE
 BUILD_DIR
-BUILD_SVC_C_DIR
-BUILD_SVC_SN_DIR
-BUILD_SVC_CLIENTS_DIR
-DOCKER_IMAGES
-DOCKER_IMAGE_BUILD_SPECS
-BUILD_MANIFEST_SCHEMA
-BUILD_MANIFEST_SOURCE_KEY
-BUILD_MANIFEST_SOURCE_LABEL
-SERVICE_GO_BUILD_SPECS
-SERVICE_ARTIFACT_COPY_SPECS
-SERVICE_DEBIAN_REQUIRED_ARTIFACTS
-SERVICE_DOCKER_REQUIRED_ARTIFACTS
+SERVICE_BUILD_DIR_C
+SERVICE_BUILD_DIR_SN
+SERVICE_BUILD_DIR_CLIENT
+SERVICE_PACKAGE_C
+SERVICE_PACKAGE_SN
+SERVICE_PACKAGE_C_CLI
+SERVICE_PACKAGE_CLIENT
+SERVICE_GO_ARTIFACTS
+SERVICE_P_*
+SERVICE_FILE_ARTIFACTS
 ```
 
 The root Makefile supplies the pre-include `BUILD_ENV_MAKEFILE` and
 `BUILD_ENV_ASN_VERSION_FILE` bootstrap defaults.
 The shared builder supplies standard ASN-service defaults for generic builder
 image variables, manifest wrapper args, `DEBIAN_PATH`, `DEBIAN_SERVICES`,
+`DOCKER_IMAGES`, `DOCKER_IMAGE_BUILD_SPECS`,
 `SERVICE_PLUGIN_REQUIRED_ARTIFACTS`, `SERVICE_PLUGIN_REQUIRED_GLOBS`, and
 derived proto generation variables.
 
 Services with docs, clients, local API docs, or custom release topology should
-also define the relevant `SERVICE_DOCS_*`, `SERVICE_LOCAL_MAKE_*`,
-`SERVICE_DOCKER_REQUIRED_GLOBS`, `DEBIAN_REPO_*`, and `DOCKER_REGISTRY_*`
-variables.
+also define the relevant `SERVICE_DOCS_*`, `DEBIAN_REPO_*`, and
+`DOCKER_REGISTRY_*` variables. Service-specific target delegates and ordering
+such as `build-docs`, `check-docs`, and `build-debian: build-docs` should be
+declared as targets in the consuming service root Makefile, not as shared
+lifecycle or config variables.
 
 ## ASN Framework Release Checklist
 
@@ -289,7 +299,7 @@ Then build in lane order:
 
 ```bash
 make build-plugin
-make stage-docs
+make build-docs
 make build-debian
 make build-docker
 ```

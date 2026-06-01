@@ -12,17 +12,17 @@
 	private_key="$${PRIVATE_GIT_SSH_KEY_FILE:-}"; \
 	if [ -z "$$private_key" ]; then status="MISSING"; elif [ ! -r "$$private_key" ]; then status="UNREADABLE"; else status="SET"; fi; \
 	printf "%-44s %-11s %-7s %s\n" "PRIVATE_GIT_SSH_KEY_FILE" "$$status" "yes" "init"; \
-	if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then status="MISSING"; else status="SET"; fi; \
-	printf "%-44s %-11s %-7s %s\n" "DOCKER_REGISTRY_SITES" "$$status" "no" "plan-push-docker, push-docker"; \
-	if [ -z "$(strip $(DEBIAN_REPO_SITES))" ]; then status="MISSING"; else status="SET"; fi; \
-	printf "%-44s %-11s %-7s %s\n" "DEBIAN_REPO_SITES" "$$status" "no" "plan-push-debian, push-debian"
-	@for site in $(sort $(DOCKER_REGISTRY_SITES) $(DEBIAN_REPO_SITES)); do \
+	if [ -z "$(strip $(DOCKER_REGISTRIES))" ]; then status="MISSING"; else status="SET"; fi; \
+	printf "%-44s %-11s %-7s %s\n" "DOCKER_REGISTRIES" "$$status" "no" "plan-push-docker, push-docker"; \
+	if [ -z "$(strip $(DEBIAN_REPOSITORIES))" ]; then status="MISSING"; else status="SET"; fi; \
+	printf "%-44s %-11s %-7s %s\n" "DEBIAN_REPOSITORIES" "$$status" "no" "plan-push-debian, push-debian"
+	@for site in $(sort $(DOCKER_REGISTRIES) $(DEBIAN_REPOSITORIES)); do \
 		$(MAKE) -s .print-publish-profile-var SITE=$$site; \
 	done
-	@for site in $(DOCKER_REGISTRY_SITES); do \
+	@for site in $(DOCKER_REGISTRIES); do \
 		$(MAKE) -s .print-docker-push-var SITE=$$site; \
 	done
-	@for site in $(DEBIAN_REPO_SITES); do \
+	@for site in $(DEBIAN_REPOSITORIES); do \
 		$(MAKE) -s .print-debian-push-var SITE=$$site; \
 	done
 	@echo ""; \
@@ -91,7 +91,7 @@ check-build:
 		--version "$(VERSION)" \
 		--mode "$(BUILD_MODE)" \
 		--build "$(BUILD)" \
-		--dev-start "$(BUILD_NUM_DEV)" \
+		--dev-start "$(BUILD_DEV)" \
 		--dev-file "$(DEV_BUILD_FILE)" \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
@@ -105,7 +105,7 @@ check-version:
 		--version "$(VERSION)" \
 		--mode "$(BUILD_MODE)" \
 		--build "$(BUILD)" \
-		--dev-start "$(BUILD_NUM_DEV)" \
+		--dev-start "$(BUILD_DEV)" \
 		--dev-file "$(DEV_BUILD_FILE)" \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
@@ -164,4 +164,3 @@ check-go-mod:
 	printf "  %15s : %s matched\n" "Shared packages" "$$compared"; \
 	printf "  %15s : %s ignored\n" "Utils-only mods" "$$skipped"
 	@echo ""
-

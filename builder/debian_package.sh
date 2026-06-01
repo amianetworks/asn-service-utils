@@ -164,7 +164,11 @@ cmd_build() {
                 ;;
         esac
         echo "Processing file: $src -> $dst_parent_abs"
-        cp "$src" "$dst_parent_abs/" || { echo "Failed to copy $src"; exit 1; }
+        if [ -d "$src" ]; then
+            cp -R "$src"/. "$dst_parent_abs/" || { echo "Failed to copy $src"; exit 1; }
+        else
+            cp "$src" "$dst_parent_abs/" || { echo "Failed to copy $src"; exit 1; }
+        fi
     done
     echo "Prepared to packing .deb."
 

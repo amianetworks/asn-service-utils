@@ -2,7 +2,10 @@
 
 ###
 # Generic deb input check rule: check-deb-<service>
-check-deb-%:
+.PHONY: SERVICE_UTILS_DEBIAN_FORCE
+SERVICE_UTILS_DEBIAN_FORCE:
+
+check-deb-%: SERVICE_UTILS_DEBIAN_FORCE
 	$(eval SERVICE_NAME := $*)
 	$(eval SERVICE_CONFIG := debian/deb.$(SERVICE_NAME).config)
 	$(eval SERVICE_CONTROL := debian/deb.$(SERVICE_NAME).control)
@@ -21,7 +24,7 @@ build-init build-prepare debian docker:
 
 ###
 # Generic deb packaging rule: deb-<service>
-deb-%: check-deb-%
+deb-%: SERVICE_UTILS_DEBIAN_FORCE check-deb-%
 	$(eval SERVICE_NAME := $*)
 	$(eval SERVICE_CONFIG := debian/deb.$(SERVICE_NAME).config)
 	$(eval SERVICE_CONTROL := debian/deb.$(SERVICE_NAME).control)
@@ -29,7 +32,7 @@ deb-%: check-deb-%
 	@$(DEBIAN_PACKAGE_CMD) build --service "$(SERVICE_NAME)" --config "$(SERVICE_CONFIG)" --control "$(SERVICE_CONTROL)" --files "$(DEBIAN_FILES)" --debian-path "$(DEBIAN_PATH)" --version-build "$(VERSION_BUILD)" --depends-version "$(DEP_VERSION_ASN)"
 
 
-clean-deb-%:
+clean-deb-%: SERVICE_UTILS_DEBIAN_FORCE
 	$(call service_utils_assert_build_paths,$(DEBIAN_PATH),DEBIAN_PATH)
 	@set -e; \
 	stem="$*"; \

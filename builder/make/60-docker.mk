@@ -3,49 +3,80 @@
 ##----------------------------------------------------------------------------##
 ## Docker Image Handling ##
 
-DOCKER_BUILD_PRE_TARGETS ?=
-DOCKER_BUILD_INPUT_CHECK_TARGETS ?= .check-docker-build-inputs
+service_utils_docker_components := C SN
+service_utils_docker_build_args = $(addprefix --build-arg ,$(SERVICE_DOCKER_BUILD_ARGS))
+service_utils_docker_package_file_func = service_docker_package_file() { printf '%s/%s_%s_amd64.deb\n' "$(DEBIAN_PATH)" "$$1" "$$version_build"; };
 
-build-docker: require-build-manifest $(DOCKER_BUILD_PRE_TARGETS) $(DOCKER_BUILD_INPUT_CHECK_TARGETS)
-	@if [ -z "$(strip $(DOCKER_IMAGE_BUILD_SPECS))" ]; then \
-		echo "ERROR: DOCKER_IMAGE_BUILD_SPECS is empty."; \
+define service_utils_docker_build_component
+image="$(strip $(SERVICE_DOCKER_IMAGE_$(1)))"; \
+dockerfile="$(strip $(SERVICE_DOCKERFILE_$(1)))"; \
+package="$(strip $(SERVICE_PACKAGE_$(1)))"; \
+if [ -n "$$image$$dockerfile$$package" ]; then \
+	[ -n "$$image" ] || { echo "ERROR: SERVICE_DOCKER_IMAGE_$(1) is required when SERVICE_DOCKERFILE_$(1) or SERVICE_PACKAGE_$(1) is set."; exit 2; }; \
+	case "$$image" in ""|*[^A-Za-z0-9._/-]*) echo "ERROR: invalid SERVICE_DOCKER_IMAGE_$(1): $$image"; exit 2 ;; esac; \
+	[ -n "$$dockerfile" ] || { echo "ERROR: SERVICE_DOCKERFILE_$(1) is required for $$image."; exit 2; }; \
+	if [ ! -f "$$dockerfile" ]; then echo "ERROR: SERVICE_DOCKERFILE_$(1) does not exist: $$dockerfile"; exit 2; fi; \
+	image_build_args="$$docker_build_args"; \
+	if [ -n "$$package" ]; then \
+		case "$$package" in *:*|*[^A-Za-z0-9+._-]*) echo "ERROR: invalid SERVICE_PACKAGE_$(1): $$package"; exit 2 ;; esac; \
+		debian_file="$$(service_docker_package_file "$$package")"; \
+		image_build_args="$$image_build_args --build-arg SERVICE_PACKAGE=$$package --build-arg SERVICE_DEBIAN_FILE=$$debian_file"; \
+	fi; \
+	echo ""; \
+	echo "Building docker image: $$image:$$version_build"; \
+	echo "Dockerfile: $$dockerfile; BUILD_ARGS: $$image_build_args"; \
+	docker buildx build \
+		--progress=plain \
+		--platform linux/amd64 \
+		--load \
+		-f "$$dockerfile" \
+		$$image_build_args \
+		-t "$$image:$$version_build" \
+		.; \
+	echo "Successfully built docker image for $$image/$$version_build"; \
+	echo ""; \
+fi;
+endef
+
+define service_utils_docker_check_component
+image="$(strip $(SERVICE_DOCKER_IMAGE_$(1)))"; \
+dockerfile="$(strip $(SERVICE_DOCKERFILE_$(1)))"; \
+package="$(strip $(SERVICE_PACKAGE_$(1)))"; \
+if [ -n "$$image$$dockerfile$$package" ]; then \
+	[ -n "$$image" ] || { echo "ERROR: SERVICE_DOCKER_IMAGE_$(1) is required when SERVICE_DOCKERFILE_$(1) or SERVICE_PACKAGE_$(1) is set."; exit 2; }; \
+	case "$$image" in ""|*[^A-Za-z0-9._/-]*) echo "ERROR: invalid SERVICE_DOCKER_IMAGE_$(1): $$image"; exit 2 ;; esac; \
+	[ -n "$$dockerfile" ] || { echo "ERROR: SERVICE_DOCKERFILE_$(1) is required for $$image."; exit 2; }; \
+	if [ ! -f "$$dockerfile" ]; then echo "ERROR: SERVICE_DOCKERFILE_$(1) does not exist: $$dockerfile"; exit 2; fi; \
+	if [ -n "$$package" ]; then \
+		case "$$package" in *:*|*[^A-Za-z0-9+._-]*) echo "ERROR: invalid SERVICE_PACKAGE_$(1): $$package"; exit 2 ;; esac; \
+		file="$$(service_docker_package_file "$$package")"; \
+		if [ ! -f "$$file" ]; then \
+			echo "Missing Docker package input for $$image: $$file"; \
+			missing=1; \
+		fi; \
+	fi; \
+fi;
+endef
+
+# Docker images install Debian packages derived from the service image,
+# Dockerfile, and package variables.
+# Services that package docs must make their Debian target produce those docs.
+build-docker: require-build-manifest .check-docker-build-inputs
+	@if [ -z "$(strip $(DOCKER_IMAGES))" ]; then \
+		echo "ERROR: no service Docker images are configured."; \
 		exit 1; \
 	fi
 	@set -e; \
 	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane debian $(BUILD_MANIFEST_COMMON_ARGS))"; \
-	docker_build_args="$(DEP_DOCKER_BUILD_ARGS)"; \
+	$(service_utils_docker_package_file_func) \
+	docker_build_args="$(service_utils_docker_build_args)"; \
 	docker_build_args="$${docker_build_args//@VERSION_BUILD@/$$version_build}"; \
-	for spec in $(DOCKER_IMAGE_BUILD_SPECS); do \
-		image=$${spec%%:*}; \
-		dockerfile=$${spec#*:}; \
-		case "$$image" in ""|*[^A-Za-z0-9._/-]*) echo "ERROR: invalid Docker image name in DOCKER_IMAGE_BUILD_SPECS: $$image"; exit 2 ;; esac; \
-		if [ "$$dockerfile" = "$$spec" ] || [ -z "$$dockerfile" ] || [ ! -f "$$dockerfile" ]; then \
-			echo "ERROR: invalid Dockerfile in DOCKER_IMAGE_BUILD_SPECS item '$$spec'."; \
-			exit 2; \
-		fi; \
-		echo ""; \
-		echo "Building docker image: $$image:$$version_build"; \
-		echo "Dockerfile: $$dockerfile; BUILD_ARGS: $$docker_build_args"; \
-		docker buildx build \
-			--progress=plain \
-			--platform linux/amd64 \
-			--load \
-			-f "$$dockerfile" \
-			$$docker_build_args \
-			-t "$$image:$$version_build" \
-			.; \
-		echo "Successfully built docker image for $$image/$$version_build"; \
-		echo ""; \
-	done; \
+	$(foreach component,$(service_utils_docker_components),$(call service_utils_docker_build_component,$(component))) \
 	$(BUILD_MANIFEST_CMD) commit-lane \
 		--lane docker \
 		$(BUILD_MANIFEST_COMMON_ARGS) \
 		--version-build "$$version_build"
 
-.docker-build-image: .require-version-build-var
-	$(call func_build_docker,$(IMAGE),$(VERSION_BUILD),$(DOCKERFILE),$(DEP_DOCKER_BUILD_ARGS))
-
-DOCKER_PUSH_CHECK_TARGETS ?= .check-docker-release-mode .check-docker-publish-images
 DOCKER_PUSH_VERSION ?= $(VERSION_BUILD)
 DOCKER_PUSH_LATEST ?= $(if $(filter pro,$(BUILD_MODE)),yes,no)
 
@@ -55,32 +86,13 @@ DOCKER_PUSH_LATEST ?= $(if $(filter pro,$(BUILD_MODE)),yes,no)
 .check-docker-build-inputs:
 	@set -e; \
 	version_build="$$($(BUILD_MANIFEST_CMD) require-lane --lane debian $(BUILD_MANIFEST_COMMON_ARGS))"; \
+	$(service_utils_docker_package_file_func) \
 	missing=0; \
-	for file_template in $(SERVICE_DOCKER_REQUIRED_ARTIFACTS); do \
-		file="$${file_template//@VERSION_BUILD@/$$version_build}"; \
-		if [ ! -f "$$file" ]; then \
-			echo "Missing Docker input: $$file"; \
-			missing=1; \
-		fi; \
-	done; \
-	for glob_template in $(SERVICE_DOCKER_REQUIRED_GLOBS); do \
-		glob="$${glob_template//@VERSION_BUILD@/$$version_build}"; \
-		if matches="$$(compgen -G "$$glob" 2>&1)"; then \
-			:; \
-		elif [ -n "$$matches" ]; then \
-			echo "ERROR: Docker input glob probe failed for $$glob"; \
-			echo "$$matches"; \
-			missing=1; \
-		fi; \
-		if [ -z "$$matches" ]; then \
-			echo "Missing Docker input: $$glob"; \
-			missing=1; \
-		fi; \
-	done; \
+	$(foreach component,$(service_utils_docker_components),$(call service_utils_docker_check_component,$(component))) \
 	if [ "$$missing" = "1" ]; then \
 		echo "ERROR: Docker inputs for $$version_build are incomplete."; \
 		echo "Expected version source: $(BUILD_MANIFEST_FILE)"; \
-		echo "Run 'make $(SERVICE_ARTIFACT_BUILD_TARGET) && make build-debian' first, or 'make build-all' for the full local build."; \
+		echo "Run 'make build-plugin && make build-debian' first, or 'make build-all' for the full local build."; \
 		exit 1; \
 	fi
 
@@ -129,28 +141,5 @@ DOCKER_PUSH_LATEST ?= $(if $(filter pro,$(BUILD_MODE)),yes,no)
 
 include $(SERVICE_UTILS_DIR)/builder/docker.registry.mk
 include $(SERVICE_UTILS_DIR)/builder/release.preflight.mk
-
-# $(1): IMAGE_NAME
-# $(2): VERSION
-# $(3): DOCKERFILE
-# $(4): BUILD_ARGS string
-define func_build_docker
-	@echo ""
-	@echo "Building docker image: $(1):$(2)"
-	@set -e; \
-	docker_build_args="$(4)"; \
-	docker_build_args="$${docker_build_args//@VERSION_BUILD@/$(2)}"; \
-	echo "Dockerfile: $(3); BUILD_ARGS: $$docker_build_args"; \
-	docker buildx build \
-		--progress=plain \
-		--platform linux/amd64 \
-		--load \
-		-f $(3) \
-		$$docker_build_args \
-		-t $(1):$(2) \
-		.
-	@echo "Successfully built docker image for $(1)/$(2)"
-	@echo ""
-endef
 
 #------------------------------------------------------------------------------#

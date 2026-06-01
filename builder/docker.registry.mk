@@ -2,27 +2,28 @@
 
 # Shared Docker registry targets for ASN framework and services.
 
-DOCKER_PUSH_CHECK_TARGETS ?=
-DOCKER_INTERNAL_PUSH_CHECK_TARGETS ?= $(DOCKER_PUSH_CHECK_TARGETS)
 DOCKER_PUSH_VERSION ?= $(VERSION_BUILD)
 DOCKER_PUSH_LATEST ?= no
 DOCKER_REQUIRE_REGISTRY_USER ?= yes
 DOCKER_REQUIRE_LOGIN_CONFIG ?= yes
 DOCKER_CLEAN_DEPS ?=
 DOCKER_CLEAN_UNTAGGED ?= no
+DOCKER_CLEAN_GLOBAL_PRUNE ?= no
+DOCKER_CLEAN_TAGGED ?= no
+DOCKER_CHECK_REMOTE_TAGS ?= yes
+DOCKER_ALLOW_TAG_OVERWRITE ?= no
 DOCKER_LIST_LIMIT ?= 20
 DOCKER_LIST_LOCAL_LABEL ?= Services
 DOCKER_LIST_REQUIRE_REMOTE_AUTH ?= yes
 DOCKER_SUBREPO ?=
 DOCKER_CURL_TIMEOUT_FLAGS ?= --connect-timeout 10 --max-time 120 --retry 2 --retry-delay 2 --retry-connrefused
-SERVICE_UTILS_RECURSIVE_MAKE ?= $(MAKE)
 
 # The list/push recipes read credentials through shell variables such as
 # $${DOCKER_REGISTRY_CN_USER} so curl invocations do not contain make-expanded
-# secret values. Export the selected site variables because projects often
+# secret values. Export the selected registry variables because projects often
 # derive them from RELEASE_SECRET_* values in make/config.mk or ignored make/local.mk.
 docker_registry_uppercase = $(call uppercase,$(1))
-DOCKER_REGISTRY_USER_EXPORTS := $(foreach site,$(DOCKER_REGISTRY_SITES),DOCKER_REGISTRY_$(call docker_registry_uppercase,$(site))_USER)
+DOCKER_REGISTRY_USER_EXPORTS := $(foreach site,$(DOCKER_REGISTRIES),DOCKER_REGISTRY_$(call docker_registry_uppercase,$(site))_USER)
 export $(DOCKER_REGISTRY_USER_EXPORTS)
 
 .PHONY: \
@@ -31,35 +32,35 @@ export $(DOCKER_REGISTRY_USER_EXPORTS)
 	list-docker list-docker-local list-docker-cn list-docker-us list-docker-% \
 	clean-docker
 
-push-docker: $(DOCKER_PUSH_CHECK_TARGETS) check-push-docker-sites
-	@for site in $(DOCKER_REGISTRY_SITES); do \
+push-docker: .check-docker-release-mode .check-docker-publish-images check-push-docker-sites
+	@for site in $(DOCKER_REGISTRIES); do \
 		$(MAKE) -s .push-docker-site SITE=$$site; \
 	done
 
 # Site-specific targets are thin selectors. The aggregate target owns all
 # validation and push behavior, so site shortcuts cannot drift from it.
-push-docker-cn: $(DOCKER_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s push-docker DOCKER_REGISTRY_SITES=CN
+push-docker-cn: .check-docker-release-mode .check-docker-publish-images
+	@$(MAKE) -s push-docker DOCKER_REGISTRIES=CN
 
-push-docker-us: $(DOCKER_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s push-docker DOCKER_REGISTRY_SITES=US
+push-docker-us: .check-docker-release-mode .check-docker-publish-images
+	@$(MAKE) -s push-docker DOCKER_REGISTRIES=US
 
-push-docker-%: $(DOCKER_PUSH_CHECK_TARGETS)
-	@$(MAKE) -s push-docker DOCKER_REGISTRY_SITES=$(call uppercase,$*)
+push-docker-%: .check-docker-release-mode .check-docker-publish-images
+	@$(MAKE) -s push-docker DOCKER_REGISTRIES=$(call uppercase,$*)
 
 check-push-docker-sites:
-	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
+	@if [ -z "$(strip $(DOCKER_REGISTRIES))" ]; then \
 		echo ">> Docker Site Preflight: [FAIL]"; \
-		printf "  %15s : %s\n" "Selected sites" "<empty>"; \
-		echo "ERROR: DOCKER_REGISTRY_SITES is empty."; \
+		printf "  %15s : %s\n" "Selected registries" "<empty>"; \
+		echo "ERROR: DOCKER_REGISTRIES is empty."; \
 		exit 1; \
 	fi
 	@set +e; \
 	echo ">> Docker Site Preflight"; \
-	printf "  %15s : %s\n" "Selected sites" "$(DOCKER_REGISTRY_SITES)"; \
+	printf "  %15s : %s\n" "Selected registries" "$(DOCKER_REGISTRIES)"; \
 	failed=0; \
-	for site in $(DOCKER_REGISTRY_SITES); do \
-		output="$$( $(SERVICE_UTILS_RECURSIVE_MAKE) -s .check-docker-registry-site SITE=$$site 2>&1 )"; \
+	for site in $(DOCKER_REGISTRIES); do \
+		output="$$( $(MAKE) -s .check-docker-registry-site SITE=$$site 2>&1 )"; \
 		status="$$?"; \
 		if [ "$$status" -ne 0 ]; then \
 			if [ -n "$$output" ]; then \
@@ -117,7 +118,7 @@ check-push-docker-sites:
 		fi; \
 	fi
 
-.push-docker-site: $(DOCKER_INTERNAL_PUSH_CHECK_TARGETS)
+.push-docker-site:
 	$(eval DOCKER_SITE := $(call uppercase,$(SITE)))
 	$(eval REGISTRY := $(DOCKER_REGISTRY_$(DOCKER_SITE)))
 	@set -e; \
@@ -128,10 +129,61 @@ check-push-docker-sites:
 	registry="$(REGISTRY)"; \
 	registry_prefix="$$registry"; \
 	if [ -n "$(DOCKER_SUBREPO)" ]; then registry_prefix="$$registry/$(DOCKER_SUBREPO)"; fi; \
+	curl_config_file=""; \
+	if [ "$(DOCKER_CHECK_REMOTE_TAGS)" = "yes" ] && [ "$(DOCKER_ALLOW_TAG_OVERWRITE)" != "yes" ]; then \
+		registry_auth="$${DOCKER_REGISTRY_$(DOCKER_SITE)_USER:-}"; \
+		if [ -z "$$registry_auth" ]; then \
+			echo "ERROR: Docker remote tag check requires DOCKER_REGISTRY_$(DOCKER_SITE)_USER."; \
+			exit 1; \
+		fi; \
+		curl_config_file="$$(mktemp "$${TMPDIR:-/tmp}/docker-push-curl-config.XXXXXX")"; \
+		chmod 600 "$$curl_config_file"; \
+		printf 'user = "%s"\n' "$$registry_auth" > "$$curl_config_file"; \
+		trap 'rm -f "$$curl_config_file"' EXIT; \
+		trap 'rm -f "$$curl_config_file"; exit 130' INT; \
+		trap 'rm -f "$$curl_config_file"; exit 143' TERM; \
+	fi; \
 	validate_docker_ref() { \
 		label="$$1"; \
 		ref="$$2"; \
 		case "$$ref" in ""|*[^A-Za-z0-9._:/-]*) echo "ERROR: invalid Docker $$label: $$ref"; exit 2 ;; esac; \
+	}; \
+	remote_docker_tag_exists() { \
+		repo_path="$$1"; \
+		tag="$$2"; \
+		response_file="$$(mktemp "$${TMPDIR:-/tmp}/docker-remote-tag.XXXXXX")"; \
+		http_code="$$(curl $(DOCKER_CURL_TIMEOUT_FLAGS) -sS -o "$$response_file" -w '%{http_code}' --config "$$curl_config_file" -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' "https://$$registry/v2/$$repo_path/manifests/$$tag")" || { \
+			echo "ERROR: Docker registry tag probe failed for $$registry/$$repo_path:$$tag"; \
+			rm -f "$$response_file"; \
+			return 2; \
+		}; \
+		case "$$http_code" in \
+			200|201|202) rm -f "$$response_file"; return 0 ;; \
+			404) rm -f "$$response_file"; return 1 ;; \
+			*) \
+				echo "ERROR: Docker registry returned HTTP $$http_code while checking $$registry/$$repo_path:$$tag"; \
+				if [ -s "$$response_file" ]; then sed 's/^/Registry response: /' "$$response_file"; fi; \
+				rm -f "$$response_file"; \
+				return 2 ;; \
+		esac; \
+	}; \
+	assert_remote_docker_tag_absent() { \
+		repo_path="$$1"; \
+		tag="$$2"; \
+		ref="$$3"; \
+		if [ "$(DOCKER_CHECK_REMOTE_TAGS)" != "yes" ] || [ "$(DOCKER_ALLOW_TAG_OVERWRITE)" = "yes" ] || [ "$$tag" = "latest" ]; then \
+			return 0; \
+		fi; \
+		set +e; \
+		remote_docker_tag_exists "$$repo_path" "$$tag"; \
+		status="$$?"; \
+		set -e; \
+		if [ "$$status" = "0" ]; then \
+			echo "ERROR: Docker remote tag already exists: $$ref"; \
+			echo "Set DOCKER_ALLOW_TAG_OVERWRITE=yes only with explicit release approval."; \
+			exit 1; \
+		fi; \
+		if [ "$$status" -gt 1 ]; then exit "$$status"; fi; \
 	}; \
 	publish_docker_ref() { \
 		image="$$1"; \
@@ -139,8 +191,11 @@ check-push-docker-sites:
 		source_tag="$$3"; \
 		source_ref="$$image:$$source_tag"; \
 		target_ref="$$registry_prefix/$$image:$$target_tag"; \
+		repo_path="$$image"; \
+		if [ -n "$(DOCKER_SUBREPO)" ]; then repo_path="$(DOCKER_SUBREPO)/$$image"; fi; \
 		validate_docker_ref "source ref" "$$source_ref"; \
 		validate_docker_ref "target ref" "$$target_ref"; \
+		assert_remote_docker_tag_absent "$$repo_path" "$$target_tag" "$$target_ref"; \
 		echo ""; \
 		printf "%s" "Tagging image $$source_ref to registry: $$target_ref"; \
 		docker tag "$$source_ref" "$$target_ref"; \
@@ -177,9 +232,10 @@ check-push-docker-sites:
 		for image in $(DOCKER_IMAGES); do \
 			publish_docker_ref "$$image" "latest" "$$push_version"; \
 		done; \
-	fi
+	fi; \
+	if [ -n "$$curl_config_file" ]; then rm -f "$$curl_config_file"; trap - EXIT INT TERM; fi
 
-.push-docker-image: $(DOCKER_INTERNAL_PUSH_CHECK_TARGETS)
+.push-docker-image:
 	$(eval SOURCE_IMAGE_TAG := $(if $(SOURCE_TAG),$(SOURCE_TAG),$(IMAGE_TAG)))
 	$(eval REGISTRY_IMAGE_PREFIX := $(if $(DOCKER_SUBREPO),$(REGISTRY)/$(DOCKER_SUBREPO),$(REGISTRY)))
 	@set -e; \
@@ -197,20 +253,24 @@ check-push-docker-sites:
 
 list-docker:
 	@$(MAKE) -s .list-docker-local
-	@if [ -z "$(strip $(DOCKER_REGISTRY_SITES))" ]; then \
-		echo "No Docker registry sites configured."; \
+	@if [ -z "$(strip $(DOCKER_REGISTRIES))" ]; then \
+		echo "No Docker registries configured."; \
 		echo ""; \
 	else \
-		for site in $(DOCKER_REGISTRY_SITES); do \
+		for site in $(DOCKER_REGISTRIES); do \
 			$(MAKE) -s .list-docker-site SITE=$$site; \
 		done; \
 	fi
 
 clean-docker: $(DOCKER_CLEAN_DEPS)
-	@echo "Removing untagged Docker images..."; \
-	docker image prune -f
-	@if [ "$(DOCKER_CLEAN_UNTAGGED)" = "yes" ]; then \
-		echo "DOCKER_CLEAN_UNTAGGED=yes; skipped older tagged image cleanup."; \
+	@if [ "$(DOCKER_CLEAN_GLOBAL_PRUNE)" = "yes" ]; then \
+		echo "Removing untagged Docker images by explicit request..."; \
+		docker image prune -f; \
+	else \
+		echo "Skipped global Docker image prune. Set DOCKER_CLEAN_GLOBAL_PRUNE=yes to opt in."; \
+	fi
+	@if [ "$(DOCKER_CLEAN_TAGGED)" != "yes" ]; then \
+		echo "Skipped older tagged image cleanup. Set DOCKER_CLEAN_TAGGED=yes to opt in."; \
 	else \
 		echo "- Cleaning older docker images for repositories: $(DOCKER_IMAGES)"; \
 		echo ""; \
@@ -240,10 +300,10 @@ list-docker-local:
 # Site-specific list targets mirror the push selector model: they only set the
 # configured site list, while `list-docker` owns local and remote list behavior.
 list-docker-cn:
-	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=CN
+	@$(MAKE) -s list-docker DOCKER_REGISTRIES=CN
 
 list-docker-us:
-	@$(MAKE) -s list-docker DOCKER_REGISTRY_SITES=US
+	@$(MAKE) -s list-docker DOCKER_REGISTRIES=US
 
 list-docker-%:
 	@echo "ERROR: unsupported Docker list target: list-docker-$*."

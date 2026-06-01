@@ -30,7 +30,7 @@
 	proto-tools-check \
 	proto-gen \
 	proto-gen-force \
-	stage-docs \
+	.service-docs-stage \
 	require-build-manifest \
 	.build-manifest-require-lane \
 	.build-manifest-value \
@@ -60,6 +60,7 @@
 	list-docker-us \
 	service-build-plugin \
 	service-build-debian \
+	service-build-from-scratch \
 	prepare-service-builder-base \
 	check-service-builder-base \
 	service-build-once \
@@ -102,14 +103,10 @@ prepare: .check_service_utils_version_file prepare-service-builder-base
 # - check-prepare: build-readiness bundle used by lifecycle and workflow targets.
 # - check-vars: redacted inventory only.
 # Extension contract:
-# - CHECK_LOCAL_EXTRA_TARGETS appends targets to default `make check`.
-# - CHECK_PREPARE_EXTRA_TARGETS appends targets to `make check-prepare`.
 # - CHECK_VERSION_ROWS and CHECK_BUILD_ROWS replace the default identity rows.
 # - CHECK_VERSION_EXTRA_ROWS and CHECK_BUILD_EXTRA_ROWS append rows to the
 #   active identity sections.
-CHECK_LOCAL_EXTRA_TARGETS ?=
-CHECK_PREPARE_EXTRA_TARGETS ?=
-CHECK_PREPARE_TARGETS ?= check-version check-go-mod check-build check-service-builder-base $(CHECK_PREPARE_EXTRA_TARGETS)
+service_utils_check_prepare_targets := check-version check-go-mod check-build check-service-builder-base
 CHECK_BUILD_EXTRA_ROWS ?=
 CHECK_VERSION_EXTRA_ROWS ?=
 export CHECK_BUILD_ROWS CHECK_VERSION_ROWS CHECK_BUILD_EXTRA_ROWS CHECK_VERSION_EXTRA_ROWS
@@ -123,7 +120,7 @@ service-utils-init: .check_service_utils_version_file .check_build_vars update_s
 # remain outside the generic builder and should consume the published outputs.
 push-all: push-docker push-debian
 
-check: .check-local-start check-prepare $(CHECK_LOCAL_EXTRA_TARGETS)
+check: .check-local-start check-prepare
 	@echo ">> Local Check: [PASS]"
 
 .check-local-start:
@@ -131,22 +128,22 @@ check: .check-local-start check-prepare $(CHECK_LOCAL_EXTRA_TARGETS)
 	printf "  %15s : %s\n" "Scope" "version identity, manifest state, Go module compatibility, builder image"; \
 	echo ""
 
-check-prepare: .check-prepare-start $(CHECK_PREPARE_TARGETS)
+check-prepare: .check-prepare-start $(service_utils_check_prepare_targets)
 	@echo ">> Local Readiness: [PASS]"
 
 .check-prepare-start:
 	@echo ">> Local Readiness"; \
-	printf "  %15s : %s\n" "Targets" "$(strip $(CHECK_PREPARE_TARGETS))"; \
+	printf "  %15s : %s\n" "Targets" "$(strip $(service_utils_check_prepare_targets))"; \
 	echo ""
 
-define service_utils_owned_lifecycle_targets
+define service_utils_lifecycle_targets
 ## `build-all` is the only legacy spelling kept, and it is a plain alias for
 ## `build` in service repositories that use the shared lifecycle directly.
 build-all: build
 
-build: prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian build-docker
+build: prepare build-plugin build-debian build-docker
 
-build-fresh: clean prepare build-plugin $(BUILD_EXTRA_TARGETS) build-debian build-docker
+build-fresh: clean prepare build-plugin build-debian build-docker
 	@echo "Built fresh artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
@@ -162,6 +159,13 @@ build-plugin: check proto-gen
 	else \
 		version_build="$$$$($(BUILD_MANIFEST_CMD) reserve-plugin-version $(BUILD_MANIFEST_RESERVE_ARGS))"; \
 	fi; \
+	clear_reserved_build() { \
+		if ! clear_output="$$$$($(BUILD_MANIFEST_CMD) clear-reserved-plugin-version $(BUILD_MANIFEST_RESERVE_ARGS) --version-build "$$$$version_build" 2>&1)"; then \
+			echo "WARN: failed to clear reserved DEV build version $$$$version_build after build failure." >&2; \
+			printf '%s\n' "$$$$clear_output" >&2; \
+		fi; \
+	}; \
+	trap 'status=$$$$?; if [ "$$$$status" -ne 0 ]; then clear_reserved_build; fi; exit "$$$$status"' EXIT; \
 	mkdir -p "$(BUILD_DIR)"; \
 	echo ">> Build Plugin Version"; \
 	printf "  %15s : %s\n" "Version" "$$$$version_build"; \
@@ -175,16 +179,16 @@ build-plugin: check proto-gen
 	$$(BUILD_MANIFEST_CMD) commit-plugin \
 		$$(BUILD_MANIFEST_COMMIT_PLUGIN_ARGS) \
 		--version-build "$$$$version_build" \
-		--service-utils-ref "$$$$service_utils_ref"
+		--service-utils-ref "$$$$service_utils_ref"; \
+	trap - EXIT
 	@echo "Built artifacts (DIR):"
 	@find ./build -maxdepth 1 -print
 	@echo
 endef
-$(if $(filter yes,$(SERVICE_UTILS_OWN_BUILD_TARGETS)),$(eval $(service_utils_owned_lifecycle_targets)))
+$(eval $(service_utils_lifecycle_targets))
 
 # Any artifacts should be under build/. Guard this shared clean path so a bad
 # override cannot remove source, config, or parent directories.
-define service_utils_owned_clean_target
 clean:
 	$(call service_utils_assert_build_paths,$(SERVICE_CLEAN_DIRS),SERVICE_CLEAN_DIRS)
 	@set -e; \
@@ -193,11 +197,9 @@ clean:
 		exit 0; \
 	fi; \
 	for path in $(SERVICE_CLEAN_DIRS); do \
-		case "$$$$path" in \
-			""|"."|"/"|*"/.."|*"/../"*|".."|"../"*) echo "ERROR: refusing unsafe clean path: '$$$$path'."; exit 2 ;; \
-			build|build/|build/*|./build|./build/|./build/*) rm -rf "$$$$path" ;; \
-			*) echo "ERROR: refusing clean path outside build/: $$$$path"; exit 2 ;; \
+		case "$$path" in \
+			""|"."|"/"|*"/.."|*"/../"*|".."|"../"*) echo "ERROR: refusing unsafe clean path: '$$path'."; exit 2 ;; \
+			build|build/|build/*|./build|./build/|./build/*) rm -rf "$$path" ;; \
+			*) echo "ERROR: refusing clean path outside build/: $$path"; exit 2 ;; \
 		esac; \
 	done
-endef
-$(if $(filter yes,$(SERVICE_UTILS_OWN_CLEAN_TARGET)),$(eval $(service_utils_owned_clean_target)))
