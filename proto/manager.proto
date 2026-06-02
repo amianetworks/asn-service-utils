@@ -11,13 +11,133 @@ service Manager {
   rpc GetInfo     (Empty)         returns (ControllerInfo);
   rpc UpdatePort  (UpdatePortReq) returns (Empty);
 
-  // Authentication & Authorization API
-  rpc Login           (LoginRequest)          returns (LoginResponse);
-  rpc MfaLogin        (MfaLoginRequest)       returns (LoginResponse);
-  rpc TokenRefresh    (TokenRefreshRequest)   returns (LoginResponse);
-  rpc ResetPassword   (ResetPasswordRequest)  returns (Empty);
-  rpc Logout          (Empty)                 returns (Empty);
-  rpc GetUserByToken  (Empty)                 returns (User);
+  // ---------------------------------------------------------------------------
+  // 1 — Auth (Verification Codes, Login, MFA, Factors, Tokens, Logout)
+  // ---------------------------------------------------------------------------
+
+  // --- Auth Login/Logout ---
+
+  // Lists supported login methods (password, phone+code, email+code, WeChat, Sign in with Apple).
+  rpc AuthListLoginMethods (Empty) returns (Auth.LoginMethods);
+
+  // Lists allowed phone countries for SMS login/bind.
+  rpc AuthListPhoneCountries (Empty) returns (Auth.CountryCodeList);
+
+  // Sends a verification code (e.g., SMS) to a phone number.
+  rpc AuthSendCodeToPhone (Auth.Phone) returns (Auth.Code);
+
+  // Sends a verification code to an email address.
+  rpc AuthSendCodeToEmail (Auth.Email) returns (Auth.Code);
+
+  // Logs in or creates an account using (username | email | phone) + password.
+  rpc AuthLoginWithPassword (Auth.LoginWithPassword) returns (Auth.LoginResult);
+
+  // Logs in or creates an account using phone + verification code.
+  rpc AuthLoginWithPhoneCode (Auth.LoginWithPhone) returns (Auth.LoginResult);
+
+  // Logs in or creates an account using email + verification code.
+  rpc AuthLoginWithEmailCode (Auth.LoginWithEmail) returns (Auth.LoginResult);
+
+  // Logs in or creates an account using WeChat credentials.
+  rpc AuthLoginWithWeChat (Auth.LoginWithWeChat) returns (Auth.LoginResult);
+
+  // Logs in or creates an account using Sign in with Apple.
+  rpc AuthLoginWithApple (Auth.LoginWithApple) returns (Auth.LoginResult);
+
+  // Logs in or creates an account using Sign in with Google.
+  rpc AuthLoginWithGoogle (Auth.LoginWithGoogle) returns (Auth.LoginResult);
+
+  // Returns a WebAuthn challenge for passkey-based login.
+  rpc AuthGetPasskeyLoginChallenge (Auth.PasskeyDomain) returns (Auth.PasskeyChallenge);
+
+  // Logs in using a passkey credential response.
+  rpc AuthLoginWithPasskey (Auth.LoginWithPasskey) returns (Auth.LoginResult);
+
+  // Refreshes the access/refresh token pair.
+  rpc AuthRefreshToken (Auth.Tokens) returns (Auth.Tokens);
+
+  // Logs a user out from a single device or all devices.
+  rpc AuthLogout (Empty) returns (Empty);
+
+  // Returns the current authenticated user, resolved from the access token.
+  rpc AuthGetCurrentUser (Empty) returns (User);
+
+  // --- Auth Management ---
+
+  // Updates to a new password (requires the old password).
+  rpc AuthUpdatePassword (Auth.UpdatePassword) returns (Empty);
+
+  // Sets a new password using a temporary token from password retrieval.
+  rpc AuthResetPassword (Auth.ResetPassword) returns (Empty);
+
+  // Enables MFA login for the current user.
+  rpc AuthEnableUserMfa (Empty) returns (Empty);
+
+  // Disables MFA login for the current user.
+  rpc AuthDisableUserMfa (Empty) returns (Empty);
+
+  // Generates provisioning materials to enroll a TOTP authenticator.
+  rpc AuthGenerateTotpQrCode (Empty) returns (Auth.TotpQrCode);
+
+  // Binds/enrolls a TOTP authenticator for a user (requires a valid TOTP code).
+  rpc AuthBindTotp (Auth.BindTotp) returns (Empty);
+
+  // Unbinds a TOTP authenticator from a user.
+  rpc AuthUnbindTotp (User.ID) returns (Empty);
+
+  // Binds an email factor (used for verification/MFA).
+  rpc AuthBindEmail (Auth.BindEmail) returns (Empty);
+
+  // Unbinds the email factor.
+  rpc AuthUnbindEmail (User.ID) returns (Empty);
+
+  // Binds a phone factor (used for verification/MFA).
+  rpc AuthBindPhone (Auth.BindPhone) returns (Empty);
+
+  // Unbinds the phone factor.
+  rpc AuthUnbindPhone (User.ID) returns (Empty);
+
+  // Binds a WeChat factor.
+  rpc AuthBindWeChat (Auth.BindWeChat) returns (Empty);
+
+  // Unbinds the WeChat factor.
+  rpc AuthUnbindWeChat (User.ID) returns (Empty);
+
+  // Binds an Apple ID factor.
+  rpc AuthBindAppleId (Auth.BindApple) returns (Empty);
+
+  // Unbinds the Apple ID factor.
+  rpc AuthUnbindAppleId (User.ID) returns (Empty);
+
+  // Binds a Google ID factor.
+  rpc AuthBindGoogleId (Auth.BindGoogle) returns (Empty);
+
+  // Unbinds the Google ID factor.
+  rpc AuthUnbindGoogleId (User.ID) returns (Empty);
+
+  // Returns a WebAuthn challenge for passkey enrollment.
+  rpc AuthGetPasskeyBindChallenge (Auth.PasskeyDomain) returns (Auth.PasskeyChallenge);
+
+  // Binds a passkey credential to the current user.
+  rpc AuthBindPasskey (Auth.BindPasskey) returns (Empty);
+
+  // Unbinds a specific passkey from the current user.
+  rpc AuthUnbindPasskey (Auth.UnbindPasskey) returns (Empty);
+
+  // ---------------------------------------------------------------------------
+  // 2 — Device
+  // ---------------------------------------------------------------------------
+
+  // Unbinds a device from a user.
+  rpc DeviceUnbind (Device.UnbindReq) returns (Empty);
+
+  // Renames a device.
+  rpc DeviceRename (Device.RenameReq) returns (Empty);
+
+  // Auth Flow APIs (stateful login flow with forced inline MFA setup/verify)
+  rpc AuthFlowMfaSetupInitiate (Auth.FlowMfaSetupInitiateReq) returns (Auth.FlowMfaSetupInitiateRes); // FLOW_STATE_MFA_SETUP step 1: initiate binding for chosen method
+  rpc AuthFlowMfaSetupConfirm  (Auth.FlowMfaSetupConfirmReq)  returns (Auth.LoginResult);             // FLOW_STATE_MFA_SETUP step 2: confirm binding and complete login
+  rpc AuthFlowMfaVerify        (Auth.FlowMfaVerifyReq)        returns (Auth.LoginResult);             // FLOW_STATE_MFA_VERIFY: submit factor and complete login
 
   // User API
   rpc GetUsersByIDs   (User.GetReq)         returns (User.List);  // User Info by name
@@ -131,6 +251,328 @@ message IncludeAsn {
   bool include_asn = 1;
 }
 
+// -----------------------------------------------------------------------------
+// 2 — Auth
+// -----------------------------------------------------------------------------
+
+message Auth {
+  enum MfaMethod {
+    MFA_METHOD_UNSPECIFIED = 0;
+    MFA_METHOD_TOTP        = 1; // time-based one-time password (authenticator app)
+    MFA_METHOD_EMAIL       = 2; // email verification code
+    MFA_METHOD_SMS         = 3; // SMS verification code
+    MFA_METHOD_PASSKEY     = 4; // WebAuthn passkey
+  }
+
+  // Phone number (country code and local number).
+  message Phone {
+    string country_code = 1;
+    string number = 2;
+    bool send_only_when_exists = 3; // if true, send the code only if the phone is already registered
+  }
+
+  // RFC 5321/5322 email address.
+  message Email {
+    string email = 1;
+    bool send_only_when_exists = 2; // if true, send the code only if the email is already registered
+  }
+
+  // Verification code response.
+  message Code {
+    int64 result = 1;  // result code (0 = success)
+    string code = 2;   // verification code (may be empty when sent out-of-band)
+    int64 next = 3;    // earliest UNIX second at which the next code can be requested
+  }
+
+  // Flags for supported login methods.
+  message LoginMethods {
+    bool username_and_password = 1;
+    bool email_and_password = 2;
+    bool phone_and_password = 3;
+    bool email_code = 4;
+    bool phone_code = 5;
+    bool wechat = 6;
+    bool apple = 7;   // Sign in with Apple
+    bool google = 8;
+    bool passkey = 9;
+  }
+
+  // Login with password. Exactly one of username | phone | email must be set.
+  message LoginWithPassword {
+    Device.Info device_info = 1;
+
+    // Exactly one must be provided:
+    string username = 2;
+    Phone phone = 3;
+    string email = 4;
+
+    string password = 5;
+  }
+
+  // Set a new password using a temporary token obtained during password retrieval.
+  message ResetPassword {
+    string account_id = 1;
+    string password = 2;
+  }
+
+  message UpdatePassword {
+    string old_password = 1;
+    string new_password = 2;
+  }
+
+  // Login with phone + verification code.
+  message LoginWithPhone {
+    Device.Info device_info = 1;
+
+    Phone phone = 2;
+    string phone_code = 3;
+  }
+
+  // Login with email + verification code.
+  message LoginWithEmail {
+    Device.Info device_info = 1;
+
+    string email = 2;
+    string email_code = 3;
+  }
+
+  // Login with WeChat.
+  message LoginWithWeChat {
+    Device.Info device_info = 1;
+
+    string wechat_app_id = 2;
+    string wechat_code = 3;
+  }
+
+  // Login with Sign in with Apple.
+  message LoginWithApple {
+    Device.Info device_info = 1;
+
+    string apple_id_token = 2;
+  }
+
+  // Login with Sign in with Google.
+  message LoginWithGoogle {
+    Device.Info device_info = 1;
+
+    string google_id_token = 2;
+  }
+
+  message PasskeyDomain {
+    string domain = 1;
+    string account_id = 2;
+  }
+
+  message PasskeyChallenge {
+    string session_id = 1;
+    string data = 2; // JSON-encoded WebAuthn challenge options
+  }
+
+  message LoginWithPasskey {
+    Device.Info device_info = 1;
+    string domain = 2;
+    string session_id = 3;
+    string data = 4; // JSON-encoded WebAuthn credential response
+  }
+
+  // MFA methods available for the user.
+  message MfaMethods {
+    bool totp = 1;    // TOTP (Authenticator App) is available
+    string email = 2; // email address for email MFA (empty if not available)
+    Phone phone = 3;  // phone number for SMS MFA (empty if not available)
+  }
+
+  // Country info for phone login area selector.
+  message CountryCodeList {
+    string type = 1;           // category/region type of the list
+    repeated string codes = 2; // phone country codes, e.g., "+86"
+  }
+
+  message TokenSet {
+    string access_token = 1;
+    string refresh_token = 2;
+  }
+
+  // FlowState tells the client exactly what to do next after a login attempt.
+  enum FlowState {
+    FLOW_STATE_UNSPECIFIED = 0;
+    FLOW_STATE_AUTHENTICATED = 1;  // login complete; token_set is valid
+    FLOW_STATE_MFA_VERIFY    = 2;  // credentials OK; must verify an existing MFA factor
+    FLOW_STATE_MFA_SETUP     = 3;  // credentials OK; service requires MFA but none bound yet
+  }
+
+  // Result returned by login endpoints.
+  message LoginResult {
+    User   account   = 1;
+    FlowState state     = 2;
+
+    // FLOW_STATE_AUTHENTICATED only: final usable token pair
+    TokenSet token_set = 3;
+
+    // FLOW_STATE_MFA_VERIFY / FLOW_STATE_MFA_SETUP:
+    // short-lived credential that must be passed to AuthFlowMfaVerify or AuthFlowMfaSetup
+    string flow_token = 4;
+
+    // FLOW_STATE_MFA_VERIFY: methods the account already has bound; client shows a picker
+    repeated MfaMethod available_mfa_methods = 5;
+
+    // FLOW_STATE_MFA_SETUP: methods the account can bind right now
+    //   - SMS    available when account has a phone number
+    //   - EMAIL  available when account has an email address
+    //   - TOTP   always available
+    //   - PASSKEY always available
+    repeated MfaMethod available_setup_methods = 6;
+  }
+
+  // Access/refresh token pair.
+  message Tokens {
+    string access_token = 1;
+    string refresh_token = 2;
+  }
+
+  // Bind (enroll) TOTP for a user.
+  message BindTotp {
+    string code = 1; // current TOTP code for proof-of-possession
+  }
+
+  // Bind email as an authentication factor.
+  message BindEmail {
+    string email = 1;
+    string code = 2; // verification code sent to the email
+  }
+
+  // Bind phone as an authentication factor.
+  message BindPhone {
+    Phone phone = 1;
+    string code = 2; // verification code sent to the phone
+  }
+
+  // Bind WeChat as an authentication factor.
+  message BindWeChat {
+    string app_id = 1;
+    string code = 2;
+  }
+
+  // Bind Apple ID as an authentication factor.
+  message BindApple {
+    string id_token = 1;
+  }
+
+  // Bind Google ID as an authentication factor.
+  message BindGoogle {
+    string id_token = 1;
+  }
+
+  message BindPasskey {
+    string domain = 1;
+    string session_id = 2;
+    string data = 3; // JSON-encoded WebAuthn registration response
+  }
+
+  message UnbindPasskey {
+    string account_id = 1;
+    string passkey_id = 2;
+  }
+
+  // Result payload for TOTP provisioning.
+  message TotpQrCode {
+    bytes qr_png = 1;         // QR image in PNG bytes
+    string auth_uri = 2;      // otpauth:// URI for direct import into authenticator apps
+    string secret = 3;        // TOTP secret (sensitive; short-lived; do not log)
+    string issuer = 4;        // issuer label shown in authenticator apps
+    string display_name = 5;  // account name shown in authenticator apps
+  }
+
+  // Step 1 of inline MFA setup: choose a method and get the binding material.
+  message FlowMfaSetupInitiateReq {
+    string    flow_token   = 1;
+    MfaMethod method       = 2;
+    string    domain       = 3;  // passkey only: relying-party domain
+  }
+
+  // Response to FlowMfaSetupInitiateReq; fields are populated based on method.
+  message FlowMfaSetupInitiateRes {
+    // TOTP: display this QR code in the authenticator app
+    string totp_image  = 1;
+    string totp_issuer = 2;
+    string totp_secret = 3;
+
+    // PASSKEY: WebAuthn registration challenge
+    string session_id = 4;
+    string data       = 5;
+  }
+
+  // Step 2 of inline MFA setup: confirm binding with the received code or credential.
+  message FlowMfaSetupConfirmReq {
+    string    flow_token   = 1;
+    MfaMethod method       = 2;
+
+    string code = 3;  // TOTP first code / SMS OTP / Email OTP
+
+    // passkey only
+    string domain     = 4;
+    string session_id = 5;
+    string data       = 6;
+  }
+
+  // Input for AuthFlowMfaVerify: submit the MFA factor for an account that already has one bound.
+  // For SMS / Email: call AccountPhoneSend / AccountEmailSend first to trigger the code.
+  // For Passkey: call AccountPasskeyLoginChallengeGet first to obtain the challenge.
+  message FlowMfaVerifyReq {
+    string    flow_token   = 1;
+    MfaMethod method       = 2;
+
+    string code = 3;  // TOTP / SMS / Email OTP
+
+    // passkey only
+    string domain     = 4;
+    string session_id = 5;
+    string data       = 6;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 3 — Device
+// -----------------------------------------------------------------------------
+
+message Device {
+  // Device details captured during login/binding.
+  message Info {
+    string id = 1;
+    int64 category = 2;
+    int64 type = 3;
+    string os = 4;
+    int64 language = 5;
+    string name = 6;
+    string model = 7;
+    string serial_number = 8;
+    string version = 9;
+    bool Connected = 10; // non-standard proto casing; preserved for wire compatibility
+    bool Current = 11;   // non-standard proto casing; preserved for wire compatibility
+
+    int64 sent = 12;     // bytes sent by this device
+    int64 received = 13; // bytes received by this device
+  }
+
+  // Device list returned for a user.
+  message List {
+    repeated Info device_infos = 1;
+  }
+
+  // Unbind a device from a user.
+  message UnbindReq {
+    string account_id = 1;
+    string device_id = 2;
+  }
+
+  // Rename a device.
+  message RenameReq {
+    string account_id = 1;
+    string device_id = 2;
+    string device_name = 3;
+  }
+}
+
 /*
  * Info
  */
@@ -143,43 +585,6 @@ message ControllerInfo {
 
 message UpdatePortReq {
   uint32 port = 1;
-}
-
-/*
- * Login
- */
-message LoginRequest {
-  string username = 1;
-  string password = 2;
-}
-
-enum MfaMethod {
-  MFA_METHOD_UNSPECIFIED = 0;
-  MFA_METHOD_TOTP = 1;
-  MFA_METHOD_EMAIL = 2;
-  MFA_METHOD_SMS = 3;
-}
-
-message MfaLoginRequest {
-  string access_token = 1;
-  MfaMethod mfa_method = 2;
-  string code = 3;
-}
-
-message TokenRefreshRequest {
-  string access_token = 1;
-  string refresh_token = 2;
-}
-
-message ResetPasswordRequest {
-  string id = 1;
-  string password = 2;
-}
-
-message LoginResponse {
-  string access_token = 1;
-  string refresh_token = 2;
-  bool need_mfa = 3;
 }
 
 /*
