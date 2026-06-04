@@ -2,12 +2,22 @@
 
 `service-utils` is a shared utility submodule for ASN Services implemented as plugins.
 
-It is not the ASN Service API itself. The ASN Service API is provided by the `asn-service-api` Go module. This repository contains the common builder, Docker, config, topology, and dependency metadata used by services that plug into the ASN Framework.
+It is not the ASN Service API itself. The ASN Service API is provided by the
+`asn-service-api` Go module. This repository contains ASN-service-specific
+builder, Docker, config, topology, and dependency metadata used by services that
+plug into the ASN Framework.
+
+`service-utils` must not become the home for generic AM workflow runtime code,
+generic workflow Make libraries, or scripts shared by non-ASN services. Those
+belong in the shared workflow runtime or another explicitly generic service
+tooling location. Keep this repository focused on ASN service helpers, ASN
+Framework compatibility, ASN plugin build support, and ASN setup/versioning
+knowledge.
 
 ## Repository Layout
 
 ```text
-builder/    Makefiles, Dockerfiles, and ASN Framework version metadata for plugin builds
+builder/    ASN service plugin Makefiles, Dockerfiles, and ASN Framework version metadata
 config/     ASN Controller and ASN Service Node config templates and topology examples
 docker/     Docker Compose examples and cluster-generation helper
 proto/      ASN manager/local protobuf definitions used by utility tooling
