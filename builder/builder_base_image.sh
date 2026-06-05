@@ -102,6 +102,67 @@ builder_input_hash() {
     )
 }
 
+prepare_build_context() {
+    local build_context="$context_dir"
+    local tmp_context=""
+
+    if [ -L "$context_dir/go.mod" ] || [ -L "$context_dir/go.sum" ]; then
+        tmp_context="$(mktemp -d "${TMPDIR:-/tmp}/builder-base-context.XXXXXX")"
+        cp -L "$context_dir/go.mod" "$tmp_context/go.mod"
+        if [ -e "$context_dir/go.sum" ]; then
+            cp -L "$context_dir/go.sum" "$tmp_context/go.sum"
+        fi
+        build_context="$tmp_context"
+    fi
+
+    printf '%s\n' "$build_context"
+}
+
+cleanup_build_context() {
+    local build_context="$1"
+    if [ "$build_context" != "$context_dir" ]; then
+        rm -rf "$build_context"
+    fi
+}
+
+context_symlink_mounts=()
+
+symlink_container_target() {
+    local rel="$1" target="$2" rel_dir
+
+    case "$target" in
+        /*) printf '%s\n' "$target" ;;
+        *)
+            rel_dir="$(dirname "$rel")"
+            if [ "$rel_dir" = "." ]; then
+                printf '%s/%s\n' "$workdir" "$target"
+            else
+                printf '%s/%s/%s\n' "$workdir" "$rel_dir" "$target"
+            fi
+            ;;
+    esac
+}
+
+collect_context_symlink_mounts() {
+    local rel link_path target target_abs container_target
+    context_symlink_mounts=()
+
+    for rel in utils service-utils go.mod go.sum; do
+        link_path="$context_dir/$rel"
+        [ -L "$link_path" ] || continue
+        target="$(readlink "$link_path")"
+        case "$target" in
+            /*) target_abs="$target" ;;
+            *)
+                target_abs="$(cd "$(dirname "$link_path")" && cd "$(dirname "$target")" && pwd -P)/$(basename "$target")"
+                ;;
+        esac
+        [ -e "$target_abs" ] || continue
+        container_target="$(symlink_container_target "$rel" "$target")"
+        context_symlink_mounts+=(--mount "type=bind,source=$target_abs,target=$container_target,readonly")
+    done
+}
+
 cmd_hashes() {
     require_common
     printf 'service_go_mod_hash=%s\n' "$(service_go_mod_hash)"
@@ -114,10 +175,12 @@ cmd_prepare() {
     [ -n "$ssh_key" ] || { echo "builder_base_image ERROR: --ssh-key or PRIVATE_GIT_SSH_KEY_FILE is required" >&2; exit 1; }
     [ -r "$ssh_key" ] || { echo "builder_base_image ERROR: SSH key is not readable: $ssh_key" >&2; exit 1; }
 
-    local go_mod_hash inputs_hash
+    local go_mod_hash inputs_hash build_context build_status
     go_mod_hash="$(service_go_mod_hash)"
     inputs_hash="$(builder_input_hash)"
+    build_context="$(prepare_build_context)"
 
+    set +e
     DOCKER_BUILDKIT=1 docker buildx build \
         --progress=plain \
         --platform "$platform" \
@@ -130,7 +193,11 @@ cmd_prepare() {
         --label "asn.go=$go_version" \
         --label "asn.service_go_mod=$go_mod_hash" \
         --label "asn.builder_inputs=$inputs_hash" \
-        -t "$image" "$context_dir"
+        -t "$image" "$build_context"
+    build_status=$?
+    set -e
+    cleanup_build_context "$build_context"
+    return "$build_status"
 }
 
 print_check_failure() {
@@ -228,12 +295,22 @@ cmd_check() {
     fi
 
     local cache_probe cache_probe_status
+    collect_context_symlink_mounts
     set +e
-    cache_probe="$(docker run --rm --platform "$platform" \
-        --mount "type=bind,source=$context_dir,target=$workdir,readonly" \
-        --workdir "$workdir" \
-        --env "SERVICE_GO_CACHE_PACKAGES=$cache_packages" \
-        "$image" sh -lc 'GOPROXY=off GOSUMDB=off go list -mod=readonly -deps $SERVICE_GO_CACHE_PACKAGES >/dev/null' 2>&1)"
+    if [ "${#context_symlink_mounts[@]}" -eq 0 ]; then
+        cache_probe="$(docker run --rm --platform "$platform" \
+            --mount "type=bind,source=$context_dir,target=$workdir,readonly" \
+            --workdir "$workdir" \
+            --env "SERVICE_GO_CACHE_PACKAGES=$cache_packages" \
+            "$image" sh -lc 'GOPROXY=off GOSUMDB=off go list -mod=readonly -deps $SERVICE_GO_CACHE_PACKAGES >/dev/null' 2>&1)"
+    else
+        cache_probe="$(docker run --rm --platform "$platform" \
+            --mount "type=bind,source=$context_dir,target=$workdir,readonly" \
+            "${context_symlink_mounts[@]}" \
+            --workdir "$workdir" \
+            --env "SERVICE_GO_CACHE_PACKAGES=$cache_packages" \
+            "$image" sh -lc 'GOPROXY=off GOSUMDB=off go list -mod=readonly -deps $SERVICE_GO_CACHE_PACKAGES >/dev/null' 2>&1)"
+    fi
     cache_probe_status=$?
     set -e
     if [ "$cache_probe_status" -ne 0 ]; then

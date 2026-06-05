@@ -237,9 +237,35 @@ service-build-once-docker-run: .require-version-build-var
 	@echo "  workspace:   $(CURDIR) -> $(SERVICE_BUILD_WORKDIR)"
 	@echo "  go cache:    $(SERVICE_BUILDER_GOCACHE) -> /root/.cache/go-build"
 	@echo "  secret:      PRIVATE_GIT_SSH_KEY_FILE -> $(SERVICE_BUILD_SECRET_TARGET) (readonly)"
-	@docker run --rm --platform $(SERVICE_BUILD_DOCKER_PLATFORM) --name $(BUILD_ENV_IMAGE) \
+	@set -eo pipefail; \
+		symlink_mounts=(); \
+		for rel in utils service-utils go.mod go.sum; do \
+			link_path="$(CURDIR)/$$rel"; \
+			if [ ! -L "$$link_path" ]; then \
+				continue; \
+			fi; \
+			target="$$(readlink "$$link_path")"; \
+			case "$$target" in \
+				/*) \
+					target_abs="$$target"; \
+					container_target="$$target" ;; \
+				*) \
+					target_abs="$$(cd "$$(dirname "$$link_path")" && cd "$$(dirname "$$target")" && pwd -P)/$$(basename "$$target")"; \
+					rel_dir="$$(dirname "$$rel")"; \
+					if [ "$$rel_dir" = "." ]; then \
+						container_target="$(SERVICE_BUILD_WORKDIR)/$$target"; \
+					else \
+						container_target="$(SERVICE_BUILD_WORKDIR)/$$rel_dir/$$target"; \
+					fi ;; \
+			esac; \
+			if [ -e "$$target_abs" ]; then \
+				symlink_mounts+=(--mount "type=bind,source=$$target_abs,target=$$container_target,readonly"); \
+			fi; \
+		done; \
+		docker run --rm --platform $(SERVICE_BUILD_DOCKER_PLATFORM) --name $(BUILD_ENV_IMAGE) \
 		$(SERVICE_BUILD_DOCKER_RUN_ARGS) \
 		--mount type=bind,source="$(CURDIR)",target=$(SERVICE_BUILD_WORKDIR) \
+		"$${symlink_mounts[@]}" \
 		--mount type=bind,source="$$PRIVATE_GIT_SSH_KEY_FILE",target=$(SERVICE_BUILD_SECRET_TARGET),readonly \
 		--mount type=bind,source="$(SERVICE_BUILDER_GOCACHE)",target=/root/.cache/go-build \
 		--env BUILD_MODE="$(BUILD_MODE)" \
