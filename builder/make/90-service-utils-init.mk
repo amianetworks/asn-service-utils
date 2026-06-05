@@ -2,7 +2,7 @@
 
 .PHONY: init_service_utils update_service_utils
 
-SERVICE_UTILS_REF ?= release/$(ASN_SERVICE_API_VERSION)
+SERVICE_UTILS_REF ?= workflow/$(ASN_SERVICE_API_VERSION)
 
 #------------------------------------------------------------------------------#
 init_service_utils:
