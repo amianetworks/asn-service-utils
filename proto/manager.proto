@@ -11,13 +11,145 @@ service Manager {
   rpc GetInfo     (Empty)         returns (ControllerInfo);
   rpc UpdatePort  (UpdatePortReq) returns (Empty);
 
-  // Authentication & Authorization API
-  rpc Login           (LoginRequest)          returns (LoginResponse);
-  rpc MfaLogin        (MfaLoginRequest)       returns (LoginResponse);
-  rpc TokenRefresh    (TokenRefreshRequest)   returns (LoginResponse);
-  rpc ResetPassword   (ResetPasswordRequest)  returns (Empty);
-  rpc Logout          (Empty)                 returns (Empty);
-  rpc GetUserByToken  (Empty)                 returns (User);
+  // ---------------------------------------------------------------------------
+  // 1 — Auth (Verification Codes, Login, MFA, Factors, Tokens, Logout)
+  // ---------------------------------------------------------------------------
+
+  // --- Auth Login/Logout ---
+
+  // Lists supported login methods (password, phone+code, email+code, WeChat, Sign in with Apple).
+  rpc AuthListLoginMethods (Empty) returns (Auth.LoginMethods);
+
+  // Lists allowed phone countries for SMS login/bind.
+  rpc AuthListPhoneCountries (Empty) returns (Auth.CountryCodeList);
+
+  // Sends a verification code (e.g., SMS) to a phone number.
+  rpc AuthSendCodeToPhone (Auth.Phone) returns (Auth.Code);
+
+  // Sends a verification code to an email address.
+  rpc AuthSendCodeToEmail (Auth.Email) returns (Auth.Code);
+
+  // Login is a single stateful flow regardless of credential kind:
+  //   AuthFlowInit -> (optional) AuthFlowGetChallenge -> AuthFlowVerify
+  // and, when AuthFlowVerify returns FLOW_STATE_MFA_VERIFY / FLOW_STATE_MFA_SETUP,
+  // continue via the Auth Flow MFA APIs below.
+
+  // Step 1: choose a credential method, provide the matching identity, and open a
+  // login flow. The returned state directs the client to AuthFlowGetChallenge
+  // (FLOW_STATE_CHALLENGE_REQUIRED) or straight to AuthFlowVerify (FLOW_STATE_VERIFY_REQUIRED).
+  rpc AuthFlowInit (Auth.FlowInitReq) returns (Auth.FlowInitRes);
+
+  // Step 2 (FLOW_STATE_CHALLENGE_REQUIRED only): prepare the verify step — send an
+  // OTP for phone/email code methods, or return a WebAuthn challenge for passkey.
+  rpc AuthFlowGetChallenge (Auth.FlowGetChallengeReq) returns (Auth.FlowGetChallengeRes);
+
+  // Step 3: submit the proof matching the flow's method and complete the login (or
+  // advance to FLOW_STATE_MFA_VERIFY / FLOW_STATE_MFA_SETUP).
+  rpc AuthFlowVerify (Auth.FlowVerifyReq) returns (Auth.LoginResult);
+
+  // Re-enters the MFA flow from an MFA-unverified access token (when token
+  // verification reports MFA is still required).
+  rpc AuthFlowResume (Auth.FlowResumeReq) returns (Auth.LoginResult);
+
+  // Refreshes the access/refresh token pair.
+  rpc AuthRefreshToken (Auth.Tokens) returns (Auth.Tokens);
+
+  // Logs a user out from a single device or all devices.
+  rpc AuthLogout (Empty) returns (Empty);
+
+  // Returns the current authenticated user, resolved from the access token.
+  rpc AuthGetCurrentUser (Empty) returns (User);
+
+  // --- Auth Management ---
+
+  // Password Flow: a single stateful flow covering both forgot-password recovery
+  // and in-session password change.
+  //   AuthPasswordFlowInit -> (OTP methods) AuthPasswordFlowSendCode
+  //     -> AuthPasswordFlowVerify -> AuthPasswordFlowComplete
+  // Step 1: identify the account and obtain a flow token + available methods.
+  rpc AuthPasswordFlowInit (Auth.PasswordFlowInitReq) returns (Auth.PasswordFlowInitRes);
+
+  // Step 2 (OTP methods only): send (or resend, rate-limited) the verification code
+  // to the account's bound email/phone. Skip for the old-password method.
+  rpc AuthPasswordFlowSendCode (Auth.PasswordFlowSendCodeReq) returns (Auth.PasswordFlowSendCodeRes);
+
+  // Step 3: submit the chosen proof (old password or OTP) to verify the flow token.
+  rpc AuthPasswordFlowVerify (Auth.PasswordFlowVerifyReq) returns (Empty);
+
+  // Step 4: set the new password for a verified flow token.
+  rpc AuthPasswordFlowComplete (Auth.PasswordFlowCompleteReq) returns (Empty);
+
+  // Admin-only: directly set another account's password (no proof of the old one).
+  rpc AuthResetPassword (Auth.ResetPassword) returns (Empty);
+
+  // Enables MFA login for the current user.
+  rpc AuthEnableUserMfa (Empty) returns (Empty);
+
+  // Disables MFA login for the current user.
+  rpc AuthDisableUserMfa (Empty) returns (Empty);
+
+  // Generates provisioning materials to enroll a TOTP authenticator.
+  rpc AuthGenerateTotpQrCode (Empty) returns (Auth.TotpQrCode);
+
+  // Binds/enrolls a TOTP authenticator for a user (requires a valid TOTP code).
+  rpc AuthBindTotp (Auth.BindTotp) returns (Empty);
+
+  // Unbinds a TOTP authenticator from a user.
+  rpc AuthUnbindTotp (User.ID) returns (Empty);
+
+  // Binds an email factor (used for verification/MFA).
+  rpc AuthBindEmail (Auth.BindEmail) returns (Empty);
+
+  // Unbinds the email factor.
+  rpc AuthUnbindEmail (User.ID) returns (Empty);
+
+  // Binds a phone factor (used for verification/MFA).
+  rpc AuthBindPhone (Auth.BindPhone) returns (Empty);
+
+  // Unbinds the phone factor.
+  rpc AuthUnbindPhone (User.ID) returns (Empty);
+
+  // Binds a WeChat factor.
+  rpc AuthBindWeChat (Auth.BindWeChat) returns (Empty);
+
+  // Unbinds the WeChat factor.
+  rpc AuthUnbindWeChat (User.ID) returns (Empty);
+
+  // Binds an Apple ID factor.
+  rpc AuthBindAppleId (Auth.BindApple) returns (Empty);
+
+  // Unbinds the Apple ID factor.
+  rpc AuthUnbindAppleId (User.ID) returns (Empty);
+
+  // Binds a Google ID factor.
+  rpc AuthBindGoogleId (Auth.BindGoogle) returns (Empty);
+
+  // Unbinds the Google ID factor.
+  rpc AuthUnbindGoogleId (User.ID) returns (Empty);
+
+  // Returns a WebAuthn challenge for passkey enrollment.
+  rpc AuthGetPasskeyBindChallenge (Auth.PasskeyDomain) returns (Auth.PasskeyChallenge);
+
+  // Binds a passkey credential to the current user.
+  rpc AuthBindPasskey (Auth.BindPasskey) returns (Empty);
+
+  // Unbinds a specific passkey from the current user.
+  rpc AuthUnbindPasskey (Auth.UnbindPasskey) returns (Empty);
+
+  // ---------------------------------------------------------------------------
+  // 2 — Device
+  // ---------------------------------------------------------------------------
+
+  // Unbinds a device from a user.
+  rpc DeviceUnbind (Device.UnbindReq) returns (Empty);
+
+  // Renames a device.
+  rpc DeviceRename (Device.RenameReq) returns (Empty);
+
+  // Auth Flow APIs (stateful login flow with forced inline MFA setup/verify)
+  rpc AuthFlowMfaSetupInitiate (Auth.FlowMfaSetupInitiateReq) returns (Auth.FlowMfaSetupInitiateRes); // FLOW_STATE_MFA_SETUP step 1: initiate binding for chosen method
+  rpc AuthFlowMfaSetupConfirm  (Auth.FlowMfaSetupConfirmReq)  returns (Auth.LoginResult);             // FLOW_STATE_MFA_SETUP step 2: confirm binding and complete login
+  rpc AuthFlowMfaVerify        (Auth.FlowMfaVerifyReq)        returns (Auth.LoginResult);             // FLOW_STATE_MFA_VERIFY: submit factor and complete login
 
   // User API
   rpc GetUsersByIDs   (User.GetReq)         returns (User.List);  // User Info by name
@@ -131,6 +263,405 @@ message IncludeAsn {
   bool include_asn = 1;
 }
 
+// -----------------------------------------------------------------------------
+// 2 — Auth
+// -----------------------------------------------------------------------------
+
+message Auth {
+  enum MfaMethod {
+    MFA_METHOD_UNSPECIFIED = 0;
+    MFA_METHOD_TOTP        = 1; // time-based one-time password (authenticator app)
+    MFA_METHOD_EMAIL       = 2; // email verification code
+    MFA_METHOD_SMS         = 3; // SMS verification code
+    MFA_METHOD_PASSKEY     = 4; // WebAuthn passkey
+  }
+
+  // CredentialMethod is the identity + proof kind chosen when starting a login flow.
+  enum CredentialMethod {
+    CREDENTIAL_METHOD_UNSPECIFIED       = 0;
+    CREDENTIAL_METHOD_USERNAME_PASSWORD = 1; // identity: username, proof: password
+    CREDENTIAL_METHOD_PHONE_PASSWORD    = 2; // identity: phone,    proof: password
+    CREDENTIAL_METHOD_EMAIL_PASSWORD    = 3; // identity: email,    proof: password
+    CREDENTIAL_METHOD_PHONE_CODE        = 4; // identity: phone,    proof: OTP
+    CREDENTIAL_METHOD_EMAIL_CODE        = 5; // identity: email,    proof: OTP
+    CREDENTIAL_METHOD_WECHAT            = 6; // WeChat OAuth
+    CREDENTIAL_METHOD_APPLE             = 7; // Sign in with Apple
+    CREDENTIAL_METHOD_GOOGLE            = 8; // Sign in with Google
+    CREDENTIAL_METHOD_PASSKEY           = 9; // WebAuthn passkey
+  }
+
+  // PasswordVerifyMethod is the proof a user supplies during the password flow.
+  enum PasswordVerifyMethod {
+    PASSWORD_VERIFY_METHOD_UNSPECIFIED  = 0;
+    PASSWORD_VERIFY_METHOD_OLD_PASSWORD = 1; // prove possession of the current password
+    PASSWORD_VERIFY_METHOD_EMAIL        = 2; // OTP sent to the bound email
+    PASSWORD_VERIFY_METHOD_SMS          = 3; // OTP sent to the bound phone
+  }
+
+  // PasswordFlowInitState is the outcome of AuthPasswordFlowInit.
+  enum PasswordFlowInitState {
+    PASSWORD_FLOW_INIT_STATE_UNSPECIFIED     = 0;
+    PASSWORD_FLOW_INIT_STATE_METHOD_REQUIRED = 1; // flow_token and methods are valid; pick a method
+    PASSWORD_FLOW_INIT_STATE_NO_RECOVERY     = 2; // account not found OR no usable verification method
+  }
+
+  // Phone number (country code and local number).
+  message Phone {
+    string country_code = 1;
+    string number = 2;
+    bool send_only_when_exists = 3; // if true, send the code only if the phone is already registered
+  }
+
+  // RFC 5321/5322 email address.
+  message Email {
+    string email = 1;
+    bool send_only_when_exists = 2; // if true, send the code only if the email is already registered
+  }
+
+  // Verification code response.
+  message Code {
+    int64 result = 1;  // result code (0 = success)
+    string code = 2;   // verification code (may be empty when sent out-of-band)
+    int64 next = 3;    // earliest UNIX second at which the next code can be requested
+  }
+
+  // The login methods enabled at runtime.
+  message LoginMethods {
+    repeated CredentialMethod methods = 1;
+  }
+
+  // Admin-only: directly set another account's password.
+  message ResetPassword {
+    string account_id = 1;
+    string password = 2;
+  }
+
+  message PasskeyDomain {
+    string domain = 1;
+    string account_id = 2;
+  }
+
+  message PasskeyChallenge {
+    string session_id = 1;
+    string data = 2; // JSON-encoded WebAuthn challenge options
+  }
+
+  // MfaMethodInfo is one MFA option offered to the client during a login flow.
+  // masked_target is a masked rendering of the delivery channel for SMS/Email
+  // (empty for TOTP/Passkey); country_code is set only for SMS.
+  message MfaMethodInfo {
+    MfaMethod method        = 1;
+    string    masked_target = 2;
+    string    country_code  = 3;
+  }
+
+  // Country info for phone login area selector.
+  message CountryCodeList {
+    string type = 1;           // category/region type of the list
+    repeated string codes = 2; // phone country codes, e.g., "+86"
+  }
+
+  message TokenSet {
+    string access_token = 1;
+    string refresh_token = 2;
+  }
+
+  // FlowState tells the client exactly what to do next after a login attempt.
+  enum FlowState {
+    FLOW_STATE_UNSPECIFIED = 0;
+    FLOW_STATE_AUTHENTICATED = 1;     // login complete; token_set is valid
+    FLOW_STATE_MFA_VERIFY    = 2;     // credentials OK; must verify an existing MFA factor
+    FLOW_STATE_MFA_SETUP     = 3;     // credentials OK; service requires MFA but none bound yet
+    FLOW_STATE_CHALLENGE_REQUIRED = 4; // call AuthFlowGetChallenge (send OTP / get passkey challenge), then AuthFlowVerify
+    FLOW_STATE_VERIFY_REQUIRED    = 5; // call AuthFlowVerify with the proof
+  }
+
+  // Result returned by login endpoints.
+  message LoginResult {
+    User   account   = 1;
+    FlowState state     = 2;
+
+    // FLOW_STATE_AUTHENTICATED only: final usable token pair
+    TokenSet token_set = 3;
+
+    // FLOW_STATE_MFA_VERIFY / FLOW_STATE_MFA_SETUP:
+    // short-lived credential that must be passed to AuthFlowMfaVerify or AuthFlowMfaSetup
+    string flow_token = 4;
+
+    // FLOW_STATE_MFA_VERIFY: methods the account already has bound; client shows a picker
+    repeated MfaMethodInfo available_mfa_methods = 5;
+
+    // FLOW_STATE_MFA_SETUP: methods the account can bind right now
+    //   - SMS    available when account has a phone number
+    //   - EMAIL  available when account has an email address
+    //   - TOTP   always available
+    //   - PASSKEY always available
+    repeated MfaMethod available_setup_methods = 6;
+  }
+
+  // Access/refresh token pair.
+  message Tokens {
+    string access_token = 1;
+    string refresh_token = 2;
+  }
+
+  // Bind (enroll) TOTP for a user.
+  message BindTotp {
+    string code = 1; // current TOTP code for proof-of-possession
+  }
+
+  // Bind email as an authentication factor.
+  message BindEmail {
+    string email = 1;
+    string code = 2; // verification code sent to the email
+  }
+
+  // Bind phone as an authentication factor.
+  message BindPhone {
+    Phone phone = 1;
+    string code = 2; // verification code sent to the phone
+  }
+
+  // Bind WeChat as an authentication factor.
+  message BindWeChat {
+    string app_id = 1;
+    string code = 2;
+  }
+
+  // Bind Apple ID as an authentication factor.
+  message BindApple {
+    string id_token = 1;
+  }
+
+  // Bind Google ID as an authentication factor.
+  message BindGoogle {
+    string id_token = 1;
+  }
+
+  message BindPasskey {
+    string domain = 1;
+    string session_id = 2;
+    string data = 3; // JSON-encoded WebAuthn registration response
+  }
+
+  message UnbindPasskey {
+    string account_id = 1;
+    string passkey_id = 2;
+  }
+
+  // Result payload for TOTP provisioning.
+  message TotpQrCode {
+    bytes qr_png = 1;         // QR image in PNG bytes
+    string auth_uri = 2;      // otpauth:// URI for direct import into authenticator apps
+    string secret = 3;        // TOTP secret (sensitive; short-lived; do not log)
+    string issuer = 4;        // issuer label shown in authenticator apps
+    string display_name = 5;  // account name shown in authenticator apps
+  }
+
+  // Step 1 of inline MFA setup: choose a method and get the binding material.
+  message FlowMfaSetupInitiateReq {
+    string    flow_token   = 1;
+    MfaMethod method       = 2;
+    string    domain       = 3;  // passkey only: relying-party domain
+  }
+
+  // Response to FlowMfaSetupInitiateReq; fields are populated based on method.
+  message FlowMfaSetupInitiateRes {
+    // TOTP: display this QR code in the authenticator app
+    string totp_image  = 1;
+    string totp_issuer = 2;
+    string totp_secret = 3;
+
+    // PASSKEY: WebAuthn registration challenge
+    string session_id = 4;
+    string data       = 5;
+  }
+
+  // Step 2 of inline MFA setup: confirm binding with the received code or credential.
+  message FlowMfaSetupConfirmReq {
+    string    flow_token   = 1;
+    MfaMethod method       = 2;
+
+    string code = 3;  // TOTP first code / SMS OTP / Email OTP
+
+    // passkey only
+    string domain     = 4;
+    string session_id = 5;
+    string data       = 6;
+  }
+
+  // Input for AuthFlowMfaVerify: submit the MFA factor for an account that already has one bound.
+  // For SMS / Email: call AuthFlowGetChallenge first to trigger the code.
+  // For Passkey: call AuthFlowGetChallenge first to obtain the challenge.
+  message FlowMfaVerifyReq {
+    string    flow_token   = 1;
+    MfaMethod method       = 2;
+
+    string code = 3;  // TOTP / SMS / Email OTP
+
+    // passkey only
+    string domain     = 4;
+    string session_id = 5;
+    string data       = 6;
+  }
+
+  // --- Unified login flow ---
+
+  // Step 1 input: choose a credential method and provide the matching identity.
+  // Fill the identity for the method's identity kind: username for *_USERNAME_*,
+  // phone for *_PHONE_*, email for *_EMAIL_*. Third-party (WeChat/Apple/Google)
+  // and Passkey methods leave all identity fields empty.
+  message FlowInitReq {
+    Device.Info      device_info        = 1;
+    CredentialMethod method             = 2;
+    bool             create_if_not_exist = 3; // create the account on first successful credential validation
+
+    string username = 4;
+    Phone  phone    = 5;
+    string email    = 6;
+  }
+
+  // Step 1 output: either FLOW_STATE_CHALLENGE_REQUIRED or FLOW_STATE_VERIFY_REQUIRED.
+  message FlowInitRes {
+    FlowState state      = 1;
+    string    flow_token = 2;
+  }
+
+  // Step 2 input (FLOW_STATE_CHALLENGE_REQUIRED): prepare the verify step.
+  message FlowGetChallengeReq {
+    string    flow_token = 1;
+    MfaMethod mfa_method = 2; // MFA phase only; ignored in the credential phase
+    string    domain     = 3; // passkey only: relying-party domain
+  }
+
+  // Step 2 output: OTP send result and/or a passkey challenge.
+  message FlowGetChallengeRes {
+    int64  result     = 1; // CodeSendResult (OTP methods)
+    int64  next       = 2; // cooldown in seconds before another code can be requested
+    string code       = 3; // dev-mode OTP only
+    string session_id = 4; // passkey only
+    string data       = 5; // passkey only: JSON-encoded WebAuthn challenge options
+  }
+
+  // Step 3 input: submit the proof matching the flow's method (fill only the
+  // relevant fields). password for *_PASSWORD; code for *_CODE; wechat_* for WeChat;
+  // apple_id_token/google_id_token for Apple/Google; domain/session_id/data for passkey.
+  message FlowVerifyReq {
+    string flow_token = 1;
+
+    string password = 2;
+    string code     = 3;
+
+    string wechat_app_id  = 4;
+    string wechat_code    = 5;
+    string apple_id_token = 6;
+    string google_id_token = 7;
+
+    string domain     = 8;
+    string session_id = 9;
+    string data       = 10;
+  }
+
+  // Re-enter the MFA flow from an MFA-unverified access token.
+  message FlowResumeReq {
+    string access_token = 1;
+  }
+
+  // --- Password flow ---
+
+  // Step 1 input: identify the account by exactly one of the identity fields.
+  message PasswordFlowInitReq {
+    string account_id   = 1;
+    string username     = 2;
+    string email        = 3;
+    string country_code = 4;
+    string number       = 5;
+  }
+
+  // Step 1 output: the available verification methods for the resolved account.
+  message PasswordFlowInitRes {
+    PasswordFlowInitState state      = 1;
+    string                flow_token = 2;
+    repeated PasswordFlowMethod methods = 3;
+  }
+
+  // One verification option offered after init. masked_target is empty for the
+  // old-password method; country_code is set only for SMS.
+  message PasswordFlowMethod {
+    PasswordVerifyMethod method        = 1;
+    string               masked_target = 2;
+    string               country_code  = 3;
+  }
+
+  // Step 2 input (OTP methods only): send (or resend) the code to the bound target.
+  message PasswordFlowSendCodeReq {
+    string               flow_token = 1;
+    PasswordVerifyMethod method     = 2; // PASSWORD_VERIFY_METHOD_EMAIL or _SMS
+  }
+
+  message PasswordFlowSendCodeRes {
+    int64  result = 1; // CodeSendResult
+    int64  next   = 2; // cooldown in seconds before another code can be requested
+    string code   = 3; // dev-mode OTP only
+  }
+
+  // Step 3 input: submit the chosen proof (old password or OTP).
+  message PasswordFlowVerifyReq {
+    string               flow_token   = 1;
+    PasswordVerifyMethod method       = 2;
+    string               code         = 3; // OTP methods
+    string               old_password = 4; // old-password method
+  }
+
+  // Step 4 input: set the new password for a verified flow token.
+  message PasswordFlowCompleteReq {
+    string flow_token   = 1;
+    string new_password = 2;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 3 — Device
+// -----------------------------------------------------------------------------
+
+message Device {
+  // Device details captured during login/binding.
+  message Info {
+    string id = 1;
+    int64 category = 2;
+    int64 type = 3;
+    string os = 4;
+    int64 language = 5;
+    string name = 6;
+    string model = 7;
+    string serial_number = 8;
+    string version = 9;
+    bool Connected = 10; // non-standard proto casing; preserved for wire compatibility
+    bool Current = 11;   // non-standard proto casing; preserved for wire compatibility
+
+    int64 sent = 12;     // bytes sent by this device
+    int64 received = 13; // bytes received by this device
+  }
+
+  // Device list returned for a user.
+  message List {
+    repeated Info device_infos = 1;
+  }
+
+  // Unbind a device from a user.
+  message UnbindReq {
+    string account_id = 1;
+    string device_id = 2;
+  }
+
+  // Rename a device.
+  message RenameReq {
+    string account_id = 1;
+    string device_id = 2;
+    string device_name = 3;
+  }
+}
+
 /*
  * Info
  */
@@ -143,43 +674,6 @@ message ControllerInfo {
 
 message UpdatePortReq {
   uint32 port = 1;
-}
-
-/*
- * Login
- */
-message LoginRequest {
-  string username = 1;
-  string password = 2;
-}
-
-enum MfaMethod {
-  MFA_METHOD_UNSPECIFIED = 0;
-  MFA_METHOD_TOTP = 1;
-  MFA_METHOD_EMAIL = 2;
-  MFA_METHOD_SMS = 3;
-}
-
-message MfaLoginRequest {
-  string access_token = 1;
-  MfaMethod mfa_method = 2;
-  string code = 3;
-}
-
-message TokenRefreshRequest {
-  string access_token = 1;
-  string refresh_token = 2;
-}
-
-message ResetPasswordRequest {
-  string id = 1;
-  string password = 2;
-}
-
-message LoginResponse {
-  string access_token = 1;
-  string refresh_token = 2;
-  bool need_mfa = 3;
 }
 
 /*
