@@ -113,7 +113,17 @@ build-plugin: $(service_utils_manifest_producer_targets) proto-gen
 	@find ./build -maxdepth 1 -print
 	@echo
 endef
+# Consumers that own their build/build-all/build-fresh/build-plugin lifecycle
+# can set SERVICE_UTILS_DEFINE_BUILD_LIFECYCLE := 0 before including this
+# builder to suppress these shared definitions. The ASN Framework repo uses
+# this: it builds framework artifacts (not downstream service plugins) and owns
+# its own `build` rule, so leaving these defined here would make GNU Make merge
+# the prerequisite lists (build would inherit build-plugin) and break the
+# framework build. Default 1 preserves behavior for service repositories.
+SERVICE_UTILS_DEFINE_BUILD_LIFECYCLE ?= 1
+ifeq ($(SERVICE_UTILS_DEFINE_BUILD_LIFECYCLE),1)
 $(eval $(service_utils_lifecycle_targets))
+endif
 
 # Any artifacts should be under build/. Guard this shared clean path so a bad
 # override cannot remove source, config, or parent directories.
