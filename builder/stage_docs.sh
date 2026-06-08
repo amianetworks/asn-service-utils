@@ -395,7 +395,11 @@ EOF
     else
         find "$stage_dir" -mindepth 1 -maxdepth 1 -type d | sort | while IFS= read -r dir; do
             path="$(basename "$dir")"
-            printf '    <li><a href="%s/">%s</a></li>\n' "$path" "$path" >> "$stage_dir/index.html"
+            printf '    <li><a href="%s/">%s/</a></li>\n' "$path" "$path" >> "$stage_dir/index.html"
+        done
+        find "$stage_dir" -mindepth 1 -maxdepth 1 -type f ! -name index.html | sort | while IFS= read -r file; do
+            path="$(basename "$file")"
+            printf '    <li><a href="%s">%s</a></li>\n' "$path" "$path" >> "$stage_dir/index.html"
         done
     fi
     cat >> "$stage_dir/index.html" <<'EOF'
@@ -418,7 +422,10 @@ write_section_indexes() {
             printf '<body>\n'
             printf '  <h1>%s %s</h1>\n' "$service_title" "$name"
             printf '  <ul>\n'
-            find "$dir" -mindepth 1 -maxdepth 1 -type f | sort | while IFS= read -r file; do
+            find "$dir" -mindepth 1 -maxdepth 1 -type d | sort | while IFS= read -r sub; do
+                printf '    <li><a href="%s/">%s/</a></li>\n' "$(basename "$sub")" "$(basename "$sub")"
+            done
+            find "$dir" -mindepth 1 -maxdepth 1 -type f ! -name index.html | sort | while IFS= read -r file; do
                 printf '    <li><a href="%s">%s</a></li>\n' "$(basename "$file")" "$(basename "$file")"
             done
             printf '  </ul>\n'
