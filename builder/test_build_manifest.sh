@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
+
 # Contract tests for the local build manifest helper.
 
 set -euo pipefail
@@ -61,8 +63,8 @@ common_args=(
 )
 identity_args=(
     --asn-service-api-version 26.7.3
-    --asn-version 26.7.0
-    --dep-version-asn 26.7.0
+    --asn-version 26.7.1
+    --dep-version-asn 26.7.1
     --go-version 1.26.3
     --dep-version-go 1.26.3
     --service-utils-ref utils-ref
@@ -81,7 +83,7 @@ version="$("${manifest_cmd[@]}" commit-plugin \
     --version-build 1.2.101)"
 assert_equals "$version" "1.2.101" "commit-plugin version"
 assert_contains build/Manifest.yaml 'asn_service_api_version: "26.7.3"'
-assert_contains build/Manifest.yaml 'asn_version: "26.7.0"'
+assert_contains build/Manifest.yaml 'asn_version: "26.7.1"'
 assert_contains build/Manifest.yaml 'dep_version_go: "1.26.3"'
 assert_contains build/Manifest.yaml 'service_utils_ref: "utils-ref"'
 assert_contains build/Manifest.yaml 'status: "PASS"'
@@ -98,8 +100,8 @@ printf '<!doctype html>\n' > build/docs/index.html
     "${docs_args[@]}" \
     --version-build 1.2.101 >/dev/null
 assert_contains build/Manifest.yaml 'asn_service_api_version: "26.7.3"'
-assert_contains build/Manifest.yaml 'asn_version: "26.7.0"'
-assert_contains build/Manifest.yaml 'dep_version_asn: "26.7.0"'
+assert_contains build/Manifest.yaml 'asn_version: "26.7.1"'
+assert_contains build/Manifest.yaml 'dep_version_asn: "26.7.1"'
 assert_contains build/Manifest.yaml 'go_version: "1.26.3"'
 assert_contains build/Manifest.yaml 'dep_version_go: "1.26.3"'
 
