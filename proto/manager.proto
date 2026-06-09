@@ -459,10 +459,14 @@ message Auth {
   }
 
   // Step 1 of inline MFA setup: choose a method and get the binding material.
+  // The chosen method (and, for SMS/Email, the target being bound) is recorded on
+  // the flow; AuthFlowMfaSetupConfirm resolves it from the flow token.
   message FlowMfaSetupInitiateReq {
     string    flow_token   = 1;
     MfaMethod method       = 2;
     string    domain       = 3;  // passkey only: relying-party domain
+    Phone     phone        = 4;  // SMS only: number to bind and send the OTP to
+    string    email        = 5;  // EMAIL only: address to bind and send the OTP to
   }
 
   // Response to FlowMfaSetupInitiateReq; fields are populated based on method.
@@ -473,36 +477,31 @@ message Auth {
     string totp_secret = 3;
 
     // PASSKEY: WebAuthn registration challenge
-    string session_id = 4;
-    string data       = 5;
+    string data = 4;
+
+    // SMS / EMAIL: OTP delivery outcome for the bound target
+    int64  result = 5; // CodeSendResult
+    int64  next   = 6; // cooldown in seconds before another code can be requested
+    string code   = 7; // dev-mode OTP only
   }
 
   // Step 2 of inline MFA setup: confirm binding with the received code or credential.
+  // The method, and for SMS/Email the target, were captured by FlowMfaSetupInitiateReq
+  // and are resolved from the flow; re-initiate to switch method/target.
   message FlowMfaSetupConfirmReq {
-    string    flow_token   = 1;
-    MfaMethod method       = 2;
-
-    string code = 3;  // TOTP first code / SMS OTP / Email OTP
-
-    // passkey only
-    string domain     = 4;
-    string session_id = 5;
-    string data       = 6;
+    string flow_token = 1;
+    string code       = 2;  // TOTP first code / SMS OTP / Email OTP
+    string data       = 3;  // passkey registration assertion
   }
 
   // Input for AuthFlowMfaVerify: submit the MFA factor for an account that already has one bound.
-  // For SMS / Email: call AuthFlowGetChallenge first to trigger the code.
-  // For Passkey: call AuthFlowGetChallenge first to obtain the challenge.
+  // The method, and for passkey the session id / RP domain, were captured by
+  // AuthFlowGetChallenge and are resolved from the flow; call AuthFlowGetChallenge first
+  // (also for TOTP) and re-call it to switch method before verifying.
   message FlowMfaVerifyReq {
-    string    flow_token   = 1;
-    MfaMethod method       = 2;
-
-    string code = 3;  // TOTP / SMS / Email OTP
-
-    // passkey only
-    string domain     = 4;
-    string session_id = 5;
-    string data       = 6;
+    string flow_token = 1;
+    string code       = 2;  // TOTP / SMS / Email OTP
+    string data       = 3;  // passkey assertion
   }
 
   // --- Unified login flow ---
@@ -534,18 +533,19 @@ message Auth {
     string    domain     = 3; // passkey only: relying-party domain
   }
 
-  // Step 2 output: OTP send result and/or a passkey challenge.
+  // Step 2 output: OTP send result and/or a passkey challenge. For passkey the
+  // session is recorded on the flow and resolved by AuthFlowVerify.
   message FlowGetChallengeRes {
-    int64  result     = 1; // CodeSendResult (OTP methods)
-    int64  next       = 2; // cooldown in seconds before another code can be requested
-    string code       = 3; // dev-mode OTP only
-    string session_id = 4; // passkey only
-    string data       = 5; // passkey only: JSON-encoded WebAuthn challenge options
+    int64  result = 1; // CodeSendResult (OTP methods)
+    int64  next   = 2; // cooldown in seconds before another code can be requested
+    string code   = 3; // dev-mode OTP only
+    string data   = 4; // passkey only: JSON-encoded WebAuthn challenge options
   }
 
   // Step 3 input: submit the proof matching the flow's method (fill only the
   // relevant fields). password for *_PASSWORD; code for *_CODE; wechat_* for WeChat;
-  // apple_id_token/google_id_token for Apple/Google; domain/session_id/data for passkey.
+  // apple_id_token/google_id_token for Apple/Google; data for the passkey assertion
+  // (the session and RP domain were captured by AuthFlowGetChallenge).
   message FlowVerifyReq {
     string flow_token = 1;
 
@@ -557,9 +557,7 @@ message Auth {
     string apple_id_token = 6;
     string google_id_token = 7;
 
-    string domain     = 8;
-    string session_id = 9;
-    string data       = 10;
+    string data = 8;
   }
 
   // Re-enter the MFA flow from an MFA-unverified access token.
@@ -605,12 +603,13 @@ message Auth {
     string code   = 3; // dev-mode OTP only
   }
 
-  // Step 3 input: submit the chosen proof (old password or OTP).
+  // Step 3 input: submit the chosen proof (old password or OTP). The method is
+  // resolved from the flow: a non-empty old_password means the old-password method,
+  // otherwise the OTP method chosen by the last AuthPasswordFlowSendCode.
   message PasswordFlowVerifyReq {
-    string               flow_token   = 1;
-    PasswordVerifyMethod method       = 2;
-    string               code         = 3; // OTP methods
-    string               old_password = 4; // old-password method
+    string flow_token   = 1;
+    string code         = 2; // OTP methods
+    string old_password = 3; // old-password method
   }
 
   // Step 4 input: set the new password for a verified flow token.
