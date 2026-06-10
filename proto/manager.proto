@@ -273,7 +273,6 @@ message Auth {
     MFA_METHOD_TOTP        = 1; // time-based one-time password (authenticator app)
     MFA_METHOD_EMAIL       = 2; // email verification code
     MFA_METHOD_SMS         = 3; // SMS verification code
-    MFA_METHOD_PASSKEY     = 4; // WebAuthn passkey
   }
 
   // CredentialMethod is the identity + proof kind chosen when starting a login flow.
@@ -464,9 +463,8 @@ message Auth {
   message FlowMfaSetupInitiateReq {
     string    flow_token   = 1;
     MfaMethod method       = 2;
-    string    domain       = 3;  // passkey only: relying-party domain
-    Phone     phone        = 4;  // SMS only: number to bind and send the OTP to
-    string    email        = 5;  // EMAIL only: address to bind and send the OTP to
+    Phone     phone        = 3;  // SMS only: number to bind and send the OTP to
+    string    email        = 4;  // EMAIL only: address to bind and send the OTP to
   }
 
   // Response to FlowMfaSetupInitiateReq; fields are populated based on method.
@@ -476,13 +474,10 @@ message Auth {
     string totp_issuer = 2;
     string totp_secret = 3;
 
-    // PASSKEY: WebAuthn registration challenge
-    string data = 4;
-
     // SMS / EMAIL: OTP delivery outcome for the bound target
-    int64  result = 5; // CodeSendResult
-    int64  next   = 6; // cooldown in seconds before another code can be requested
-    string code   = 7; // dev-mode OTP only
+    int64  result = 4; // CodeSendResult
+    int64  next   = 5; // cooldown in seconds before another code can be requested
+    string code   = 6; // dev-mode OTP only
   }
 
   // Step 2 of inline MFA setup: confirm binding with the received code or credential.
@@ -491,7 +486,6 @@ message Auth {
   message FlowMfaSetupConfirmReq {
     string flow_token = 1;
     string code       = 2;  // TOTP first code / SMS OTP / Email OTP
-    string data       = 3;  // passkey registration assertion
   }
 
   // Input for AuthFlowMfaVerify: submit the MFA factor for an account that already has one bound.
@@ -501,7 +495,6 @@ message Auth {
   message FlowMfaVerifyReq {
     string flow_token = 1;
     string code       = 2;  // TOTP / SMS / Email OTP
-    string data       = 3;  // passkey assertion
   }
 
   // --- Unified login flow ---
