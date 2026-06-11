@@ -7,8 +7,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-
-	"gopkg.in/yaml.v2"
 )
 
 type ASNC struct {
@@ -196,7 +194,7 @@ func main() {
 	}
 	asncD.Services["sapphire-iam"] = DockerService{
 		ContainerName: "sapphire-iam",
-		Image:         "registry.amiasys.com/sapphire.iam:26.7.3",
+		Image:         "registry.amiasys.com/sapphire.iam:26.7.4",
 		NetworkMode:   "host",
 		Restart:       "unless-stopped",
 		Privileged:    true,
