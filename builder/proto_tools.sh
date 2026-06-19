@@ -28,6 +28,9 @@ stamp_file="${PROTO_GEN_STAMP:-}"
 force="${PROTO_GEN_FORCE:-0}"
 specs="${PROTO_GEN_SPECS:-}"
 state_files="${PROTO_GEN_STATE_FILES:-}"
+gateway="${PROTO_GEN_GATEWAY:-0}"
+protoc_gen_grpc_gateway_version="${PROTOC_GEN_GRPC_GATEWAY_VERSION:-}"
+proto_include_paths="${PROTO_INCLUDE_PATHS:-}"
 
 usage() {
     cat <<'EOF'
@@ -54,6 +57,9 @@ Options:
   --force 0|1
   --specs "SRC_GLOB:OUT_DIR ..."
   --state-files "FILE ..."
+  --gateway 0|1
+  --protoc-gen-grpc-gateway-version VERSION
+  --proto-include-paths "DIR ..."
 EOF
 }
 
@@ -74,6 +80,9 @@ while [ "$#" -gt 0 ]; do
         --force) shift; force="${1:-}" ;;
         --specs) shift; specs="${1:-}" ;;
         --state-files) shift; state_files="${1:-}" ;;
+        --gateway) shift; gateway="${1:-}" ;;
+        --protoc-gen-grpc-gateway-version) shift; protoc_gen_grpc_gateway_version="${1:-}" ;;
+        --proto-include-paths) shift; proto_include_paths="${1:-}" ;;
         --help|-h) usage; exit 0 ;;
         *) echo "proto_tools ERROR: unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
@@ -215,6 +224,10 @@ cmd_tools() {
     fi
     ensure_tool protoc-gen-go google.golang.org/protobuf/cmd/protoc-gen-go "$protoc_gen_go_version" "protoc-gen-go $protoc_gen_go_version$"
     ensure_tool protoc-gen-go-grpc google.golang.org/grpc/cmd/protoc-gen-go-grpc "$protoc_gen_go_grpc_version" "protoc-gen-go-grpc ${protoc_gen_go_grpc_version#v}$"
+    if [ "$gateway" = "1" ]; then
+        [ -n "$protoc_gen_grpc_gateway_version" ] || { echo "ERROR: PROTO_GEN_GATEWAY=1 requires PROTOC_GEN_GRPC_GATEWAY_VERSION." >&2; exit 1; }
+        ensure_tool protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway "$protoc_gen_grpc_gateway_version" "Version $protoc_gen_grpc_gateway_version,"
+    fi
 }
 
 cmd_tools_check() {
@@ -228,6 +241,9 @@ cmd_tools_check() {
     fi
     protoc-gen-go --version | grep -Eq "protoc-gen-go $protoc_gen_go_version$"
     protoc-gen-go-grpc --version | grep -Eq "protoc-gen-go-grpc ${protoc_gen_go_grpc_version#v}$"
+    if [ "$gateway" = "1" ]; then
+        protoc-gen-grpc-gateway --version 2>&1 | grep -Eq "Version $protoc_gen_grpc_gateway_version,"
+    fi
     echo "protobuf toolchain check passed"
 }
 
@@ -238,6 +254,9 @@ proto_state_hash() {
             printf 'PROTOC_VERSION=%s\n' "$protoc_version"
             printf 'PROTOC_GEN_GO_VERSION=%s\n' "$protoc_gen_go_version"
             printf 'PROTOC_GEN_GO_GRPC_VERSION=%s\n' "$protoc_gen_go_grpc_version"
+            printf 'PROTO_GEN_GATEWAY=%s\n' "$gateway"
+            printf 'PROTOC_GEN_GRPC_GATEWAY_VERSION=%s\n' "$protoc_gen_grpc_gateway_version"
+            printf 'PROTO_INCLUDE_PATHS=%s\n' "$proto_include_paths"
             printf 'PROTO_GEN_SPECS=%s\n' "$specs"
             for file in $state_files; do
                 [ -e "$file" ] || continue
@@ -279,10 +298,18 @@ cmd_gen() {
             fi
             include_args="-I ."
             [ -d "$protoc_include" ] && include_args="$include_args -I $protoc_include"
-            # Intentionally leave proto_sources unquoted so configured globs expand.
-            "$protoc_override" $include_args --go_out="$proto_out_abs" --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:"$proto_out_abs" --go-grpc_opt=paths=source_relative $proto_sources
+            # Extra include roots (e.g. vendored google/api annotations for grpc-gateway).
+            for inc in $proto_include_paths; do
+                include_args="$include_args -I $inc"
+            done
+            gateway_args=""
+            if [ "$gateway" = "1" ]; then
+                gateway_args="--grpc-gateway_out=$proto_out_abs --grpc-gateway_opt=paths=source_relative"
+            fi
+            # Intentionally leave proto_sources/gateway_args unquoted so configured globs/args expand.
+            "$protoc_override" $include_args --go_out="$proto_out_abs" --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:"$proto_out_abs" --go-grpc_opt=paths=source_relative $gateway_args $proto_sources
             if [ -d "$proto_out_abs/$generated_dir" ]; then
-                find "$proto_out_abs/$generated_dir" -name '*.pb.go' -exec gofmt -w {} +
+                find "$proto_out_abs/$generated_dir" \( -name '*.pb.go' -o -name '*.pb.gw.go' \) -exec gofmt -w {} +
             fi
         done
     )
