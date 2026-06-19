@@ -38,10 +38,9 @@ docs_version_file="${SERVICE_DOCS_VERSION_FILE:-}"
 docs_version_key="${SERVICE_DOCS_VERSION_KEY:-version_build}"
 service_utils_dir="${SERVICE_UTILS_DIR:-service-utils}"
 asn_service_api_version="${ASN_SERVICE_API_VERSION:-}"
-asn_version="${ASN_VERSION:-}"
-dep_version_asn="${DEP_VERSION_ASN:-}"
+asn_runtime_version="${ASN_RUNTIME_VERSION:-}"
 go_version="${GO_VERSION:-}"
-dep_version_go="${DEP_VERSION_GO:-}"
+asn_builder_go_version="${ASN_BUILDER_GO_VERSION:-}"
 service_utils_ref=""
 service_name=""
 manifest_commit_lane="docker"
@@ -94,10 +93,9 @@ while [ "$#" -gt 0 ]; do
         --service-utils-dir) shift; service_utils_dir="${1:-}" ;;
         --service) shift; service_name="${1:-}" ;;
         --asn-service-api-version) shift; asn_service_api_version="${1:-}" ;;
-        --asn-version) shift; asn_version="${1:-}" ;;
-        --dep-version-asn) shift; dep_version_asn="${1:-}" ;;
+        --asn-runtime-version) shift; asn_runtime_version="${1:-}" ;;
         --go-version) shift; go_version="${1:-}" ;;
-        --dep-version-go) shift; dep_version_go="${1:-}" ;;
+        --builder-go-version) shift; asn_builder_go_version="${1:-}" ;;
         --service-utils-ref) shift; service_utils_ref="${1:-}" ;;
         --key) shift; key_path="${1:-}" ;;
         -h|--help) usage; exit 0 ;;
@@ -190,10 +188,9 @@ replace_placeholders() {
     value="${value//@NEXT_BUILD@/$display_next_build}"
     value="${value//@VERSION_BUILD@/$display_version_build}"
     value="${value//@ASN_SERVICE_API_VERSION@/$asn_service_api_version}"
-    value="${value//@ASN_VERSION@/${asn_version:-$dep_version_asn}}"
-    value="${value//@DEP_VERSION_ASN@/$dep_version_asn}"
-    value="${value//@GO_VERSION@/${go_version:-$dep_version_go}}"
-    value="${value//@DEP_VERSION_GO@/$dep_version_go}"
+    value="${value//@ASN_RUNTIME_VERSION@/$asn_runtime_version}"
+    value="${value//@GO_VERSION@/${go_version:-$asn_builder_go_version}}"
+    value="${value//@ASN_BUILDER_GO_VERSION@/$asn_builder_go_version}"
     printf '%s\n' "$value"
 }
 
@@ -644,10 +641,9 @@ write_manifest() {
     source_commit="$(git_ref_or_unknown "$PROJECT_ROOT" "$source_label")"
     [ -n "$service_utils_ref" ] || service_utils_ref="$(git_ref_or_unknown "$service_utils_dir" "service-utils")"
     [ -n "$asn_service_api_version" ] || asn_service_api_version="$(yaml_value "$manifest_file" source.asn_service_api_version || true)"
-    [ -n "$asn_version" ] || asn_version="$(yaml_value "$manifest_file" source.asn_version || true)"
-    [ -n "$dep_version_asn" ] || dep_version_asn="$(yaml_value "$manifest_file" source.dep_version_asn || true)"
+    [ -n "$asn_runtime_version" ] || asn_runtime_version="$(yaml_value "$manifest_file" source.asn_runtime_version || true)"
     [ -n "$go_version" ] || go_version="$(yaml_value "$manifest_file" source.go_version || true)"
-    [ -n "$dep_version_go" ] || dep_version_go="$(yaml_value "$manifest_file" source.dep_version_go || true)"
+    [ -n "$asn_builder_go_version" ] || asn_builder_go_version="$(yaml_value "$manifest_file" source.asn_builder_go_version || true)"
 
     plugin_status="$(plugin_lane_status "$plugin_artifacts")"
     if lane_is_committed docs; then
@@ -677,10 +673,9 @@ write_manifest() {
         printf 'source:\n'
         printf '  %s: %s\n' "$source_key" "$(yaml_quote "$source_commit")"
         printf '  asn_service_api_version: %s\n' "$(yaml_quote "$asn_service_api_version")"
-        printf '  asn_version: %s\n' "$(yaml_quote "$asn_version")"
-        printf '  dep_version_asn: %s\n' "$(yaml_quote "$dep_version_asn")"
+        printf '  asn_runtime_version: %s\n' "$(yaml_quote "$asn_runtime_version")"
         printf '  go_version: %s\n' "$(yaml_quote "$go_version")"
-        printf '  dep_version_go: %s\n' "$(yaml_quote "$dep_version_go")"
+        printf '  asn_builder_go_version: %s\n' "$(yaml_quote "$asn_builder_go_version")"
         printf '  service_utils_ref: %s\n' "$(yaml_quote "$service_utils_ref")"
         printf 'lanes:\n'
         printf '  plugin:\n'
@@ -902,7 +897,7 @@ EOF
 Service=@SERVICE@
 Version Build=@VERSION_BUILD@
 ASN Service API=@ASN_SERVICE_API_VERSION@
-ASN Framework=@DEP_VERSION_ASN@
+ASN Runtime=@ASN_RUNTIME_VERSION@
 Go Toolchain=@GO_VERSION@
 EOF
 )"

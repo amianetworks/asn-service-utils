@@ -29,7 +29,7 @@ deb-%: SERVICE_UTILS_DEBIAN_FORCE
 	$(eval SERVICE_CONFIG := debian/deb.$(SERVICE_NAME).config)
 	$(eval SERVICE_CONTROL := debian/deb.$(SERVICE_NAME).control)
 	$(if $(wildcard $(SERVICE_CONFIG)),$(eval include $(SERVICE_CONFIG)))
-	@$(DEBIAN_PACKAGE_CMD) build --service "$(SERVICE_NAME)" --config "$(SERVICE_CONFIG)" --control "$(SERVICE_CONTROL)" --files "$(DEBIAN_FILES)" --debian-path "$(DEBIAN_PATH)" --version-build "$(VERSION_BUILD)" --depends-version "$(DEP_VERSION_ASN)"
+	@$(DEBIAN_PACKAGE_CMD) build --service "$(SERVICE_NAME)" --config "$(SERVICE_CONFIG)" --control "$(SERVICE_CONTROL)" --files "$(DEBIAN_FILES)" --debian-path "$(DEBIAN_PATH)" --version-build "$(VERSION_BUILD)" --depends-version "$(ASN_RUNTIME_VERSION)"
 
 
 clean-deb-%: SERVICE_UTILS_DEBIAN_FORCE

@@ -134,9 +134,17 @@ BUILD_ENV_IMAGE ?= asn-service-builder
 # Framework-owned runtime and toolchain versions. The include stays optional so
 # `make init` can repair a missing service-utils checkout, but checked build
 # targets must pass `.check_service_utils_version_file` before they consume the
-# values. Keep this before manifest argument defaults so DEP_VERSION_ASN is not
-# captured as empty during Make expansion.
+# values. Keep this before manifest argument defaults so runtime versions are
+# not captured as empty during Make expansion.
 -include $(BUILD_ENV_ASN_VERSION_FILE)
+
+ifneq ($(strip $(ASN_RUNTIME_MODE)),)
+ifeq ($(BUILD_MODE),pro)
+ifneq ($(ASN_RUNTIME_MODE),pro)
+$(error BUILD_MODE=pro requires ASN_RUNTIME_MODE=pro)
+endif
+endif
+endif
 
 BUILD_DIR ?= build
 SERVICE_BUILD_DIR_C ?= $(BUILD_DIR)/controller
@@ -180,10 +188,9 @@ BUILD_MANIFEST_CORE_ARGS ?= \
 	--debian-services "$(DEBIAN_SERVICES)" \
 	--docker-images "$(DOCKER_IMAGES)" \
 	--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
-	--asn-version "$(ASN_VERSION)" \
-	--dep-version-asn "$(DEP_VERSION_ASN)" \
+	--asn-runtime-version "$(ASN_RUNTIME_VERSION)" \
 	--go-version "$(GO_VERSION)" \
-	--dep-version-go "$(DEP_VERSION_GO)"
+	--builder-go-version "$(ASN_BUILDER_GO_VERSION)"
 BUILD_MANIFEST_COMMON_EXTRA_ARGS ?= $(BUILD_MANIFEST_DEFAULT_DOCS_ARGS)
 BUILD_MANIFEST_COMMON_ARGS ?= $(BUILD_MANIFEST_CORE_ARGS) --docs-dir "$(CURDIR)/build/docs" $(BUILD_MANIFEST_ARGS) $(BUILD_MANIFEST_COMMON_EXTRA_ARGS)
 BUILD_MANIFEST_RESERVE_ARGS ?= --version "$(VERSION)" --mode "$(BUILD_MODE)" --build "$(BUILD)" --dev-start "$(BUILD_DEV)" --dev-file "$(DEV_BUILD_FILE)" --manifest "$(BUILD_MANIFEST_FILE)" $(BUILD_MANIFEST_ARGS)

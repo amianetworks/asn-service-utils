@@ -18,8 +18,8 @@ dockerfile=""
 context_dir="$PROJECT_ROOT"
 ssh_key="${PRIVATE_GIT_SSH_KEY_FILE:-}"
 api_version="${ASN_SERVICE_API_VERSION:-}"
-framework_version="${DEP_VERSION_ASN:-}"
-go_version="${DEP_VERSION_GO:-}"
+framework_version="${ASN_RUNTIME_VERSION:-}"
+go_version="${ASN_BUILDER_GO_VERSION:-}"
 cache_packages="${SERVICE_GO_CACHE_PACKAGES:-./...}"
 input_files="go.mod go.sum service-utils/builder/service.plugin.builder.base.dockerfile service-utils/builder/service.plugin.builder.mk service-utils/builder/ASN_VERSION"
 platform="${SERVICE_BUILD_DOCKER_PLATFORM:-linux/amd64}"
@@ -87,8 +87,8 @@ builder_input_hash() {
         cd "$context_dir"
         {
             printf 'ASN_SERVICE_API_VERSION=%s\n' "$api_version"
-            printf 'DEP_VERSION_ASN=%s\n' "$framework_version"
-            printf 'DEP_VERSION_GO=%s\n' "$go_version"
+            printf 'ASN_RUNTIME_VERSION=%s\n' "$framework_version"
+            printf 'ASN_BUILDER_GO_VERSION=%s\n' "$go_version"
             printf 'SERVICE_GO_CACHE_PACKAGES=%s\n' "$cache_packages"
             for file in $input_files; do
                 if [ -f "$file" ]; then
@@ -233,7 +233,7 @@ cmd_check() {
         --mount "type=bind,source=$context_dir,target=$workdir,readonly" \
         --workdir "$workdir" \
         --env "SERVICE_GO_CACHE_PACKAGES=$cache_packages" \
-        "$image" sh -lc 'GOPROXY=off GOSUMDB=off go list -mod=readonly -deps $SERVICE_GO_CACHE_PACKAGES >/dev/null' 2>&1)"
+        "$image" sh -lc 'GOPROXY=off GOSUMDB=off go list -buildvcs=false -mod=readonly -deps $SERVICE_GO_CACHE_PACKAGES >/dev/null' 2>&1)"
     cache_probe_status=$?
     set -e
     if [ "$cache_probe_status" -ne 0 ]; then

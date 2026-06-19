@@ -16,7 +16,7 @@ service_control=""
 debian_files=""
 debian_path="build/debian"
 version_build="${VERSION_BUILD:-}"
-depends_version="${DEP_VERSION_ASN:-}"
+depends_version="${ASN_RUNTIME_VERSION:-}"
 deb_file=""
 metadata_field=""
 

@@ -95,8 +95,7 @@ check-build:
 		--dev-file "$(DEV_BUILD_FILE)" \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
-		--asn-version "$(ASN_VERSION)" \
-		--dep-version-asn "$(DEP_VERSION_ASN)" \
+		--asn-runtime-version "$(ASN_RUNTIME_VERSION)" \
 		$(BUILD_MANIFEST_ARGS)
 
 check-version:
@@ -109,10 +108,9 @@ check-version:
 		--dev-file "$(DEV_BUILD_FILE)" \
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--asn-service-api-version "$(ASN_SERVICE_API_VERSION)" \
-		--asn-version "$(ASN_VERSION)" \
-		--dep-version-asn "$(DEP_VERSION_ASN)" \
+		--asn-runtime-version "$(ASN_RUNTIME_VERSION)" \
 		--go-version "$(GO_VERSION)" \
-		--dep-version-go "$(DEP_VERSION_GO)" \
+		--builder-go-version "$(ASN_BUILDER_GO_VERSION)" \
 		$(BUILD_MANIFEST_ARGS)
 
 check-go-mod:

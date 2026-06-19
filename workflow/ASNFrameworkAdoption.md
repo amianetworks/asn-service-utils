@@ -49,19 +49,21 @@ builder/ASN_VERSION
 
 For every ASN Framework release:
 
-1. Run the framework release version command that updates `DEP_VERSION_ASN` and
-   `DEP_VERSION_GO`.
-2. Verify `DEP_VERSION_ASN` matches the ASN Framework `VERSION`.
-3. Verify `DEP_VERSION_GO` matches the framework-supported `GO_VERSION`.
-4. Commit and publish the `service-utils` branch or tag that consuming services
+1. Run the framework release version command that updates `ASN_RUNTIME_VERSION_DEV`,
+   `ASN_RUNTIME_VERSION_PRO`, and `ASN_BUILDER_GO_VERSION`.
+2. Verify `ASN_RUNTIME_VERSION_PRO` matches the ASN Framework PRO `VERSION.BUILD`.
+3. Verify `ASN_RUNTIME_VERSION_DEV` matches the latest approved ASN DEV build manifest.
+4. Verify `ASN_BUILDER_GO_VERSION` matches the framework-supported `GO_VERSION`.
+5. Commit and publish the `service-utils` branch or tag that consuming services
    will use, for example `v26.7.6`.
-5. Communicate the compatible tuple:
+6. Communicate the compatible tuple:
 
 ```text
 ASN_SERVICE_API_VERSION
 service-utils branch/tag
-DEP_VERSION_ASN
-DEP_VERSION_GO
+ASN_RUNTIME_VERSION_PRO
+ASN_RUNTIME_VERSION_DEV
+ASN_BUILDER_GO_VERSION
 minimum consuming-service Makefile contract
 ```
 
@@ -113,13 +115,13 @@ SERVICE_DOCKERFILE_SN ?= docker/$(SERVICE_NAME)-servicenode.dockerfile
 PROTO_SOURCE_FILES := <proto-source-globs>
 ```
 
-The root Makefile owns the pre-include bootstrap defaults for
-`BUILD_ENV_MAKEFILE` and `BUILD_ENV_ASN_VERSION_FILE`. `service-utils` derives
-generic builder image paths, manifest schema/source defaults, manifest argument
-wrappers, `DEBIAN_PATH`, `DEBIAN_SERVICES`, plugin artifact inventories, proto
-generation specs, and proto stamp inputs from the service identity, derived
-package/build names, and compact artifact specs above. Define those variables in
-service config only when a service intentionally breaks the standard ASN service
+The root Makefile includes `service-utils/builder/asn.mk` before the neutral AM
+Workflow service builder. `service-utils` derives generic builder image paths,
+manifest schema/source defaults, manifest argument wrappers, `DEBIAN_PATH`,
+`DEBIAN_SERVICES`, plugin artifact inventories, proto generation specs, and
+proto stamp inputs from the service identity, derived package/build names, and
+compact artifact specs above. Define those variables in service config only
+when a service intentionally breaks the standard ASN service
 layout.
 
 The root Makefile, or the equivalent non-config Make layer, should resolve
@@ -232,8 +234,8 @@ checksums, release manifest metadata, and manifest lane updates.
 The prepared builder base image is now stricter. Its freshness check includes:
 
 - `ASN_SERVICE_API_VERSION`;
-- `DEP_VERSION_ASN`;
-- `DEP_VERSION_GO`;
+- `ASN_RUNTIME_VERSION`;
+- `ASN_BUILDER_GO_VERSION`;
 - `go.mod`;
 - files listed by `SERVICE_BUILDER_INPUT_FILES`;
 - `SERVICE_GO_CACHE_PACKAGES`;
@@ -245,8 +247,8 @@ Services may tune:
 SERVICE_GO_CACHE_SPECS := SERVICE_CACHE_CONTROLLER SERVICE_CACHE_SERVICENODE
 SERVICE_CACHE_CONTROLLER := ./$(SERVICE_GO_SOURCE_C)
 SERVICE_CACHE_SERVICENODE := ./$(SERVICE_GO_SOURCE_SN)
-SERVICE_BUILDER_MAKEFILES ?= $(BUILD_ENV_MAKEFILE) $(wildcard $(SERVICE_UTILS_DIR)/builder/make/*.mk)
-SERVICE_BUILDER_INPUT_FILES ?= go.mod go.sum $(BUILD_ENV_BASE_DOCKERFILE) $(SERVICE_BUILDER_MAKEFILES) $(BUILD_ENV_ASN_VERSION_FILE)
+BUILD_CONTAINER_METADATA_FILES += $(SERVICE_UTILS_DIR)/builder/ASN_VERSION
+BUILD_CONTAINER_CACHE_INPUTS += $(SERVICE_UTILS_DIR)/go.mod $(SERVICE_UTILS_DIR)/go.sum
 SERVICE_BUILDER_GOCACHE ?= $(CURDIR)/.cache/service-builder/go-build
 ```
 
@@ -317,5 +319,5 @@ service-local manifest script or temporarily keep the service on the previous
 
 Rollback from the manifest-aware builder is a submodule/ref rollback, not a
 runtime Framework rollback. Record the service, API version, `service-utils`
-ref, `DEP_VERSION_ASN`, and reason before publishing artifacts from a rolled
+ref, `ASN_RUNTIME_VERSION`, and reason before publishing artifacts from a rolled
 back service.

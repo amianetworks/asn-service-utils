@@ -242,10 +242,10 @@ SERVICE_P_*
 SERVICE_FILE_ARTIFACTS
 ```
 
-The root Makefile supplies the pre-include `BUILD_ENV_MAKEFILE` and
-`BUILD_ENV_ASN_VERSION_FILE` bootstrap defaults.
-The shared builder supplies standard ASN-service defaults for generic builder
-image variables, manifest wrapper args, `DEBIAN_PATH`, `DEBIAN_SERVICES`,
+The root Makefile includes `service-utils/builder/asn.mk` before the neutral
+AM Workflow service builder. The ASN extension supplies standard ASN-service
+defaults for builder image variables, manifest wrapper args, `DEBIAN_PATH`,
+`DEBIAN_SERVICES`,
 `SERVICE_DOCKER_COMPONENTS`, `DOCKER_IMAGES`,
 `SERVICE_PLUGIN_REQUIRED_ARTIFACTS`, `SERVICE_PLUGIN_REQUIRED_GLOBS`, and
 derived proto generation variables.
@@ -263,17 +263,19 @@ ASN Framework owns the reusable runtime/toolchain tuple. For each framework
 release:
 
 1. Update `builder/ASN_VERSION` through the framework-owned version process.
-2. Verify `DEP_VERSION_ASN` matches the ASN Framework runtime release.
-3. Verify `DEP_VERSION_GO` matches the supported builder Go toolchain.
-4. Verify `service-utils` helper scripts and builder Dockerfiles are committed.
-5. Publish the approved `service-utils` branch or tag.
-6. Tell service teams the compatible tuple:
+2. Verify `ASN_RUNTIME_VERSION_PRO` matches the ASN Framework PRO runtime release.
+3. Verify `ASN_RUNTIME_VERSION_DEV` matches the latest approved ASN DEV build manifest.
+4. Verify `ASN_BUILDER_GO_VERSION` matches the supported builder Go toolchain.
+5. Verify `service-utils` helper scripts and builder Dockerfiles are committed.
+6. Publish the approved `service-utils` branch or tag.
+7. Tell service teams the compatible tuple:
 
 ```text
 ASN_SERVICE_API_VERSION
 service-utils branch/tag/commit
-DEP_VERSION_ASN
-DEP_VERSION_GO
+ASN_RUNTIME_VERSION_PRO
+ASN_RUNTIME_VERSION_DEV
+ASN_BUILDER_GO_VERSION
 minimum Makefile migration guide revision
 ```
 

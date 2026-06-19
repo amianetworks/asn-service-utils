@@ -87,8 +87,10 @@ The shared builder must not force service-only rows onto ASN Framework.
 | `CHECK_VERSION_EXTRA_ROWS` | Append rows to `check-version`. |
 | `CHECK_BUILD_ROWS` | Replace all default `check-build` rows. |
 | `CHECK_BUILD_EXTRA_ROWS` | Append rows to `check-build`. |
-| `CHECK_LOCAL_EXTRA_TARGETS` | Append extra gates to `make check`. |
-| `CHECK_PREPARE_EXTRA_TARGETS` | Append extra gates to `make check-prepare`. |
+| `CHECK_LOCAL_TARGETS` | Append project or extension gates to `make check`. |
+| `CHECK_PREPARE_TARGETS` | Append project or extension gates to `make check-prepare`. |
+| `PREPARE_CHECK_TARGETS` | Run project or extension checks during `make prepare`. |
+| `BUILD_PRECHECK_TARGETS` | Run project or extension checks before raw artifact reservation and build. |
 
 Supported placeholders:
 
@@ -97,10 +99,9 @@ Supported placeholders:
 | `@SERVICE@` | Service display name. Empty for repos that do not define one. |
 | `@VERSION_BUILD@` | Active build version. |
 | `@ASN_SERVICE_API_VERSION@` | ASN Service API version implemented by a service. |
-| `@ASN_VERSION@` | ASN Framework version. Falls back to `DEP_VERSION_ASN`. |
-| `@DEP_VERSION_ASN@` | Framework dependency version consumed by a service. |
+| `@ASN_RUNTIME_VERSION@` | Canonical ASN Framework/runtime dependency version consumed by a service. |
 | `@GO_VERSION@` | Effective Go toolchain version. |
-| `@DEP_VERSION_GO@` | Go version from builder metadata. |
+| `@ASN_BUILDER_GO_VERSION@` | Canonical Go version from builder metadata. |
 | `@BUILD_MODE@` | Active build mode. |
 | `@MANIFEST@` | Build manifest path. |
 | `@BUILT_VERSION@` | Version currently recorded in the manifest. |
@@ -109,15 +110,15 @@ Supported placeholders:
 ## ASN Framework Migration
 
 ASN Framework has no service identity row. Its own version is the ASN version
-that services consume as `DEP_VERSION_ASN`.
+that services consume as `ASN_RUNTIME_VERSION`.
 
 Set framework-owned rows near the framework build config:
 
 ```make
-ASN_VERSION ?= $(VERSION)
+ASN_RUNTIME_VERSION ?= $(VERSION)
 
 define CHECK_VERSION_ROWS
-ASN Framework=@ASN_VERSION@
+ASN Framework=@ASN_RUNTIME_VERSION@
 Go Toolchain=@GO_VERSION@
 endef
 ```
@@ -126,8 +127,8 @@ If the framework has additional readiness checks, append them without changing
 the shared builder:
 
 ```make
-CHECK_PREPARE_EXTRA_TARGETS += check-asn-framework-modules
-CHECK_LOCAL_EXTRA_TARGETS += check-asn-framework-release-inputs
+CHECK_PREPARE_TARGETS += check-asn-framework-modules
+CHECK_LOCAL_TARGETS += check-asn-framework-release-inputs
 ```
 
 Expected framework output:
@@ -148,7 +149,7 @@ Most service repositories can keep the default service rows:
 Service=@SERVICE@
 Version Build=@VERSION_BUILD@
 ASN Service API=@ASN_SERVICE_API_VERSION@
-ASN Framework=@DEP_VERSION_ASN@
+ASN Runtime=@ASN_RUNTIME_VERSION@
 Go Toolchain=@GO_VERSION@
 ```
 
@@ -261,7 +262,7 @@ done
 ASN Framework should also verify row replacement:
 
 ```bash
-make check-version CHECK_VERSION_ROWS=$'ASN Framework=@ASN_VERSION@\nGo Toolchain=@GO_VERSION@'
+make check-version CHECK_VERSION_ROWS=$'ASN Framework=@ASN_RUNTIME_VERSION@\nGo Toolchain=@GO_VERSION@'
 ```
 
 Expected output contains `ASN Framework` and does not contain `Service`.
@@ -271,7 +272,7 @@ Expected output contains `ASN Framework` and does not contain `Service`.
 - Keeping old aliases in the root Makefile. Remove callers instead.
 - Adding `[INFO]` headers. Use plain `>> Section Name`.
 - Left-aligning labels. Keep the shared right-aligned format.
-- Treating `ASN_SERVICE_API_VERSION` and `DEP_VERSION_ASN` as the same value.
+- Treating `ASN_SERVICE_API_VERSION` and `ASN_RUNTIME_VERSION` as the same value.
 - Making ASN Framework inherit service rows.
 - Reimplementing publish readiness in service-owned shell when `plan-push*`
   already owns it.

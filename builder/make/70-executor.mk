@@ -6,12 +6,12 @@
 		echo "Run 'make init' to initialize or repair service-utils."; \
 		exit 1; \
 	fi
-	@if [ -z "$(DEP_VERSION_ASN)" ] || [ -z "$(DEP_VERSION_GO)" ]; then \
-		echo "ERROR: service-utils version metadata must define DEP_VERSION_ASN and DEP_VERSION_GO: $(BUILD_ENV_ASN_VERSION_FILE)."; \
+	@if [ -z "$(ASN_RUNTIME_VERSION)" ] || [ -z "$(ASN_BUILDER_GO_VERSION)" ]; then \
+		echo "ERROR: service-utils version metadata must define ASN_RUNTIME_VERSION and ASN_BUILDER_GO_VERSION: $(BUILD_ENV_ASN_VERSION_FILE)."; \
 		exit 1; \
 	fi
 
-BUILD_ENV_BASE_IMAGE_TAG ?= $(DEP_VERSION_ASN)
+BUILD_ENV_BASE_IMAGE_TAG ?= $(ASN_RUNTIME_VERSION)
 BUILD_ENV_BASE_IMAGE_REF ?= $(BUILD_ENV_BASE_IMAGE):$(BUILD_ENV_BASE_IMAGE_TAG)
 SERVICE_BUILDER_GOCACHE ?= $(CURDIR)/.cache/service-builder/go-build
 SERVICE_BUILDER_HELPER_FILES ?= $(SERVICE_UTILS_DIR)/builder/builder_base_image.sh
@@ -34,8 +34,8 @@ prepare-service-builder-base: .check_service_utils_version_file
 		--context "$(CURDIR)" \
 		--ssh-key "$$PRIVATE_GIT_SSH_KEY_FILE" \
 		--api-version "$(ASN_SERVICE_API_VERSION)" \
-		--framework-version "$(DEP_VERSION_ASN)" \
-		--go-version "$(DEP_VERSION_GO)" \
+		--framework-version "$(ASN_RUNTIME_VERSION)" \
+		--go-version "$(ASN_BUILDER_GO_VERSION)" \
 		--cache-packages "$(SERVICE_GO_CACHE_PACKAGES)" \
 		--input-files "$(SERVICE_BUILDER_INPUT_FILES)" \
 		--platform "$(SERVICE_BUILD_DOCKER_PLATFORM)"
@@ -61,8 +61,8 @@ check-service-builder-base: .check_service_utils_version_file
 		--image "$(BUILD_ENV_BASE_IMAGE_REF)" \
 		--context "$(CURDIR)" \
 		--api-version "$(ASN_SERVICE_API_VERSION)" \
-		--framework-version "$(DEP_VERSION_ASN)" \
-		--go-version "$(DEP_VERSION_GO)" \
+		--framework-version "$(ASN_RUNTIME_VERSION)" \
+		--go-version "$(ASN_BUILDER_GO_VERSION)" \
 		--cache-packages "$(SERVICE_GO_CACHE_PACKAGES)" \
 		--input-files "$(SERVICE_BUILDER_INPUT_FILES)" \
 		--platform "$(SERVICE_BUILD_DOCKER_PLATFORM)" \
