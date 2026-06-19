@@ -1,7 +1,7 @@
 # Check And Plan Target Migration Guide
 
-Status: reusable migration guide for ASN Framework and ASN Service repositories
-Scope: repositories that include `service-utils/builder/service.plugin.builder.mk`
+Status: superseded by AM Workflow Space `workflow/make/artifact-builder.mk`
+Scope: repositories that include `service-utils/builder/asn.mk` before the shared AM Workflow artifact builder
 Audience: ASN Framework release engineers, service maintainers, DevOps, and coding agents
 
 ## Purpose
@@ -49,7 +49,7 @@ Kept shared lifecycle targets:
 | `check-version` | Identity row renderer used by `check`. |
 | `check-build` | Build manifest row renderer used by `check`. |
 | `check-go-mod` | Go module compatibility gate used by `check`. |
-| `check-service-builder-base` | Builder base-image gate used by `check`. |
+| `build-container-check` | Build container readiness gate used by `check`. |
 | `.check_build_vars` | Internal private-key gate used by `init`; not a user command. |
 
 ## Output Rules
@@ -77,7 +77,7 @@ Do not add `[INFO]`.
 
 ## Row Provider Model
 
-The shared builder must not force service-only rows onto ASN Framework.
+The artifact builder must not force service-only rows onto ASN Framework.
 
 `check-version` and `check-build` are row renderers. A consuming repository can:
 
@@ -124,7 +124,7 @@ endef
 ```
 
 If the framework has additional readiness checks, append them without changing
-the shared builder:
+the artifact builder:
 
 ```make
 CHECK_PREPARE_TARGETS += check-asn-framework-modules
@@ -162,7 +162,7 @@ CHECK_BUILD_EXTRA_ROWS += Docs Version=@VERSION_BUILD@
 
 Do not duplicate the API/framework/toolchain checks in service-owned recipes.
 They already flow through `check-version`, `check-go-mod`, and
-`check-service-builder-base`.
+`build-container-check`.
 
 ## Root Makefile Cleanup
 

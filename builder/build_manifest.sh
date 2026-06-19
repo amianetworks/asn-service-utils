@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Own the local service build identity and build/Manifest.yaml contract.
+# Own the local artifact build identity and build/Manifest.yaml contract.
 
 set -euo pipefail
 
@@ -631,7 +631,7 @@ write_manifest() {
     [ -n "$version_build" ] || { echo "build_manifest ERROR: --version-build is required" >&2; exit 2; }
     mkdir -p "$(dirname "$manifest_file")"
     local tmpdir out generated_at source_commit plugin_artifacts docs_artifacts debian_artifacts docker_artifacts
-    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/service-build-manifest.XXXXXX")"
+    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/artifact-build-manifest.XXXXXX")"
     out="$tmpdir/Manifest.yaml"
     plugin_artifacts="$tmpdir/plugin.txt"
     docs_artifacts="$tmpdir/docs.txt"

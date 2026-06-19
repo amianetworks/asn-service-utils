@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and validate the local ASN service builder base image.
+# Build and validate the local ASN artifact base image.
 
 set -euo pipefail
 
@@ -21,7 +21,7 @@ api_version="${ASN_SERVICE_API_VERSION:-}"
 framework_version="${ASN_RUNTIME_VERSION:-}"
 go_version="${ASN_BUILDER_GO_VERSION:-}"
 cache_packages="${SERVICE_GO_CACHE_PACKAGES:-./...}"
-input_files="go.mod go.sum service-utils/builder/service.plugin.builder.base.dockerfile service-utils/builder/service.plugin.builder.mk service-utils/builder/ASN_VERSION"
+input_files="go.mod go.sum service-utils/builder/asn-artifact-base.dockerfile service-utils/builder/asn.mk service-utils/builder/ASN_VERSION"
 platform="${SERVICE_BUILD_DOCKER_PLATFORM:-linux/amd64}"
 workdir="${SERVICE_BUILD_WORKDIR:-/asn-service}"
 
@@ -30,8 +30,8 @@ usage() {
 usage: service-utils/builder/builder_base_image.sh COMMAND [options]
 
 Commands:
-  prepare   Build and label the local builder base image.
-  check     Validate the local builder base image labels and offline Go cache.
+  prepare   Build and label the local artifact base image.
+  check     Validate the local artifact base image labels and offline Go cache.
   hashes    Print service_go_mod_hash and builder_input_hash values.
 
 Options:
@@ -136,7 +136,7 @@ cmd_prepare() {
 print_check_failure() {
     local inspect_id="$1" api="$2" framework="$3" image_go="$4" go_mod="$5" builder_inputs="$6" expected_go_mod="$7" expected_builder_inputs="$8"
 
-    echo ">> Builder Base Image: [FAIL]"
+    echo ">> Artifact Base Image: [FAIL]"
     printf "  %15s : %s\n" "Base image" "$image"
     printf "  %15s : %s\n" "ID" "${inspect_id#sha256:}"
     if [ "$api" = "$api_version" ]; then
@@ -164,7 +164,7 @@ print_check_failure() {
     else
         printf "  %15s : %s (expected %s from builder inputs). FAIL\n" "Builder inputs" "${builder_inputs:-missing}" "$expected_builder_inputs"
     fi
-    echo "Local builder base image check failed. Run make prepare."
+    echo "Local artifact base image check failed. Run make prepare."
 }
 
 cmd_check() {
@@ -172,18 +172,18 @@ cmd_check() {
 
     local docker_info image_id inspect_err inspect_id inspect_status
     if ! docker_info="$(docker info 2>&1)"; then
-        echo ">> Builder Base Image: [FAIL]"
+        echo ">> Artifact Base Image: [FAIL]"
         printf "  %15s : unavailable\n" "Docker"
-        echo "Local builder base image check failed: Docker daemon is not reachable."
+        echo "Local artifact base image check failed: Docker daemon is not reachable."
         printf '%s\n' "$docker_info" | sed -n '1,10p' | sed 's/^/  Docker Error             /'
         exit 1
     fi
 
     image_id="$(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' | awk -v image="$image" '$1 == image { print $2; exit }')"
     if [ -z "$image_id" ]; then
-        echo ">> Builder Base Image: [FAIL]"
+        echo ">> Artifact Base Image: [FAIL]"
         printf "  %15s : %s (missing)\n" "Base image" "$image"
-        echo "Local builder base image check failed: run make prepare before make build-plugin."
+        echo "Local artifact base image check failed: run make prepare before make build-plugin."
         exit 1
     fi
 
@@ -193,13 +193,13 @@ cmd_check() {
     inspect_status=$?
     set -e
     if [ "$inspect_status" -ne 0 ]; then
-        echo ">> Builder Base Image: [FAIL]"
+        echo ">> Artifact Base Image: [FAIL]"
         if grep -qi "No such image" "$inspect_err"; then
             printf "  %15s : %s (listed, unusable)\n" "Base image" "$image"
-            echo "Local builder base image check failed: stale Docker image ID; run make prepare."
+            echo "Local artifact base image check failed: stale Docker image ID; run make prepare."
         else
             printf "  %15s : %s (inspect failed)\n" "Base image" "$image"
-            echo "Local builder base image check failed: docker image inspect failed."
+            echo "Local artifact base image check failed: docker image inspect failed."
             sed 's/^/  Docker Error             /' "$inspect_err"
         fi
         rm -f "$inspect_err"
@@ -237,16 +237,16 @@ cmd_check() {
     cache_probe_status=$?
     set -e
     if [ "$cache_probe_status" -ne 0 ]; then
-        echo ">> Builder Base Image: [FAIL]"
+        echo ">> Artifact Base Image: [FAIL]"
         printf "  %15s : %s\n" "Base image" "$image"
         printf "  %15s : %s\n" "Packages" "$cache_packages"
-        echo "Local builder base image check failed: warmed Go module cache does not satisfy offline package resolution."
+        echo "Local artifact base image check failed: warmed Go module cache does not satisfy offline package resolution."
         printf '%s\n' "$cache_probe" | sed -n '1,20p' | sed 's/^/  Go Error                 /'
         echo "Run make prepare after confirming private module access."
         exit 1
     fi
 
-    echo ">> Builder Base Image: [PASS]"
+    echo ">> Artifact Base Image: [PASS]"
     printf "  %15s : %s\n" "Base image" "$image"
     printf "  %15s : %s\n" "ID" "${inspect_id#sha256:}"
     printf "  %15s : %s (expected as ASN_SERVICE_API_VERSION).\n" "API version" "$api"

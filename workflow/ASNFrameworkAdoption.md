@@ -21,7 +21,7 @@ that migration.
 
 ## What Changed
 
-The shared builder now expects consuming services to provide a build manifest
+The artifact builder now expects consuming services to provide a build manifest
 command through `BUILD_MANIFEST_CMD`. SWAN sets this to the generic
 `bash service-utils/builder/build_manifest.sh` helper and supplies
 service-specific artifact lists from its root Make/config layer.
@@ -34,9 +34,9 @@ The important behavior changes are:
 | DEV build number | A local `.BUILD_FILE` could be incremented before artifacts existed. | `DEV_BUILD_FILE` is committed only after successful plugin artifacts; `reserve-plugin-version` prevents concurrent duplicate DEV identities. |
 | Artifact identity | Debian and Docker targets could recompute or infer `VERSION_BUILD`. | `build/Manifest.yaml` owns the artifact version and lane status. |
 | Package/image order | Package and image targets could run without a shared artifact contract. | Producers commit manifest lanes after validating their outputs; consumers require the lane and trust the manifest. |
-| Internal build targets | Internal `service-build-*` targets could be called without `VERSION_BUILD`. | Internal build steps require `VERSION_BUILD`; top-level targets pass the manifest-owned value. |
+| Internal build targets | Private artifact executor targets could be called without `VERSION_BUILD`. | Internal build steps require `VERSION_BUILD`; top-level targets pass the manifest-owned value. |
 | Builder base image check | Labels were the main freshness check. | Builder input hashes and offline Go dependency resolution are checked too. |
-| Executor | Dockerfile target execution was the normal path. | `docker-run` is the default; `docker-build` remains a migration fallback. |
+| Executor | Dockerfile target execution was the normal path. | `docker-run` is the only shared container executor. |
 | Publish diagnostics | Some optional local/remote probes hid stderr. | Registry, Docker, and Debian checks now surface actionable failures. |
 
 ## Framework Release Responsibilities
@@ -72,8 +72,9 @@ is framework-owned release metadata.
 
 ## Consuming Service Requirements
 
-A service repository that includes `service-utils/builder/service.plugin.builder.mk`
-must provide the following service-local contract.
+A service repository that includes `service-utils/builder/asn.mk` before the
+AM Workflow Space `workflow/make/artifact-builder.mk` include must provide the
+following service-local contract.
 
 ### Required Configuration
 
@@ -116,7 +117,7 @@ PROTO_SOURCE_FILES := <proto-source-globs>
 ```
 
 The root Makefile includes `service-utils/builder/asn.mk` before the neutral AM
-Workflow service builder. `service-utils` derives generic builder image paths,
+Workflow artifact builder. `service-utils` derives generic builder image paths,
 manifest schema/source defaults, manifest argument wrappers, `DEBIAN_PATH`,
 `DEBIAN_SERVICES`, plugin artifact inventories, proto generation specs, and
 proto stamp inputs from the service identity, derived package/build names, and
@@ -206,7 +207,7 @@ They should not silently rebuild plugin artifacts or choose a new version.
 They should also avoid rechecking every upstream file; the producer that commits
 the manifest lane owns those artifact checks.
 Service repositories should declare their artifact contents in config variables
-and let the shared builder run the reusable inner targets:
+and let the artifact builder run the reusable inner targets:
 
 ```make
 SERVICE_GO_ARTIFACTS := SERVICE_P_CONTROLLER
@@ -221,7 +222,7 @@ SERVICE_DOCS_SOURCE_KEY := <service_source_commit_key>
 SERVICE_DOCS_RUNTIME_ROOT := /var/www/$(SERVICE_NAME)
 ```
 
-`build.plugin`, `check.deb`, `build.deb`, and the internal docs staging helper
+`build.artifacts`, `check.deb`, `build.deb`, and the internal docs staging helper
 are shared service-utils functions. Do not add service-specific private Make
 targets or project-local scripts for those mechanics unless the service has a
 genuinely non-generic artifact boundary. Service-owned docs manifests should list docs
@@ -237,7 +238,7 @@ The prepared builder base image is now stricter. Its freshness check includes:
 - `ASN_RUNTIME_VERSION`;
 - `ASN_BUILDER_GO_VERSION`;
 - `go.mod`;
-- files listed by `SERVICE_BUILDER_INPUT_FILES`;
+- files listed by `ARTIFACT_BUILDER_INPUT_FILES`;
 - `SERVICE_GO_CACHE_PACKAGES`;
 - an offline `go list -deps` probe.
 
@@ -249,20 +250,19 @@ SERVICE_CACHE_CONTROLLER := ./$(SERVICE_GO_SOURCE_C)
 SERVICE_CACHE_SERVICENODE := ./$(SERVICE_GO_SOURCE_SN)
 BUILD_CONTAINER_METADATA_FILES += $(SERVICE_UTILS_DIR)/builder/ASN_VERSION
 BUILD_CONTAINER_CACHE_INPUTS += $(SERVICE_UTILS_DIR)/go.mod $(SERVICE_UTILS_DIR)/go.sum
-SERVICE_BUILDER_GOCACHE ?= $(CURDIR)/.cache/service-builder/go-build
+ARTIFACT_BUILDER_GOCACHE ?= $(CURDIR)/.cache/artifact-builder/go-build
 ```
 
 Run `make prepare` whenever these inputs change. Run `make check` before
 release builds to confirm the local image still matches source intent.
 
-For executor migration details, including `SERVICE_BUILD_EXECUTION_MODE`, use
-`BuilderExecutionMigration.md`.
+For executor migration details, use `BuilderExecutionMigration.md`.
 
 ## Adoption Sequence
 
 1. Update the service's `service-utils` submodule to the framework-approved ref.
 2. Declare service artifact, docs, Docker, and Debian content in config
-   variables consumed by the shared builder.
+   variables consumed by the artifact builder.
 3. Replace old `.BUILD_FILE` usage with `DEV_BUILD_FILE` and
    `BUILD_MANIFEST_FILE`.
 4. Update top-level help and CI commands to use `check-build`,
@@ -307,15 +307,11 @@ A migrated service is ready for release workflow use when:
 
 ## Rollback
 
-For executor issues, use the documented fallback:
-
-```bash
-make build-plugin SERVICE_BUILD_EXECUTION_MODE=docker-build
-```
-
-For manifest issues, do not reintroduce `.BUILD_FILE` increments. Fix the
-service-local manifest script or temporarily keep the service on the previous
-`service-utils` ref until the manifest contract is implemented.
+For executor issues, keep or return the service to its previous known-good
+`service-utils` ref and record the host constraint. For manifest issues, do not
+reintroduce `.BUILD_FILE` increments. Fix the service-local manifest script or
+temporarily keep the service on the previous `service-utils` ref until the
+manifest contract is implemented.
 
 Rollback from the manifest-aware builder is a submodule/ref rollback, not a
 runtime Framework rollback. Record the service, API version, `service-utils`

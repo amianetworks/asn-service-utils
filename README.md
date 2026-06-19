@@ -75,7 +75,7 @@ A typical consuming service Makefile includes files in this order:
 1. The service includes its own `make/config.mk`.
 2. The service config sets product version fields and `ASN_SERVICE_API_VERSION`.
 3. The service Makefile includes `service-utils/builder/asn.mk`.
-4. The service Makefile includes the neutral AM Workflow `workflow/make/service-builder.mk`.
+4. The service Makefile includes the neutral AM Workflow `workflow/make/artifact-builder.mk`.
 5. `asn.mk` includes `builder/ASN_VERSION`.
 
 Because `builder/ASN_VERSION` is included after the service config through `asn.mk`, its selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` values are the effective ASN Framework/runtime dependency and builder Go toolchain for builder/package/runtime dependency paths under normal Make execution.
@@ -125,8 +125,10 @@ A consuming service should:
 1. Set `ASN_SERVICE_API_VERSION` in its build config.
 2. Use a root `go.mod` dependency that matches the intended ASN Service API version.
 3. Add `service-utils` as a submodule at the intended compatible checkout.
-4. Include `service-utils/builder/service.plugin.builder.mk` from its root Makefile.
-5. Provide the service-specific build targets expected by the builder, usually through the service's internal makefile.
+4. Include `service-utils/builder/asn.mk` before the AM Workflow Space
+   `workflow/make/artifact-builder.mk` include from its root Makefile.
+5. Provide the service-specific build targets expected by the shared builder,
+   usually through project-local adapters or config.
 6. Rebuild the builder base image when the service API, framework/runtime dependency, Go toolchain, protobuf tooling, private dependencies, or builder Dockerfiles change.
 
 Common high-level targets exposed by consuming services include:
@@ -146,7 +148,11 @@ Exact target names may vary by service repository.
 
 `version-report` and `version-check` do not sync `service-utils` or build artifacts. `init` is the approved synchronization point that can run `update_service_utils`; `prepare` owns local builder-base preparation before code build.
 
-`service-build-once` defaults to the shared `docker-run` executor: it runs the requested internal target inside the prepared builder base image with the service checkout bind-mounted as the artifact boundary. The older Dockerfile execution path is still available temporarily with `SERVICE_BUILD_EXECUTION_MODE=docker-build`. For adoption steps, configuration knobs, risks, and rollback guidance, see `workflow/BuilderExecutionMigration.md`.
+`.artifact-build-run` uses the shared `docker-run` executor: it runs the
+requested internal target inside the prepared builder base image with the service
+checkout bind-mounted as the artifact boundary. For adoption steps,
+configuration knobs, risks, and rollback guidance, see
+`workflow/BuilderExecutionMigration.md`.
 
 Manifest-aware build adoption is documented in `workflow/ASNFrameworkAdoption.md`.
 The step-by-step refreshed Makefile migration path for ASN Framework and

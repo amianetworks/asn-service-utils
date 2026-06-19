@@ -88,7 +88,7 @@ Control rule:
 - The consuming service's `go.mod` controls the actual Go service API dependency used to compile that service.
 - `service-utils/go.mod` records the API dependency for the utility submodule itself. It is compatibility evidence, not the primary compile authority for the consuming service.
 - These API references should use the intended same ASN service API version unless there is a documented compatibility exception.
-- When `ASN_SERVICE_API_VERSION` changes, the builder base image must be rebuilt because it caches Go packages and plugin build dependencies.
+- When `ASN_SERVICE_API_VERSION` changes, the artifact base image must be rebuilt because it caches Go packages and plugin build dependencies.
 - Changing the service API version is a compatibility-sensitive change and should be treated as release work.
 
 ### ASN Framework Runtime And Toolchain Dependency Versions
@@ -115,7 +115,7 @@ Meaning:
 - It is injected into Debian package control files as `@DEPENDS@`.
 - Consuming service projects may also pass `ASN_RUNTIME_VERSION` into Docker build arguments for ASN Controller and ASN Service Node runtime images.
 - `ASN_BUILDER_GO_VERSION` is the Go version required for service-plugin builder images.
-- In the common Makefile flow, the consuming service includes its own config first, then includes `service-utils/builder/asn.mk`, then includes the neutral AM Workflow `workflow/make/service-builder.mk`. The ASN extension owns selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` for normal Make execution.
+- In the common Makefile flow, the consuming service includes its own config first, then includes `service-utils/builder/asn.mk`, then includes the neutral AM Workflow `workflow/make/artifact-builder.mk`. The ASN extension owns selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` for normal Make execution.
 
 Control rule:
 
@@ -129,14 +129,14 @@ Control rule:
 Sources:
 
 - The consuming service project's `.gitmodules`.
-- `service-utils/builder/service.plugin.builder.mk`.
+- `service-utils/builder/asn.mk`.
 - The current submodule checkout state.
 - The consuming service's API/util pairing policy in `make/config.mk` comments.
 
 Intended behavior:
 
 - `ASN_SERVICE_UTILS` is paired with `ASN_SERVICE_API` in the consuming service's version policy.
-- `service.plugin.builder.mk` target `update_service_utils` runs:
+- the consuming service root `update-service-utils` target runs:
 
 ```make
 cd $(SERVICE_UTILS_DIR) && git fetch && git checkout $(SERVICE_UTILS_REF) && git pull
@@ -162,8 +162,7 @@ Control rule:
 Sources:
 
 - `service-utils/builder/ASN_VERSION`.
-- `service-utils/builder/service.plugin.builder.base.dockerfile`.
-- `service-utils/builder/service.plugin.builder.dockerfile`.
+- `service-utils/builder/asn-artifact-base.dockerfile`.
 
 Typical variables/files:
 
@@ -171,27 +170,26 @@ Typical variables/files:
 - Ubuntu base image in the builder Dockerfile.
 - Go version installed by the builder Dockerfile.
 - protobuf compiler packages installed by the builder Dockerfile.
-- `BUILD_ENV_BASE_IMAGE`
-- `BUILD_ENV_IMAGE`
+- `BUILD_CONTAINER_BASE_IMAGE`
+- `BUILD_CONTAINER_RUNNER_IMAGE`
 
 Meaning:
 
-- The builder base image is the cached dependency/toolchain layer.
-- The builder base image downloads module dependencies from `go.*`, but it must not copy the consuming service source tree or run service compile targets.
-- The builder base image check must prove the warmed module cache can resolve the configured service package closure offline; label checks alone are not sufficient.
-- The default service target executor runs build targets inside the builder base image with the consuming service workspace bind-mounted as the artifact boundary.
-- The service builder image path still exists as a migration fallback for projects that temporarily require Dockerfile `RUN` execution and `docker cp` output collection.
-- The builder base image must be refreshed when service API or toolchain dependency expectations change.
+- The artifact base image is the cached dependency/toolchain layer.
+- The artifact base image downloads module dependencies from `go.*`, but it must not copy the consuming service source tree or run service compile targets.
+- The artifact base image check must prove the warmed module cache can resolve the configured service package closure offline; label checks alone are not sufficient.
+- The default artifact target executor runs build targets inside the artifact base image with the consuming service workspace bind-mounted as the artifact boundary.
+- The artifact base image must be refreshed when service API or toolchain dependency expectations change.
 
 Control rule:
 
 - Toolchain versions are separate from service product version and ASN Framework/runtime version.
 - `ASN_BUILDER_GO_VERSION` is framework-owned and is carried through `service-utils/builder/ASN_VERSION`, just like `ASN_RUNTIME_VERSION_DEV` and `ASN_RUNTIME_VERSION_PRO`.
 - Every ASN Framework P6 must verify that `ASN_RUNTIME_VERSION_PRO` matches the framework PRO `VERSION.BUILD`, `ASN_RUNTIME_VERSION_DEV` matches the latest approved ASN DEV build manifest, and `ASN_BUILDER_GO_VERSION` matches the framework `GO_VERSION`; stale values mean `make set-version` has not been run for the selected release identity.
-- The builder base image is local state and should not be assumed correct only because source files are correct.
+- The artifact base image is local state and should not be assumed correct only because source files are correct.
 - Rebuild the base image when `ASN_SERVICE_API_VERSION`, Go version, protobuf requirements, private module dependencies, `go.mod`/`go.sum`, the configured service package closure, or builder Dockerfile/Makefile content changes.
 - A workspace-local Go build cache may be mounted into builder runs to speed repeated compilation, but the module cache remains image-owned by default so `check-prepare` cannot be accidentally satisfied by host state.
-- See `BuilderExecutionMigration.md` before changing `SERVICE_BUILD_EXECUTION_MODE` or migrating a consuming service from the old Dockerfile target executor.
+- See `BuilderExecutionMigration.md` before changing container executor settings.
 - See `ASNFrameworkAdoption.md` before migrating an ASN Framework release or consuming service repository to the manifest-aware builder contract.
 - See `MakefileMigration.md` for the refreshed Makefile layering, variable checklist, bootstrap pattern, and service adoption sequence.
 
@@ -212,7 +210,7 @@ Consuming service make/config.mk
   +-- ASN_SERVICE_API_VERSION
   |     |
   |     +--> Go module dependency expectation
-  |     +--> rebuild trigger for builder base image
+  |     +--> rebuild trigger for artifact base image
   |
   +-- SERVICE_UTILS_REF
   |     |
@@ -229,7 +227,7 @@ service-utils/builder/ASN_VERSION
         |
         +--> Debian package dependency version
         +--> Docker build args for ASN runtime dependency
-        +--> service-builder Docker Go toolchain version
+        +--> artifact-builder Docker Go toolchain version
 ```
 
 ## Artifact Version Effects
@@ -246,7 +244,7 @@ Expected behavior:
 
 ### Debian Packages
 
-`service.plugin.builder.mk` replaces package control placeholders:
+The shared AM Workflow artifact builder replaces package control placeholders:
 
 - `@VERSION@` becomes `$(VERSION_BUILD)`.
 - `@DEPENDS@` becomes `$(ASN_RUNTIME_VERSION)`.
@@ -267,7 +265,7 @@ This means Docker runtime dependency versions should be driven by `ASN_RUNTIME_V
 
 ### service-utils Checkout
 
-The builder target `update_service_utils` attempts to check out `service-utils` to `$(SERVICE_UTILS_REF)`.
+The ASN extension target `update_service_utils` attempts to check out `service-utils` to `$(SERVICE_UTILS_REF)`.
 
 This means changing `SERVICE_UTILS_REF` can also change the builder/config/deployment templates used by the build.
 
@@ -281,7 +279,7 @@ Before build or release work, verify:
 4. `service-utils/go.mod` uses the same intended ASN service API version, or a documented compatible exception exists.
 5. `service-utils/builder/ASN_VERSION` `ASN_RUNTIME_MODE` is `pro` by default, or explicitly set to `dev` for ASN DEV integration.
 6. `service-utils/builder/ASN_VERSION` `ASN_RUNTIME_VERSION` is an intended compatible ASN Framework/runtime version.
-7. `service-utils/builder/ASN_VERSION` `ASN_BUILDER_GO_VERSION` is the intended service-builder Go toolchain version.
+7. `service-utils/builder/ASN_VERSION` `ASN_BUILDER_GO_VERSION` is the intended artifact-builder Go toolchain version.
 8. Builder base image has been rebuilt after any API/toolchain/dependency change.
 9. Debian and Docker dependency versions are expected to follow `ASN_RUNTIME_VERSION`.
 10. Service product artifacts are expected to follow `VERSION_BUILD`.

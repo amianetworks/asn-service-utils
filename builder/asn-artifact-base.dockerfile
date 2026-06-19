@@ -1,6 +1,6 @@
 # Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
-# Build base build image for ASN Service Plugins
+# Build artifact base image for ASN service projects.
 
 FROM ubuntu:24.04
 
@@ -9,7 +9,7 @@ ARG GO_VERSION
 
 RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
     printf 'Binary::apt::APT::Keep-Downloaded-Packages "true";\n' > /etc/apt/apt.conf.d/keep-cache
-RUN --mount=type=cache,id=asn-service-builder-base-apt-cache-ubuntu24.04,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=asn-artifact-builder-base-apt-cache-ubuntu24.04,target=/var/cache/apt,sharing=locked \
     DEBIAN_FRONTEND=noninteractive apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       build-essential \
@@ -48,9 +48,9 @@ RUN --mount=type=secret,id=sshkey \
     go mod download all
 
 # Keep the base image source-free. Build targets run later with the service
-# checkout bind-mounted by service-build-once-docker-run.
+# checkout bind-mounted by the artifact build executor.
 WORKDIR /
 RUN rm -rf /asn-service
 
-# Default 
+# Default
 CMD ["bash"]

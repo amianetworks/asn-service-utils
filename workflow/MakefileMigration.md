@@ -1,13 +1,15 @@
 # Refreshed Makefile Migration Guide
 
-Status: reusable migration guide for ASN Framework and ASN Service repositories
-Scope: services that consume `service-utils/builder/service.plugin.builder.mk`
+Status: superseded by AM Workflow Space `workflow/make/artifact-builder.mk`
+Scope: services that include `service-utils/builder/asn.mk` before the shared AM Workflow artifact builder
 Audience: ASN Framework release engineers, service maintainers, DevOps, and coding agents
 
 ## Purpose
 
 The refreshed builder design makes the consuming service Makefile a thin
-contract layer and keeps reusable mechanics in `service-utils`.
+contract layer. ASN-specific dependency checks live in
+`service-utils/builder/asn.mk`; reusable build mechanics live in the AM Workflow
+Space `workflow/make/artifact-builder.mk` surface.
 
 After a service syncs to a compatible `service-utils` ref, use this guide to
 adopt the same design that SWAN now uses:
@@ -16,9 +18,8 @@ adopt the same design that SWAN now uses:
   service-utils bootstrap door;
 - service `make/config.mk` is the single portable place for service-specific
   product, artifact, docs, package, image, and publish topology declarations;
-- `service-utils/builder/service.plugin.builder.mk` is the public builder
-  include and loads focused `service-utils/builder/make/*.mk` fragments for
-  lifecycle, checks, source/proto, docs, packaging, Docker, and executor logic;
+- `service-utils/builder/asn.mk` is the ASN service extension include, loaded
+  before `workflow/make/artifact-builder.mk`;
 - generated `build/Manifest.yaml` owns artifact identity and lane status.
 
 Use `CheckPlanTargetMigration.md` with this guide when migrating `check*` and
@@ -35,8 +36,9 @@ truly service-specific.
 |---|---|---|
 | Root command map | consuming service | `help`, `init`, workflow gateway, guarded service-utils include, small root utilities. |
 | Service contract config | consuming service | Single declarative `make/config.mk` for `VERSION`, `ASN_SERVICE_API_VERSION`, artifact inventories, docs staging, Debian/Docker topology, publish sites. |
-| Shared builder contract | `service-utils` | `service.plugin.builder.mk` include index plus `builder/make/*.mk` fragments for `prepare`, `check`, `build-plugin`, internal docs staging, `build-debian`, `build-docker`, push/list targets, removed-target guidance. |
-| Helper scripts | `service-utils/builder/*.sh` | Manifest mutation, builder-base freshness, proto tool staging/generation, publish variable checks, Debian package metadata/building. |
+| ASN service extension | `service-utils` | `builder/asn.mk` for ASN runtime/API checks, ASN_VERSION loading, manifest args, and artifact-base metadata. |
+| Artifact builder contract | AM Workflow Space | `workflow/make/artifact-builder.mk` plus `workflow/make/artifact-builder/*.mk` fragments for `prepare`, `check`, docs staging, Debian, Docker, push/list targets, and executor logic. |
+| Helper scripts | `service-utils/builder/*.sh` | Manifest mutation, artifact-base freshness, proto tool staging/generation, publish variable checks, Debian package metadata/building. |
 | Generated evidence | consuming service build output | `build/Manifest.yaml`, `build/docs`, `build/debian`, local Docker images. |
 
 Do not copy `service-utils` helper scripts into service repositories. If a
@@ -90,7 +92,7 @@ The root should:
 | Public target | Meaning |
 |---|---|
 | `init` | Initialize or realign `service-utils`, then run service-utils build checks. |
-| `prepare` | Build or refresh the local builder base image. |
+| `prepare` | Build or refresh the local artifact base image. |
 | `check` | Validate build variables, build identity, go.mod compatibility, and builder readiness. |
 | `build-plugin` | Reserve the manifest-owned version and build plugin/service artifacts. |
 | `build-docs` | Service-local public target that generates service docs and calls the shared internal docs staging helper. |
@@ -164,7 +166,7 @@ args, `BUILD_MANIFEST_ARGS`, and `BUILD_MANIFEST_COMMON_EXTRA_ARGS`. Override
 these only when a service intentionally owns a different manifest contract.
 
 Do not compute `VERSION_BUILD` from ad hoc shell in tracked service config.
-The shared builder resolves the active version from `build/Manifest.yaml` only
+The artifact builder resolves the active version from `build/Manifest.yaml` only
 when the manifest matches the current `BUILD_MODE` and service `VERSION`.
 
 7. Adopt shared proto tooling when the service has protobuf generation.
@@ -243,7 +245,7 @@ SERVICE_FILE_ARTIFACTS
 ```
 
 The root Makefile includes `service-utils/builder/asn.mk` before the neutral
-AM Workflow service builder. The ASN extension supplies standard ASN-service
+AM Workflow artifact builder. The ASN extension supplies standard ASN-service
 defaults for builder image variables, manifest wrapper args, `DEBIAN_PATH`,
 `DEBIAN_SERVICES`,
 `SERVICE_DOCKER_COMPONENTS`, `DOCKER_IMAGES`,
@@ -292,7 +294,7 @@ make check
 make proto-tools-check
 ```
 
-If the builder base image is missing or stale:
+If the artifact base image is missing or stale:
 
 ```bash
 make prepare
@@ -330,10 +332,6 @@ If a service cannot complete migration:
 4. Fix the reusable helper in `service-utils` when the failure is generic;
    fix the service config when the failure is service-specific.
 
-For executor-specific issues, temporarily use:
-
-```bash
-make build-plugin SERVICE_BUILD_EXECUTION_MODE=docker-build
-```
-
-See `BuilderExecutionMigration.md` for details and constraints.
+For executor-specific issues, keep or return the service to its previous
+known-good `service-utils` ref and record the host constraint. See
+`BuilderExecutionMigration.md` for the current executor contract.
