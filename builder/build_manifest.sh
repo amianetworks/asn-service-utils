@@ -24,9 +24,9 @@ version_build="${VERSION_BUILD:-}"
 lane=""
 docs_dir="$PROJECT_ROOT/build/docs"
 debian_dir="$PROJECT_ROOT/build/debian"
-debian_services="${DEBIAN_SERVICES:-}"
+debian_packages="${DEBIAN_PACKAGES:-}"
 docker_images="${DOCKER_IMAGES:-}"
-manifest_schema="${BUILD_MANIFEST_SCHEMA:-service.build.manifest.v1}"
+manifest_schema="${BUILD_MANIFEST_SCHEMA:-artifact.build.manifest.v1}"
 source_key="${BUILD_MANIFEST_SOURCE_KEY:-source_commit}"
 source_label="${BUILD_MANIFEST_SOURCE_LABEL:-service}"
 plugin_required_artifacts="${SERVICE_PLUGIN_REQUIRED_ARTIFACTS:-}"
@@ -78,7 +78,7 @@ while [ "$#" -gt 0 ]; do
         --lane) shift; lane="${1:-}" ;;
         --docs-dir) shift; docs_dir="${1:-}" ;;
         --debian-dir) shift; debian_dir="${1:-}" ;;
-        --debian-services) shift; debian_services="${1:-}" ;;
+        --debian-packages) shift; debian_packages="${1:-}" ;;
         --docker-images) shift; docker_images="${1:-}" ;;
         --schema) shift; manifest_schema="${1:-}" ;;
         --source-key) shift; source_key="${1:-}" ;;
@@ -562,9 +562,9 @@ docs_lane_status() {
 collect_debian_artifacts() {
     local out_file="$1"
     : > "$out_file"
-    local service file
-    for service in $debian_services; do
-        file="$debian_dir/${service}_${version_build}_amd64.deb"
+    local package file
+    for package in $debian_packages; do
+        file="$debian_dir/${package}_${version_build}_amd64.deb"
         add_existing_file "$out_file" "$file" || true
     done
     sort -u "$out_file" -o "$out_file"
@@ -573,10 +573,10 @@ collect_debian_artifacts() {
 debian_lane_status() {
     local artifacts="$1"
     collect_debian_artifacts "$artifacts"
-    local service file
-    [ -n "$debian_services" ] || { printf 'MISSING\n'; return; }
-    for service in $debian_services; do
-        file="$debian_dir/${service}_${version_build}_amd64.deb"
+    local package file
+    [ -n "$debian_packages" ] || { printf 'MISSING\n'; return; }
+    for package in $debian_packages; do
+        file="$debian_dir/${package}_${version_build}_amd64.deb"
         [ -f "$file" ] || { printf 'MISSING\n'; return; }
     done
     printf 'PASS\n'

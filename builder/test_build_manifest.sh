@@ -51,11 +51,11 @@ common_args=(
     --version 1.2
     --build 7
     --debian-dir build/debian
-    --debian-services svc
+    --debian-packages svc
     --docker-images svc-image
     --service-utils-dir service-utils
     --service svc
-    --schema service.build.manifest.v1
+    --schema artifact.build.manifest.v1
     --source-key source_commit
     --source-label service
     --plugin-required-artifacts "build/controller/svc.so"
