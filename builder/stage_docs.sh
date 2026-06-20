@@ -261,7 +261,7 @@ path_is_under() {
 prepare_managed_dir() {
     local label="$1"
     local raw="$2"
-    local target project_root workspace_root build_root cache_root result_root
+    local target project_root workspace_root build_root cache_root result_root result_dir
 
     case "$raw" in
         ""|"/")
@@ -279,8 +279,9 @@ prepare_managed_dir() {
     build_root="$(abs_path "$PROJECT_ROOT/build")"
     cache_root="$(abs_path "$PROJECT_ROOT/.cache")"
     result_root=""
-    if [ -n "${WORKFLOW_RESULT_DIR:-}" ]; then
-        result_root="$(abs_path "$WORKFLOW_RESULT_DIR")"
+    result_dir="${STAGE_DOCS_RESULT_DIR:-}"
+    if [ -n "$result_dir" ]; then
+        result_root="$(abs_path "$result_dir")"
     fi
 
     if [ "$target" = "$project_root" ] ||
