@@ -1,7 +1,7 @@
 # Builder Execution Migration Book
 
 Status: active AM Workflow artifact-builder contract
-Scope: ASN service projects that include `service-utils/builder/asn.mk` before
+Scope: ASN service projects that include the workflow ASN service add-on before
 the shared AM Workflow artifact builder
 Audience: service maintainers, release engineers, and coding agents
 

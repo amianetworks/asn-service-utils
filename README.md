@@ -74,11 +74,11 @@ A typical consuming service Makefile includes files in this order:
 
 1. The service includes its own `make/config.mk`.
 2. The service config sets product version fields and `ASN_SERVICE_API_VERSION`.
-3. The service Makefile includes `service-utils/builder/asn.mk`.
+3. The service Makefile includes the workflow ASN service add-on.
 4. The service Makefile includes the neutral AM Workflow `workflow/make/artifact-builder.mk`.
-5. `asn.mk` includes `builder/ASN_VERSION`.
+5. The workflow ASN service add-on includes `service-utils/builder/ASN_VERSION`.
 
-Because `builder/ASN_VERSION` is included after the service config through `asn.mk`, its selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` values are the effective ASN Framework/runtime dependency and builder Go toolchain for builder/package/runtime dependency paths under normal Make execution.
+Because `builder/ASN_VERSION` is included after the service config through the workflow add-on, its selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` values are the effective ASN Framework/runtime dependency and builder Go toolchain for builder/package/runtime dependency paths under normal Make execution.
 
 This is why `ASN_SERVICE_API_VERSION` and `ASN_RUNTIME_VERSION` must not be treated as the same version. They are a compatibility pair.
 
@@ -125,7 +125,7 @@ A consuming service should:
 1. Set `ASN_SERVICE_API_VERSION` in its build config.
 2. Use a root `go.mod` dependency that matches the intended ASN Service API version.
 3. Add `service-utils` as a submodule at the intended compatible checkout.
-4. Include `service-utils/builder/asn.mk` before the AM Workflow Space
+4. Include the AM Workflow ASN service add-on before the AM Workflow Space
    `workflow/make/artifact-builder.mk` include from its root Makefile.
 5. Provide the service-specific build targets expected by the shared builder,
    usually through project-local adapters or config.

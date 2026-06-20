@@ -1,15 +1,16 @@
 # Refreshed Makefile Migration Guide
 
-Status: superseded by AM Workflow Space `workflow/make/artifact-builder.mk`
-Scope: services that include `service-utils/builder/asn.mk` before the shared AM Workflow artifact builder
+Status: superseded by AM Workflow Space `workflow/make/add-ons/asn-service.mk`
+Scope: services that include the workflow ASN service add-on before the shared AM Workflow artifact builder
 Audience: ASN Framework release engineers, service maintainers, DevOps, and coding agents
 
 ## Purpose
 
 The refreshed builder design makes the consuming service Makefile a thin
-contract layer. ASN-specific dependency checks live in
-`service-utils/builder/asn.mk`; reusable build mechanics live in the AM Workflow
-Space `workflow/make/artifact-builder.mk` surface.
+contract layer. ASN-specific workflow integration lives in the AM Workflow Space
+`workflow/make/add-ons/asn-service.mk`; reusable build mechanics live in the AM
+Workflow Space `workflow/make/artifact-builder.mk` surface. `service-utils`
+remains the lower-level shared support checkout.
 
 After a service syncs to a compatible `service-utils` ref, use this guide to
 adopt the same design that SWAN now uses:
@@ -18,8 +19,8 @@ adopt the same design that SWAN now uses:
   service-utils bootstrap door;
 - service `make/config.mk` is the single portable place for service-specific
   product, artifact, docs, package, image, and publish topology declarations;
-- `service-utils/builder/asn.mk` is the ASN service extension include, loaded
-  before `workflow/make/artifact-builder.mk`;
+- `workflow/make/add-ons/asn-service.mk` is the ASN service extension include,
+  loaded before `workflow/make/artifact-builder.mk`;
 - generated `build/Manifest.yaml` owns artifact identity and lane status.
 
 Use `CheckPlanTargetMigration.md` with this guide when migrating `check*` and
@@ -244,16 +245,14 @@ SERVICE_P_*
 SERVICE_FILE_ARTIFACTS
 ```
 
-The root Makefile includes `service-utils/builder/asn.mk` before the neutral
-AM Workflow artifact builder. The ASN extension supplies standard ASN-service
-defaults for builder image variables, manifest wrapper args, `DEBIAN_PATH`,
-`DEBIAN_SERVICES`,
-`SERVICE_DOCKER_COMPONENTS`, `DOCKER_IMAGES`,
-`SERVICE_PLUGIN_REQUIRED_ARTIFACTS`, `SERVICE_PLUGIN_REQUIRED_GLOBS`, and
+The root Makefile includes the workflow ASN service add-on before the neutral
+AM Workflow artifact builder. The add-on supplies ASN dependency checks while
+the neutral builder owns generic builder image variables, manifest wrapper args,
+`DEBIAN_PATH`, `DEBIAN_PACKAGES`, `DOCKER_IMAGES`, artifact inventories, and
 derived proto generation variables.
 
 Services with docs, clients, local API docs, or custom release topology should
-also define the relevant `SERVICE_DOCS_*`, `DEBIAN_REPO_*`, and
+also define the relevant package docs, `DEBIAN_REPO_*`, and
 `DOCKER_REGISTRY_*` variables. Service-specific target delegates and ordering
 such as `build-docs`, `check-docs`, and `build-debian: build-docs` should be
 declared as targets in the consuming service root Makefile, not as shared
