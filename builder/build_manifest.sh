@@ -599,11 +599,54 @@ debian_lane_status() {
     printf 'PASS\n'
 }
 
+matrix_value() {
+    local value="$1"
+    value="$(expand_manifest_tokens "$value")"
+    value="$(printf '%s' "$value" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    printf '%s\n' "$value"
+}
+
+matrix_artifacts_from_entries() {
+    local lane_name="$1"
+    local row lane distribution platform variant package path publish_channel output_mode image tag docker_platform source_distribution platforms
+    [ -n "$artifact_matrix_entries" ] || return 0
+    while IFS= read -r row || [ -n "$row" ]; do
+        [ -n "$row" ] || continue
+        IFS='|' read -r lane distribution platform variant package path publish_channel output_mode image tag docker_platform source_distribution platforms <<EOF
+$row
+EOF
+        lane="$(matrix_value "$lane")"
+        [ "$lane" = "$lane_name" ] || continue
+        path="$(matrix_value "$path")"
+        image="$(matrix_value "$image")"
+        tag="$(matrix_value "$tag")"
+        if [ "$lane_name" = "docker" ] && [ -n "$image" ] && [ -n "$tag" ]; then
+            printf '%s:%s\n' "$image" "$tag"
+        elif [ -n "$path" ]; then
+            printf '%s\n' "$path"
+        fi
+    done <<EOF
+$(printf '%s\n' "$artifact_matrix_entries" | tr ';' '\n')
+EOF
+}
+
 collect_docker_artifacts() {
     local out_file="$1"
     : > "$out_file"
     have_command docker || return 0
-    local image ref inspect_output
+    local matrix_refs image ref inspect_output
+    matrix_refs="$(matrix_artifacts_from_entries docker)"
+    if [ -n "$matrix_refs" ]; then
+        while IFS= read -r ref || [ -n "$ref" ]; do
+            [ -n "$ref" ] || continue
+            if inspect_output="$(docker image inspect "$ref" 2>&1)"; then
+                printf '%s\n' "$ref" >> "$out_file"
+            fi
+            : "${inspect_output:-}"
+        done <<< "$matrix_refs"
+        sort -u "$out_file" -o "$out_file"
+        return
+    fi
     for image in $docker_images; do
         ref="$image:$version_build"
         if inspect_output="$(docker image inspect "$ref" 2>&1)"; then
@@ -617,9 +660,22 @@ collect_docker_artifacts() {
 docker_lane_status() {
     local artifacts="$1"
     collect_docker_artifacts "$artifacts"
-    [ -n "$docker_images" ] || { printf 'MISSING\n'; return; }
     have_command docker || { printf 'MISSING\n'; return; }
-    local image inspect_output
+    local matrix_refs image ref inspect_output
+    matrix_refs="$(matrix_artifacts_from_entries docker)"
+    if [ -n "$matrix_refs" ]; then
+        while IFS= read -r ref || [ -n "$ref" ]; do
+            [ -n "$ref" ] || continue
+            inspect_output="$(docker image inspect "$ref" 2>&1)" || {
+                : "$inspect_output"
+                printf 'MISSING\n'
+                return
+            }
+        done <<< "$matrix_refs"
+        printf 'PASS\n'
+        return
+    fi
+    [ -n "$docker_images" ] || { printf 'MISSING\n'; return; }
     for image in $docker_images; do
         inspect_output="$(docker image inspect "$image:$version_build" 2>&1)" || {
             : "$inspect_output"
@@ -641,6 +697,59 @@ write_artifact_block() {
         done < "$artifacts"
     else
         printf '%sartifacts: []\n' "$indent" >> "$out"
+    fi
+}
+
+write_artifact_matrix() {
+    local out="$1"
+    local row lane distribution platform variant package path publish_channel output_mode image tag docker_platform source_distribution platforms matrix_platform
+    [ -n "$artifact_matrix_entries" ] || return 0
+    printf 'artifact_matrix:\n' >> "$out"
+    local wrote=0
+    while IFS= read -r row || [ -n "$row" ]; do
+        [ -n "$row" ] || continue
+        IFS='|' read -r lane distribution platform variant package path publish_channel output_mode image tag docker_platform source_distribution platforms <<EOF
+$row
+EOF
+        lane="$(matrix_value "$lane")"
+        distribution="$(matrix_value "$distribution")"
+        platform="$(matrix_value "$platform")"
+        variant="$(matrix_value "$variant")"
+        package="$(matrix_value "$package")"
+        path="$(matrix_value "$path")"
+        publish_channel="$(matrix_value "$publish_channel")"
+        output_mode="$(matrix_value "$output_mode")"
+        image="$(matrix_value "$image")"
+        tag="$(matrix_value "$tag")"
+        docker_platform="$(matrix_value "$docker_platform")"
+        source_distribution="$(matrix_value "$source_distribution")"
+        platforms="$(matrix_value "$platforms")"
+        [ -n "$lane" ] || continue
+        printf '  - lane: %s\n' "$(yaml_quote "$lane")" >> "$out"
+        [ -z "$distribution" ] || printf '    distribution: %s\n' "$(yaml_quote "$distribution")" >> "$out"
+        [ -z "$platform" ] || printf '    platform: %s\n' "$(yaml_quote "$platform")" >> "$out"
+        [ -z "$variant" ] || printf '    variant: %s\n' "$(yaml_quote "$variant")" >> "$out"
+        [ -z "$package" ] || printf '    package: %s\n' "$(yaml_quote "$package")" >> "$out"
+        [ -z "$path" ] || printf '    path: %s\n' "$(yaml_quote "$path")" >> "$out"
+        [ -z "$publish_channel" ] || printf '    publish_channel: %s\n' "$(yaml_quote "$publish_channel")" >> "$out"
+        [ -z "$output_mode" ] || printf '    output_mode: %s\n' "$(yaml_quote "$output_mode")" >> "$out"
+        [ -z "$image" ] || printf '    image: %s\n' "$(yaml_quote "$image")" >> "$out"
+        [ -z "$tag" ] || printf '    tag: %s\n' "$(yaml_quote "$tag")" >> "$out"
+        [ -z "$docker_platform" ] || printf '    docker_platform: %s\n' "$(yaml_quote "$docker_platform")" >> "$out"
+        [ -z "$source_distribution" ] || printf '    source_package_distribution: %s\n' "$(yaml_quote "$source_distribution")" >> "$out"
+        if [ -n "$platforms" ]; then
+            printf '    platforms:\n' >> "$out"
+            for matrix_platform in $platforms; do
+                printf '      - %s\n' "$(yaml_quote "$matrix_platform")" >> "$out"
+            done
+        fi
+        wrote=1
+    done <<EOF
+$(printf '%s\n' "$artifact_matrix_entries" | tr ';' '\n')
+EOF
+    if [ "$wrote" -ne 1 ]; then
+        sed -i.bak '$d' "$out"
+        rm -f "$out.bak"
     fi
 }
 
@@ -714,6 +823,7 @@ write_manifest() {
         printf '    status: %s\n' "$(yaml_quote "$docker_status")"
     } >> "$out"
     write_artifact_block "$out" "$docker_artifacts" "    "
+    write_artifact_matrix "$out"
 
     mv "$out" "$manifest_file"
     rm -rf "$tmpdir"
@@ -774,6 +884,87 @@ lane_artifacts_from_manifest() {
     ' "$manifest_file"
 }
 
+matrix_artifacts_from_manifest() {
+    local lane_name="$1"
+    [ -s "$manifest_file" ] || return 0
+    awk -v lane_name="$lane_name" '
+        function trim(value) {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            return value
+        }
+        function unquote(value) {
+            value = trim(value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+                gsub(/\\"/, "\"", value)
+                gsub(/\\\\/, "\\", value)
+            }
+            return value
+        }
+        function reset_item() {
+            item_lane = ""
+            item_path = ""
+            item_image = ""
+            item_tag = ""
+        }
+        function emit_item() {
+            if (item_lane != lane_name) return
+            if (item_lane == "docker" && item_image != "" && item_tag != "") {
+                print item_image ":" item_tag
+            } else if (item_path != "") {
+                print item_path
+            }
+        }
+        /^[^[:space:]][^:]*:/ {
+            top = $0
+            sub(/:.*/, "", top)
+            if (in_matrix) emit_item()
+            in_matrix = (top == "artifact_matrix")
+            reset_item()
+            next
+        }
+        in_matrix && /^  - / {
+            emit_item()
+            reset_item()
+            line = $0
+            sub(/^  -[[:space:]]*/, "", line)
+            if (line ~ /^lane:/) {
+                sub(/^lane:[[:space:]]*/, "", line)
+                item_lane = unquote(line)
+            }
+            next
+        }
+        in_matrix && /^    lane:/ {
+            value = $0
+            sub(/^    lane:[[:space:]]*/, "", value)
+            item_lane = unquote(value)
+            next
+        }
+        in_matrix && /^    path:/ {
+            value = $0
+            sub(/^    path:[[:space:]]*/, "", value)
+            item_path = unquote(value)
+            next
+        }
+        in_matrix && /^    image:/ {
+            value = $0
+            sub(/^    image:[[:space:]]*/, "", value)
+            item_image = unquote(value)
+            next
+        }
+        in_matrix && /^    tag:/ {
+            value = $0
+            sub(/^    tag:[[:space:]]*/, "", value)
+            item_tag = unquote(value)
+            next
+        }
+        END {
+            if (in_matrix) emit_item()
+        }
+    ' "$manifest_file"
+}
+
 require_lane() {
     [ -n "$lane" ] || { echo "build_manifest ERROR: --lane is required" >&2; exit 2; }
     lane_rank "$lane" >/dev/null
@@ -790,7 +981,13 @@ require_lane() {
 lane_artifacts() {
     [ -n "$lane" ] || { echo "build_manifest ERROR: --lane is required" >&2; exit 2; }
     require_lane >/dev/null
-    lane_artifacts_from_manifest "$lane"
+    local matrix_artifacts
+    matrix_artifacts="$(matrix_artifacts_from_manifest "$lane")"
+    if [ -n "$matrix_artifacts" ]; then
+        printf '%s\n' "$matrix_artifacts"
+    else
+        lane_artifacts_from_manifest "$lane"
+    fi
 }
 
 commit_dev_build_file() {

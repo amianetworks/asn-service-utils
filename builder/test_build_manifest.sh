@@ -75,6 +75,9 @@ docs_args=(
     --docs-version-file build/docs/release/ReleaseManifest.yaml
     --docs-version-key svc_version_build
 )
+matrix_args=(
+    --artifact-matrix "docker|AU_CONTROLLER|linux-amd64|||||local|svc-image|@VERSION_BUILD@-linux-amd64|linux/amd64|AU_CONTROLLER|;"
+)
 
 version="$("${manifest_cmd[@]}" commit-plugin \
     "${common_args[@]}" \
@@ -104,6 +107,31 @@ assert_contains build/Manifest.yaml 'asn_service_api_version: "26.7.6"'
 assert_contains build/Manifest.yaml 'asn_runtime_version: "26.7.5"'
 assert_contains build/Manifest.yaml 'go_version: "1.26.3"'
 assert_contains build/Manifest.yaml 'asn_builder_go_version: "1.26.3"'
+
+fakebin="$tmpdir/fakebin"
+mkdir -p "$fakebin"
+cat > "$fakebin/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "$#" -eq 3 ] && [ "$1" = "image" ] && [ "$2" = "inspect" ] && [ "$3" = "svc-image:1.2.101-linux-amd64" ]; then
+    printf '[]\n'
+    exit 0
+fi
+exit 1
+EOF
+chmod +x "$fakebin/docker"
+PATH="$fakebin:$PATH" "${manifest_cmd[@]}" commit-lane \
+    --lane docker \
+    "${common_args[@]}" \
+    "${docs_args[@]}" \
+    "${matrix_args[@]}" \
+    --version-build 1.2.101 >/dev/null
+docker_status="$("${manifest_cmd[@]}" value --key lanes.docker.status "${common_args[@]}")"
+assert_equals "$docker_status" "PASS" "matrix docker lane status"
+docker_artifacts="$("${manifest_cmd[@]}" artifacts --lane docker "${common_args[@]}" "${matrix_args[@]}")"
+printf '%s\n' "$docker_artifacts" | grep -Fxq "svc-image:1.2.101-linux-amd64" || fail "missing matrix docker artifact"
+assert_contains build/Manifest.yaml 'artifact_matrix:'
+assert_contains build/Manifest.yaml 'tag: "1.2.101-linux-amd64"'
 
 rm -rf build/docs
 required="$("${manifest_cmd[@]}" require-lane --lane docs "${common_args[@]}" "${docs_args[@]}")"
