@@ -4,8 +4,9 @@
 ## ASN artifact support extension.
 ##
 ## ASN and ASN service projects may include this file for service-utils-owned
-## runtime/API defaults, version checks, and support checkout maintenance. Any
-## higher-level hook registration belongs outside this shared dependency.
+## runtime/API defaults and version checks. Project dependency checkout
+## maintenance belongs to WorkflowSpace project_dependencies or plain Git
+## submodule setup.
 
 ifeq ($(strip $(SERVICE_UTILS_DIR)),)
 $(error SERVICE_UTILS_DIR is required before including service-utils/builder/asn.mk)
@@ -59,33 +60,13 @@ BUILD_MANIFEST_ARTIFACT_EXTRA_ARGS += \
 ASN_DEFINE_BUILD_PLUGIN ?= 1
 ASN_BUILD_PLUGIN_TARGET ?= build
 
-.PHONY: update-service-utils check-version check-build
+.PHONY: check-version check-build
 
 ifeq ($(strip $(ASN_DEFINE_BUILD_PLUGIN)),1)
 .PHONY: build-plugin
 
 build-plugin: $(ASN_BUILD_PLUGIN_TARGET)
 endif
-
-update-service-utils:
-	@if [ -z "$(strip $(SERVICE_UTILS_DIR))" ]; then printf '%s\n' "ERROR: SERVICE_UTILS_DIR is not set."; exit 2; fi
-	@if [ -z "$(strip $(SERVICE_UTILS_BRANCH))" ]; then printf '%s\n' "ERROR: SERVICE_UTILS_BRANCH is not set."; exit 2; fi
-	@if ! git -C "$(SERVICE_UTILS_DIR)" rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
-		printf '%s\n' "ERROR: $(SERVICE_UTILS_DIR) is not a git checkout; run 'make init' first."; \
-		exit 2; \
-	fi
-	@if git -C "$(SERVICE_UTILS_DIR)" ls-remote --exit-code --heads origin "$(SERVICE_UTILS_BRANCH)" >/dev/null 2>&1; then \
-		printf '%s\n' "Updating $(SERVICE_UTILS_DIR) from origin/$(SERVICE_UTILS_BRANCH)"; \
-		git -C "$(SERVICE_UTILS_DIR)" fetch origin "$(SERVICE_UTILS_BRANCH):refs/remotes/origin/$(SERVICE_UTILS_BRANCH)"; \
-		git -C "$(SERVICE_UTILS_DIR)" checkout "$(SERVICE_UTILS_BRANCH)" 2>/dev/null || git -C "$(SERVICE_UTILS_DIR)" checkout -b "$(SERVICE_UTILS_BRANCH)" --track "origin/$(SERVICE_UTILS_BRANCH)"; \
-		git -C "$(SERVICE_UTILS_DIR)" merge --ff-only "origin/$(SERVICE_UTILS_BRANCH)"; \
-	elif git -C "$(SERVICE_UTILS_DIR)" show-ref --verify --quiet "refs/heads/$(SERVICE_UTILS_BRANCH)"; then \
-		printf '%s\n' "Using local $(SERVICE_UTILS_DIR) branch $(SERVICE_UTILS_BRANCH) (origin ref unavailable)"; \
-		git -C "$(SERVICE_UTILS_DIR)" checkout "$(SERVICE_UTILS_BRANCH)"; \
-	else \
-		printf '%s\n' "ERROR: origin/$(SERVICE_UTILS_BRANCH) is unavailable and no local $(SERVICE_UTILS_BRANCH) branch exists."; \
-		exit 2; \
-	fi
 
 check-version:
 	@$(BUILD_MANIFEST_CMD) check-version \

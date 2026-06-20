@@ -1,26 +1,26 @@
 # Refreshed Makefile Migration Guide
 
-Status: superseded by AM Workflow Space `workflow/make/add-ons/asn-service.mk`
-Scope: services that include the workflow ASN service add-on before the shared AM Workflow artifact builder
+Status: superseded by project-selected `service-utils/builder/asn.mk` plus the shared AM Workflow artifact builder
+Scope: services that include the service-utils ASN support include before the shared AM Workflow artifact builder
 Audience: ASN Framework release engineers, service maintainers, DevOps, and coding agents
 
 ## Purpose
 
 The refreshed builder design makes the consuming service Makefile a thin
-contract layer. ASN-specific workflow integration lives in the AM Workflow Space
-`workflow/make/add-ons/asn-service.mk`; reusable build mechanics live in the AM
+contract layer. ASN-specific version/build support lives in the project-selected
+`service-utils/builder/asn.mk`; reusable build mechanics live in the AM
 Workflow Space `workflow/make/artifact-builder.mk` surface. `service-utils`
-remains the lower-level shared support checkout.
+remains the shared support checkout.
 
 After a service syncs to a compatible `service-utils` ref, use this guide to
 adopt the same design that SWAN now uses:
 
-- root `Makefile` owns public entry points, help, workflow gateways, and the
-  service-utils bootstrap door;
+- root `Makefile` owns public entry points, help, workflow gateways, and
+  project dependency configuration;
 - service `make/config.mk` is the single portable place for service-specific
   product, artifact, docs, package, image, and publish topology declarations;
-- `workflow/make/add-ons/asn-service.mk` is the ASN service extension include,
-  loaded before `workflow/make/artifact-builder.mk`;
+- `service-utils/builder/asn.mk` is the ASN service support include, loaded
+  before `workflow/make/artifact-builder.mk`;
 - generated `build/Manifest.yaml` owns artifact identity and lane status.
 
 Use `CheckPlanTargetMigration.md` with this guide when migrating `check*` and
