@@ -245,11 +245,11 @@ SERVICE_P_*
 SERVICE_FILE_ARTIFACTS
 ```
 
-The root Makefile includes the workflow ASN service add-on before the neutral
-AM Workflow artifact builder. The add-on supplies ASN dependency checks while
-the neutral builder owns generic builder image variables, manifest wrapper args,
-`DEBIAN_PATH`, `DEBIAN_PACKAGES`, `DOCKER_IMAGES`, artifact inventories, and
-derived proto generation variables.
+The root Makefile includes `service-utils/builder/asn.mk` before the neutral
+AM Workflow artifact builder. `builder/asn.mk` supplies ASN dependency checks
+while the neutral builder owns generic builder image variables, manifest wrapper
+args, `DEBIAN_PATH`, `DEBIAN_PACKAGES`, `DOCKER_IMAGES`, artifact inventories,
+and derived proto generation variables.
 
 Services with docs, clients, local API docs, or custom release topology should
 also define the relevant package docs, `DEBIAN_REPO_*`, and
