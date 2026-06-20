@@ -72,7 +72,7 @@ is framework-owned release metadata.
 
 ## Consuming Service Requirements
 
-A service repository that includes the workflow ASN service add-on before the
+A service repository that includes `service-utils/builder/asn.mk` before the
 AM Workflow Space `workflow/make/artifact-builder.mk` include must provide the
 following service-local contract.
 
@@ -116,15 +116,14 @@ SERVICE_DOCKERFILE_SN ?= docker/$(SERVICE_NAME)-servicenode.dockerfile
 PROTO_SOURCE_FILES := <proto-source-globs>
 ```
 
-The root Makefile includes the workflow ASN service add-on before the neutral AM
-Workflow artifact builder. The add-on reads service-utils support metadata and
-registers ASN checks; the neutral artifact builder derives builder image paths,
-manifest schema/source defaults, manifest argument wrappers, `DEBIAN_PATH`,
-`DEBIAN_PACKAGES`, artifact inventories, proto generation specs, and
-proto stamp inputs from the service identity, derived package/build names, and
-compact artifact specs above. Define those variables in service config only
-when a service intentionally breaks the standard ASN service
-layout.
+The root Makefile includes `service-utils/builder/asn.mk` before the neutral AM
+Workflow artifact builder. `builder/asn.mk` reads service-utils support metadata
+and registers ASN checks; the neutral artifact builder derives builder image
+paths, manifest schema/source defaults, manifest argument wrappers,
+`DEBIAN_PATH`, `DEBIAN_PACKAGES`, artifact inventories, proto generation specs,
+and proto stamp inputs from the service identity, derived package/build names,
+and compact artifact specs above. Define those variables in service config only
+when a service intentionally breaks the standard ASN service layout.
 
 The root Makefile, or the equivalent non-config Make layer, should resolve
 `VERSION_BUILD` from the active `build/Manifest.yaml` only when the manifest

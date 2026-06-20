@@ -74,11 +74,19 @@ A typical consuming service Makefile includes files in this order:
 
 1. The service includes its own `make/config.mk`.
 2. The service config sets product version fields and `ASN_SERVICE_API_VERSION`.
-3. The service Makefile includes the workflow ASN service add-on.
+3. The service Makefile includes `service-utils/builder/asn.mk`.
 4. The service Makefile includes the neutral AM Workflow `workflow/make/artifact-builder.mk`.
-5. The workflow ASN service add-on includes `service-utils/builder/ASN_VERSION`.
 
-Because `builder/ASN_VERSION` is included after the service config through the workflow add-on, its selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` values are the effective ASN Framework/runtime dependency and builder Go toolchain for builder/package/runtime dependency paths under normal Make execution.
+`builder/asn.mk` includes `builder/ASN_VERSION`, supplies ASN-owned defaults,
+and registers ASN readiness hooks through the neutral artifact-builder extension
+variables. The Workflow Make layer consumes those generic hooks but does not own
+ASN-specific target logic.
+
+Because `builder/ASN_VERSION` is included after the service config through
+`builder/asn.mk`, its selected `ASN_RUNTIME_VERSION` and
+`ASN_BUILDER_GO_VERSION` values are the effective ASN Framework/runtime
+dependency and builder Go toolchain for builder/package/runtime dependency paths
+under normal Make execution.
 
 This is why `ASN_SERVICE_API_VERSION` and `ASN_RUNTIME_VERSION` must not be treated as the same version. They are a compatibility pair.
 
