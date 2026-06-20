@@ -44,6 +44,8 @@ Options:
   --report-file FILE
   --service-name NAME
   --service-title TITLE
+  --project-id ID
+  --project-label LABEL
   --version-key KEY
   --version-label LABEL
   --source-key KEY
@@ -92,8 +94,8 @@ while [ "$#" -gt 0 ]; do
             [ "$#" -gt 0 ] || { echo "service-docs-stage ERROR: --report-file requires a path" >&2; exit 1; }
             report_file="$1"
             ;;
-        --service-name) shift; service_name="${1:-}" ;;
-        --service-title) shift; service_title="${1:-}" ;;
+        --service-name|--project-id) shift; service_name="${1:-}" ;;
+        --service-title|--project-label) shift; service_title="${1:-}" ;;
         --version-key) shift; version_key="${1:-}" ;;
         --version-label) shift; version_label="${1:-}" ;;
         --source-key) shift; source_key="${1:-}" ;;
@@ -259,7 +261,7 @@ path_is_under() {
 prepare_managed_dir() {
     local label="$1"
     local raw="$2"
-    local target project_root workspace_root build_root cache_root
+    local target project_root workspace_root build_root cache_root result_root
 
     case "$raw" in
         ""|"/")
@@ -276,11 +278,16 @@ prepare_managed_dir() {
     workspace_root="$(abs_path "$PROJECT_ROOT/..")"
     build_root="$(abs_path "$PROJECT_ROOT/build")"
     cache_root="$(abs_path "$PROJECT_ROOT/.cache")"
+    result_root=""
+    if [ -n "${WORKFLOW_RESULT_DIR:-}" ]; then
+        result_root="$(abs_path "$WORKFLOW_RESULT_DIR")"
+    fi
 
     if [ "$target" = "$project_root" ] ||
         [ "$target" = "$workspace_root" ] ||
         [ "$target" = "$build_root" ] ||
-        [ "$target" = "$cache_root" ]; then
+        [ "$target" = "$cache_root" ] ||
+        { [ -n "$result_root" ] && [ "$target" = "$result_root" ]; }; then
         echo "service-docs-stage ERROR: refusing unsafe $label directory: $target" >&2
         return 1
     fi

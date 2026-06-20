@@ -53,6 +53,7 @@ common_args=(
     --debian-dir build/debian
     --debian-packages svc
     --docker-images svc-image
+    --artifact-matrix ""
     --service-utils-dir service-utils
     --service svc
     --project svc

@@ -25,7 +25,9 @@ lane=""
 docs_dir="$PROJECT_ROOT/build/docs"
 debian_dir="$PROJECT_ROOT/build/debian"
 debian_packages="${DEBIAN_PACKAGES:-}"
+debian_required_artifacts="${DEBIAN_REQUIRED_ARTIFACTS:-}"
 docker_images="${DOCKER_IMAGES:-}"
+artifact_matrix_entries="${BUILD_MANIFEST_ARTIFACT_MATRIX:-}"
 manifest_schema="${BUILD_MANIFEST_SCHEMA:-artifact.build.manifest.v1}"
 source_key="${BUILD_MANIFEST_SOURCE_KEY:-source_commit}"
 source_label="${BUILD_MANIFEST_SOURCE_LABEL:-service}"
@@ -80,7 +82,9 @@ while [ "$#" -gt 0 ]; do
         --docs-dir) shift; docs_dir="${1:-}" ;;
         --debian-dir) shift; debian_dir="${1:-}" ;;
         --debian-packages) shift; debian_packages="${1:-}" ;;
+        --debian-required-artifacts) shift; debian_required_artifacts="${1:-}" ;;
         --docker-images) shift; docker_images="${1:-}" ;;
+        --artifact-matrix) shift; artifact_matrix_entries="${1:-}" ;;
         --schema) shift; manifest_schema="${1:-}" ;;
         --source-key) shift; source_key="${1:-}" ;;
         --source-label) shift; source_label="${1:-}" ;;
@@ -565,6 +569,11 @@ docs_lane_status() {
 collect_debian_artifacts() {
     local out_file="$1"
     : > "$out_file"
+    if [ -n "$debian_required_artifacts" ]; then
+        collect_configured_artifacts "$out_file" "$debian_required_artifacts" ""
+        sort -u "$out_file" -o "$out_file"
+        return
+    fi
     local package file
     for package in $debian_packages; do
         file="$debian_dir/${package}_${version_build}_amd64.deb"
@@ -576,6 +585,11 @@ collect_debian_artifacts() {
 debian_lane_status() {
     local artifacts="$1"
     collect_debian_artifacts "$artifacts"
+    if [ -n "$debian_required_artifacts" ]; then
+        [ "$(configured_files_status "$debian_required_artifacts")" = "PASS" ] || { printf 'MISSING\n'; return; }
+        printf 'PASS\n'
+        return
+    fi
     local package file
     [ -n "$debian_packages" ] || { printf 'MISSING\n'; return; }
     for package in $debian_packages; do
