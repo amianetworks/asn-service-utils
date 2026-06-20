@@ -1,11 +1,11 @@
 # Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
 ##----------------------------------------------------------------------------##
-## ASN artifact-builder extension.
+## ASN artifact support extension.
 ##
-## ASN service projects include this file before AM Workflow's neutral
-## workflow/make/artifact-builder.mk. This file owns ASN runtime/API dependency
-## checks and registers them into the neutral lifecycle hook lists.
+## ASN and ASN service projects may include this file for service-utils-owned
+## runtime/API defaults, version checks, and support checkout maintenance. Any
+## higher-level hook registration belongs outside this shared dependency.
 
 ifeq ($(strip $(SERVICE_UTILS_DIR)),)
 $(error SERVICE_UTILS_DIR is required before including service-utils/builder/asn.mk)
@@ -28,6 +28,10 @@ export ASN_SERVICE_API_VERSION ASN_RUNTIME_MODE ASN_RUNTIME_VERSION ASN_RUNTIME_
 export CHECK_VERSION_ROWS CHECK_VERSION_EXTRA_ROWS CHECK_BUILD_ROWS CHECK_BUILD_EXTRA_ROWS
 
 PROTO_TOOLS_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/proto_tools.sh
+BUILD_MANIFEST_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/build_manifest.sh
+BUILDER_BASE_IMAGE_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/builder_base_image.sh
+DEBIAN_PACKAGE_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/debian_package.sh
+STAGE_DOCS_CMD ?= bash $(SERVICE_UTILS_DIR)/builder/stage_docs.sh
 
 BUILD_CONTAINER_BASE_DOCKERFILE ?= $(SERVICE_UTILS_DIR)/builder/asn-artifact-base.dockerfile
 BUILD_CONTAINER_BASE_IMAGE ?= asn-artifact-builder-base
@@ -54,11 +58,6 @@ BUILD_MANIFEST_ARTIFACT_EXTRA_ARGS += \
 
 ASN_DEFINE_BUILD_PLUGIN ?= 1
 ASN_BUILD_PLUGIN_TARGET ?= build
-
-CHECK_PREPARE_TARGETS += check-version check-go-mod build-container-check
-CHECK_LOCAL_TARGETS += check-build
-PREPARE_CHECK_TARGETS += check-version check-go-mod
-BUILD_PRECHECK_TARGETS += check-version check-go-mod build-container-check
 
 .PHONY: update-service-utils check-version check-build
 

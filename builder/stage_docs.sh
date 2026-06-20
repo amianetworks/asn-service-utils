@@ -259,7 +259,7 @@ path_is_under() {
 prepare_managed_dir() {
     local label="$1"
     local raw="$2"
-    local target project_root workspace_root build_root cache_root result_root
+    local target project_root workspace_root build_root cache_root
 
     case "$raw" in
         ""|"/")
@@ -276,16 +276,11 @@ prepare_managed_dir() {
     workspace_root="$(abs_path "$PROJECT_ROOT/..")"
     build_root="$(abs_path "$PROJECT_ROOT/build")"
     cache_root="$(abs_path "$PROJECT_ROOT/.cache")"
-    result_root=""
-    if [ -n "${WORKFLOW_RESULT_DIR:-}" ]; then
-        result_root="$(abs_path "$WORKFLOW_RESULT_DIR")"
-    fi
 
     if [ "$target" = "$project_root" ] ||
         [ "$target" = "$workspace_root" ] ||
         [ "$target" = "$build_root" ] ||
-        [ "$target" = "$cache_root" ] ||
-        { [ -n "$result_root" ] && [ "$target" = "$result_root" ]; }; then
+        [ "$target" = "$cache_root" ]; then
         echo "service-docs-stage ERROR: refusing unsafe $label directory: $target" >&2
         return 1
     fi

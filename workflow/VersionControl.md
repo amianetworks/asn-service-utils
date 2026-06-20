@@ -111,11 +111,11 @@ Meaning:
 - `ASN_RUNTIME_VERSION_DEV` is the approved ASN DEV runtime dependency for explicit integration testing.
 - `ASN_RUNTIME_MODE` selects `pro` or `dev`; services default it to `pro`.
 - `ASN_RUNTIME_VERSION` is the selected ASN Framework/runtime dependency used by builder and packaging assets.
-- It is consumed by `service-utils/builder/asn.mk` through `include $(SERVICE_UTILS_DIR)/builder/ASN_VERSION`.
+- It is consumed by the workflow ASN service add-on through `include $(SERVICE_UTILS_DIR)/builder/ASN_VERSION`.
 - It is injected into Debian package control files as `@DEPENDS@`.
 - Consuming service projects may also pass `ASN_RUNTIME_VERSION` into Docker build arguments for ASN Controller and ASN Service Node runtime images.
 - `ASN_BUILDER_GO_VERSION` is the Go version required for service-plugin builder images.
-- In the common Makefile flow, the consuming service includes its own config first, then includes `service-utils/builder/asn.mk`, then includes the neutral AM Workflow `workflow/make/artifact-builder.mk`. The ASN extension owns selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` for normal Make execution.
+- In the common Makefile flow, the consuming service includes its own config first, then includes the workflow ASN service add-on, then includes the neutral AM Workflow `workflow/make/artifact-builder.mk`. The add-on reads selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` from service-utils for normal Make execution.
 
 Control rule:
 
@@ -129,7 +129,7 @@ Control rule:
 Sources:
 
 - The consuming service project's `.gitmodules`.
-- `service-utils/builder/asn.mk`.
+- The workflow ASN service add-on.
 - The current submodule checkout state.
 - The consuming service's API/util pairing policy in `make/config.mk` comments.
 
@@ -216,7 +216,7 @@ Consuming service make/config.mk
   |     |
   |     +--> service-utils checkout target, usually release/$(ASN_SERVICE_API_VERSION)
   |
-  +-- service-utils/builder/asn.mk
+  +-- workflow ASN service add-on
         |
         v
 service-utils/builder/ASN_VERSION
@@ -315,7 +315,7 @@ Recommended improvements:
 
 - Keep `version-report` and `version-check` free of submodule-sync and build-artifact side effects.
 - Consider adding a release-specific check that validates the selected repository target against `BUILD_MODE` before publishing.
-- Keep service-side config free of derived ASN runtime/toolchain defaults; `service-utils/builder/asn.mk` owns those values.
+- Keep service-side config free of derived ASN runtime/toolchain defaults; `service-utils/builder/ASN_VERSION` owns those values and the workflow ASN service add-on reads them.
 - Make build-number incrementing an explicit step for release workflows, or clearly distinguish the `make check` gate from `increment-build`.
 - Document the approved API/utils/framework pairing in release notes before building artifacts.
 
