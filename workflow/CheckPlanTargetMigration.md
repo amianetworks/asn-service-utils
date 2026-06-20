@@ -1,7 +1,7 @@
 # Check And Plan Target Migration Guide
 
-Status: superseded by AM Workflow Space `workflow/make/add-ons/asn-service.mk`
-Scope: repositories that include the workflow ASN service add-on before the shared AM Workflow artifact builder
+Status: superseded by project-selected `service-utils/builder/asn.mk` plus the shared AM Workflow artifact builder
+Scope: repositories that include the service-utils ASN support include before the shared AM Workflow artifact builder
 Audience: ASN Framework release engineers, service maintainers, DevOps, and coding agents
 
 ## Purpose

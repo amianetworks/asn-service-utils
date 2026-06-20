@@ -129,23 +129,25 @@ Control rule:
 Sources:
 
 - The consuming service project's `.gitmodules`.
-- The workflow ASN service add-on.
+- The consuming service's project-selected `service-utils/builder/asn.mk`.
+- The Workflow Space `project_dependencies` managed module entry.
 - The current submodule checkout state.
 - The consuming service's API/util pairing policy in `make/config.mk` comments.
 
 Intended behavior:
 
 - `ASN_SERVICE_UTILS` is paired with `ASN_SERVICE_API` in the consuming service's version policy.
-- the consuming service root `update-service-utils` target runs:
-
-```make
-cd $(SERVICE_UTILS_DIR) && git fetch && git checkout $(SERVICE_UTILS_REF) && git pull
-```
+- the Workflow Space project dependency resolver prepares the selected
+  service-utils module checkout and consumer symlinks.
 
 Meaning:
 
-- The intended active checkout for build work is selected by `SERVICE_UTILS_REF`, which usually derives from `ASN_SERVICE_API_VERSION`.
-- A consuming service's `.gitmodules` branch, current submodule checkout, and `SERVICE_UTILS_REF` target may differ if the submodule was manually moved or if repository metadata is stale.
+- The intended active checkout for build work is selected by the Workflow Space
+  project dependency registry plus the consuming service's `SERVICE_UTILS_BRANCH`
+  intent, which usually derives from `ASN_SERVICE_API_VERSION`.
+- A consuming service's `.gitmodules` branch, current submodule checkout, and
+  managed module ref may differ if the module was manually moved or if
+  repository metadata is stale.
 - The submodule may be in detached HEAD after an automated checkout of a version branch or tag.
 
 Control rule:

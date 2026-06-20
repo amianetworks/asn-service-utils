@@ -43,6 +43,7 @@ go_version="${GO_VERSION:-}"
 asn_builder_go_version="${ASN_BUILDER_GO_VERSION:-}"
 service_utils_ref=""
 service_name=""
+project_id="${PROJECT_ID:-}"
 manifest_commit_lane="docker"
 
 usage() {
@@ -83,6 +84,7 @@ while [ "$#" -gt 0 ]; do
         --schema) shift; manifest_schema="${1:-}" ;;
         --source-key) shift; source_key="${1:-}" ;;
         --source-label) shift; source_label="${1:-}" ;;
+        --project) shift; project_id="${1:-}" ;;
         --plugin-required-artifacts) shift; plugin_required_artifacts="${1:-}" ;;
         --plugin-required-globs) shift; plugin_required_globs="${1:-}" ;;
         --plugin-optional-artifacts) shift; plugin_optional_artifacts="${1:-}" ;;
@@ -182,6 +184,7 @@ yaml_value() {
 replace_placeholders() {
     local value="$1"
     value="${value//@SERVICE@/$service_name}"
+    value="${value//@PROJECT@/$project_id}"
     value="${value//@BUILD_MODE@/$mode_lower}"
     value="${value//@MANIFEST@/$(relpath "$manifest_file")}"
     value="${value//@BUILT_VERSION@/$display_built_version}"

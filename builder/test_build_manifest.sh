@@ -55,6 +55,7 @@ common_args=(
     --docker-images svc-image
     --service-utils-dir service-utils
     --service svc
+    --project svc
     --schema artifact.build.manifest.v1
     --source-key source_commit
     --source-label service
