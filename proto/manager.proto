@@ -6,10 +6,22 @@ option go_package = "./;proto";
 
 package asn_controller;
 
+import "google/api/annotations.proto";
+
 service Manager {
   // ASNC related operations
-  rpc GetInfo     (Empty)         returns (ControllerInfo);
-  rpc UpdatePort  (UpdatePortReq) returns (Empty);
+  rpc GetInfo     (Empty)         returns (ControllerInfo) {
+    option (google.api.http) = {
+      get: "/info"
+    };
+  }
+
+  rpc UpdatePort  (UpdatePortReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/info/port"
+      body: "*"
+    };
+  }
 
   // ---------------------------------------------------------------------------
   // 1 — Auth (Verification Codes, Login, MFA, Factors, Tokens, Logout)
@@ -18,16 +30,34 @@ service Manager {
   // --- Auth Login/Logout ---
 
   // Lists supported login methods (password, phone+code, email+code, WeChat, Sign in with Apple).
-  rpc AuthListLoginMethods (Empty) returns (Auth.LoginMethods);
+  rpc AuthListLoginMethods (Empty) returns (Auth.LoginMethods) {
+    option (google.api.http) = {
+      get: "/auth/login/methods"
+    };
+  }
 
   // Lists allowed phone countries for SMS login/bind.
-  rpc AuthListPhoneCountries (Empty) returns (Auth.CountryCodeList);
+  rpc AuthListPhoneCountries (Empty) returns (Auth.CountryCodeList) {
+    option (google.api.http) = {
+      get: "/auth/phone/countries"
+    };
+  }
 
   // Sends a verification code (e.g., SMS) to a phone number.
-  rpc AuthSendCodeToPhone (Auth.Phone) returns (Auth.Code);
+  rpc AuthSendCodeToPhone (Auth.Phone) returns (Auth.Code) {
+    option (google.api.http) = {
+      post: "/auth/phone/sendCode"
+      body: "*"
+    };
+  }
 
   // Sends a verification code to an email address.
-  rpc AuthSendCodeToEmail (Auth.Email) returns (Auth.Code);
+  rpc AuthSendCodeToEmail (Auth.Email) returns (Auth.Code) {
+    option (google.api.http) = {
+      post: "/auth/email/sendCode"
+      body: "*"
+    };
+  }
 
   // Login is a single stateful flow regardless of credential kind:
   //   AuthFlowInit -> (optional) AuthFlowGetChallenge -> AuthFlowVerify
@@ -37,28 +67,62 @@ service Manager {
   // Step 1: choose a credential method, provide the matching identity, and open a
   // login flow. The returned state directs the client to AuthFlowGetChallenge
   // (FLOW_STATE_CHALLENGE_REQUIRED) or straight to AuthFlowVerify (FLOW_STATE_VERIFY_REQUIRED).
-  rpc AuthFlowInit (Auth.FlowInitReq) returns (Auth.FlowInitRes);
+  rpc AuthFlowInit (Auth.FlowInitReq) returns (Auth.FlowInitRes) {
+    option (google.api.http) = {
+      post: "/auth/flow/init"
+      body: "*"
+    };
+  }
 
   // Step 2 (FLOW_STATE_CHALLENGE_REQUIRED only): prepare the verify step — send an
   // OTP for phone/email code methods, or return a WebAuthn challenge for passkey.
-  rpc AuthFlowGetChallenge (Auth.FlowGetChallengeReq) returns (Auth.FlowGetChallengeRes);
+  rpc AuthFlowGetChallenge (Auth.FlowGetChallengeReq) returns (Auth.FlowGetChallengeRes) {
+    option (google.api.http) = {
+      post: "/auth/flow/challenge"
+      body: "*"
+    };
+  }
 
   // Step 3: submit the proof matching the flow's method and complete the login (or
   // advance to FLOW_STATE_MFA_VERIFY / FLOW_STATE_MFA_SETUP).
-  rpc AuthFlowVerify (Auth.FlowVerifyReq) returns (Auth.LoginResult);
+  rpc AuthFlowVerify (Auth.FlowVerifyReq) returns (Auth.LoginResult) {
+    option (google.api.http) = {
+      post: "/auth/flow/verify"
+      body: "*"
+    };
+  }
 
   // Re-enters the MFA flow from an MFA-unverified access token (when token
   // verification reports MFA is still required).
-  rpc AuthFlowResume (Auth.FlowResumeReq) returns (Auth.LoginResult);
+  rpc AuthFlowResume (Auth.FlowResumeReq) returns (Auth.LoginResult) {
+    option (google.api.http) = {
+      post: "/auth/flow/resume"
+      body: "*"
+    };
+  }
 
   // Refreshes the access/refresh token pair.
-  rpc AuthRefreshToken (Auth.Tokens) returns (Auth.Tokens);
+  rpc AuthRefreshToken (Auth.Tokens) returns (Auth.Tokens) {
+    option (google.api.http) = {
+      post: "/auth/token"
+      body: "*"
+    };
+  }
 
   // Logs a user out from a single device or all devices.
-  rpc AuthLogout (Empty) returns (Empty);
+  rpc AuthLogout (Empty) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/logout"
+      body: "*"
+    };
+  }
 
   // Returns the current authenticated user, resolved from the access token.
-  rpc AuthGetCurrentUser (Empty) returns (User);
+  rpc AuthGetCurrentUser (Empty) returns (User) {
+    option (google.api.http) = {
+      get: "/auth/user"
+    };
+  }
 
   // --- Auth Management ---
 
@@ -67,169 +131,582 @@ service Manager {
   //   AuthPasswordFlowInit -> (OTP methods) AuthPasswordFlowSendCode
   //     -> AuthPasswordFlowVerify -> AuthPasswordFlowComplete
   // Step 1: identify the account and obtain a flow token + available methods.
-  rpc AuthPasswordFlowInit (Auth.PasswordFlowInitReq) returns (Auth.PasswordFlowInitRes);
+  rpc AuthPasswordFlowInit (Auth.PasswordFlowInitReq) returns (Auth.PasswordFlowInitRes) {
+    option (google.api.http) = {
+      post: "/auth/password/flow/init"
+      body: "*"
+    };
+  }
 
   // Step 2 (OTP methods only): send (or resend, rate-limited) the verification code
   // to the account's bound email/phone. Skip for the old-password method.
-  rpc AuthPasswordFlowSendCode (Auth.PasswordFlowSendCodeReq) returns (Auth.PasswordFlowSendCodeRes);
+  rpc AuthPasswordFlowSendCode (Auth.PasswordFlowSendCodeReq) returns (Auth.PasswordFlowSendCodeRes) {
+    option (google.api.http) = {
+      post: "/auth/password/flow/sendCode"
+      body: "*"
+    };
+  }
 
   // Step 3: submit the chosen proof (old password or OTP) to verify the flow token.
-  rpc AuthPasswordFlowVerify (Auth.PasswordFlowVerifyReq) returns (Empty);
+  rpc AuthPasswordFlowVerify (Auth.PasswordFlowVerifyReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/password/flow/verify"
+      body: "*"
+    };
+  }
 
   // Step 4: set the new password for a verified flow token.
-  rpc AuthPasswordFlowComplete (Auth.PasswordFlowCompleteReq) returns (Empty);
+  rpc AuthPasswordFlowComplete (Auth.PasswordFlowCompleteReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/password/flow/complete"
+      body: "*"
+    };
+  }
 
   // Admin-only: directly set another account's password (no proof of the old one).
-  rpc AuthResetPassword (Auth.ResetPassword) returns (Empty);
+  rpc AuthResetPassword (Auth.ResetPassword) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/password/reset"
+      body: "*"
+    };
+  }
 
   // Enables MFA login for the current user.
-  rpc AuthEnableUserMfa (Empty) returns (Empty);
+  rpc AuthEnableUserMfa (Empty) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/mfa/enable"
+      body: "*"
+    };
+  }
 
   // Disables MFA login for the current user.
-  rpc AuthDisableUserMfa (Empty) returns (Empty);
+  rpc AuthDisableUserMfa (Empty) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/mfa/disable"
+      body: "*"
+    };
+  }
 
   // Generates provisioning materials to enroll a TOTP authenticator.
-  rpc AuthGenerateTotpQrCode (Empty) returns (Auth.TotpQrCode);
+  rpc AuthGenerateTotpQrCode (Empty) returns (Auth.TotpQrCode) {
+    option (google.api.http) = {
+      get: "/auth/mfa/totp/qrcode"
+    };
+  }
 
   // Binds/enrolls a TOTP authenticator for a user (requires a valid TOTP code).
-  rpc AuthBindTotp (Auth.BindTotp) returns (Empty);
+  rpc AuthBindTotp (Auth.BindTotp) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/mfa/totp/bind"
+      body: "*"
+    };
+  }
 
   // Unbinds a TOTP authenticator from a user.
-  rpc AuthUnbindTotp (User.ID) returns (Empty);
+  rpc AuthUnbindTotp (User.ID) returns (Empty) {
+    option (google.api.http) = {
+      delete: "/auth/mfa/totp/bind"
+    };
+  }
 
   // Binds an email factor (used for verification/MFA).
-  rpc AuthBindEmail (Auth.BindEmail) returns (Empty);
+  rpc AuthBindEmail (Auth.BindEmail) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/bind/email"
+      body: "*"
+    };
+  }
 
   // Unbinds the email factor.
-  rpc AuthUnbindEmail (User.ID) returns (Empty);
+  rpc AuthUnbindEmail (User.ID) returns (Empty) {
+    option (google.api.http) = {
+      delete: "/auth/bind/email"
+    };
+  }
 
   // Binds a phone factor (used for verification/MFA).
-  rpc AuthBindPhone (Auth.BindPhone) returns (Empty);
+  rpc AuthBindPhone (Auth.BindPhone) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/bind/phone"
+      body: "*"
+    };
+  }
 
   // Unbinds the phone factor.
-  rpc AuthUnbindPhone (User.ID) returns (Empty);
+  rpc AuthUnbindPhone (User.ID) returns (Empty) {
+    option (google.api.http) = {
+      delete: "/auth/bind/phone"
+    };
+  }
 
   // Binds a WeChat factor.
-  rpc AuthBindWeChat (Auth.BindWeChat) returns (Empty);
+  rpc AuthBindWeChat (Auth.BindWeChat) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/bind/wechat"
+      body: "*"
+    };
+  }
 
   // Unbinds the WeChat factor.
-  rpc AuthUnbindWeChat (User.ID) returns (Empty);
+  rpc AuthUnbindWeChat (User.ID) returns (Empty) {
+    option (google.api.http) = {
+      delete: "/auth/bind/wechat"
+    };
+  }
 
   // Binds an Apple ID factor.
-  rpc AuthBindAppleId (Auth.BindApple) returns (Empty);
+  rpc AuthBindAppleId (Auth.BindApple) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/bind/apple"
+      body: "*"
+    };
+  }
 
   // Unbinds the Apple ID factor.
-  rpc AuthUnbindAppleId (User.ID) returns (Empty);
+  rpc AuthUnbindAppleId (User.ID) returns (Empty) {
+    option (google.api.http) = {
+      delete: "/auth/bind/apple"
+    };
+  }
 
   // Binds a Google ID factor.
-  rpc AuthBindGoogleId (Auth.BindGoogle) returns (Empty);
+  rpc AuthBindGoogleId (Auth.BindGoogle) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/bind/google"
+      body: "*"
+    };
+  }
 
   // Unbinds the Google ID factor.
-  rpc AuthUnbindGoogleId (User.ID) returns (Empty);
+  rpc AuthUnbindGoogleId (User.ID) returns (Empty) {
+    option (google.api.http) = {
+      delete: "/auth/bind/google"
+    };
+  }
 
   // Returns a WebAuthn challenge for passkey enrollment.
-  rpc AuthGetPasskeyBindChallenge (Auth.PasskeyDomain) returns (Auth.PasskeyChallenge);
+  rpc AuthGetPasskeyBindChallenge (Auth.PasskeyDomain) returns (Auth.PasskeyChallenge) {
+    option (google.api.http) = {
+      post: "/auth/bind/passkey/challenge"
+      body: "*"
+    };
+  }
 
   // Binds a passkey credential to the current user.
-  rpc AuthBindPasskey (Auth.BindPasskey) returns (Empty);
+  rpc AuthBindPasskey (Auth.BindPasskey) returns (Empty) {
+    option (google.api.http) = {
+      post: "/auth/bind/passkey"
+      body: "*"
+    };
+  }
 
   // Unbinds a specific passkey from the current user.
-  rpc AuthUnbindPasskey (Auth.UnbindPasskey) returns (Empty);
+  rpc AuthUnbindPasskey (Auth.UnbindPasskey) returns (Empty) {
+    option (google.api.http) = {
+      delete: "/auth/bind/passkey"
+    };
+  }
 
   // ---------------------------------------------------------------------------
   // 2 — Device
   // ---------------------------------------------------------------------------
 
   // Unbinds a device from a user.
-  rpc DeviceUnbind (Device.UnbindReq) returns (Empty);
+  rpc DeviceUnbind (Device.UnbindReq) returns (Empty) {
+    option (google.api.http) = {
+      delete: "/auth/device"
+    };
+  }
 
   // Renames a device.
-  rpc DeviceRename (Device.RenameReq) returns (Empty);
+  rpc DeviceRename (Device.RenameReq) returns (Empty) {
+    option (google.api.http) = {
+      put: "/auth/device/name"
+      body: "*"
+    };
+  }
 
   // Auth Flow APIs (stateful login flow with forced inline MFA setup/verify)
-  rpc AuthFlowMfaSetupInitiate (Auth.FlowMfaSetupInitiateReq) returns (Auth.FlowMfaSetupInitiateRes); // FLOW_STATE_MFA_SETUP step 1: initiate binding for chosen method
-  rpc AuthFlowMfaSetupConfirm  (Auth.FlowMfaSetupConfirmReq)  returns (Auth.LoginResult);             // FLOW_STATE_MFA_SETUP step 2: confirm binding and complete login
-  rpc AuthFlowMfaVerify        (Auth.FlowMfaVerifyReq)        returns (Auth.LoginResult);             // FLOW_STATE_MFA_VERIFY: submit factor and complete login
+  rpc AuthFlowMfaSetupInitiate (Auth.FlowMfaSetupInitiateReq) returns (Auth.FlowMfaSetupInitiateRes) {
+    option (google.api.http) = {
+      post: "/auth/flow/mfa/setup/initiate"
+      body: "*"
+    };
+  } // FLOW_STATE_MFA_SETUP step 1: initiate binding for chosen method
+
+  rpc AuthFlowMfaSetupConfirm  (Auth.FlowMfaSetupConfirmReq)  returns (Auth.LoginResult) {
+    option (google.api.http) = {
+      post: "/auth/flow/mfa/setup/confirm"
+      body: "*"
+    };
+  } // FLOW_STATE_MFA_SETUP step 2: confirm binding and complete login
+
+  rpc AuthFlowMfaVerify        (Auth.FlowMfaVerifyReq)        returns (Auth.LoginResult) {
+    option (google.api.http) = {
+      post: "/auth/flow/mfa/verify"
+      body: "*"
+    };
+  } // FLOW_STATE_MFA_VERIFY: submit factor and complete login
 
   // User API
-  rpc GetUsersByIDs   (User.GetReq)         returns (User.List);  // User Info by name
-  rpc ListUsers       (Node.Service.Names)  returns (User.ServiceUsers);
-  rpc CreateUser      (User.Create)         returns (Empty);
-  rpc UpdateUser      (User.Update)         returns (Empty);
-  rpc DeleteUser      (User.ID)             returns (Empty);
+  rpc GetUsersByIDs   (User.GetReq)         returns (User.List) {
+    option (google.api.http) = {
+      get: "/user"
+    };
+  } // User Info by name
+
+  rpc ListUsers       (Node.Service.Names)  returns (User.ServiceUsers) {
+    option (google.api.http) = {
+      get: "/user/list"
+    };
+  }
+
+  rpc CreateUser      (User.Create)         returns (Empty) {
+    option (google.api.http) = {
+      post: "/user"
+      body: "*"
+    };
+  }
+
+  rpc UpdateUser      (User.Update)         returns (Empty) {
+    option (google.api.http) = {
+      put: "/user"
+      body: "*"
+    };
+  }
+
+  rpc DeleteUser      (User.ID)             returns (Empty) {
+    option (google.api.http) = {
+      delete: "/user"
+    };
+  }
 
   // User Group API
-  rpc GetUserGroups             (UserGroup.GetReq)    returns (UserGroup.List);         // User Group info by name
-  rpc ListUserGroups            (Empty)               returns (UserGroup.Names);
-  rpc CreateUserGroup           (UserGroup.Create)    returns (Empty);
-  rpc UpdateUserGroup           (UserGroup.Update)    returns (Empty);
-  rpc DeleteUserGroup           (UserGroup.Name)      returns (Empty);
-  rpc AddUsersToGroup           (UserGroup.UserReq)   returns (Empty);
-  rpc RemoveUsersFromGroup      (UserGroup.UserReq)   returns (Empty);
+  rpc GetUserGroups             (UserGroup.GetReq)    returns (UserGroup.List) {
+    option (google.api.http) = {
+      get: "/user/group"
+    };
+  } // User Group info by name
+
+  rpc ListUserGroups            (Empty)               returns (UserGroup.Names) {
+    option (google.api.http) = {
+      get: "/user/group/list"
+    };
+  }
+
+  rpc CreateUserGroup           (UserGroup.Create)    returns (Empty) {
+    option (google.api.http) = {
+      post: "/user/group"
+      body: "*"
+    };
+  }
+
+  rpc UpdateUserGroup           (UserGroup.Update)    returns (Empty) {
+    option (google.api.http) = {
+      put: "/user/group"
+      body: "*"
+    };
+  }
+
+  rpc DeleteUserGroup           (UserGroup.Name)      returns (Empty) {
+    option (google.api.http) = {
+      delete: "/user/group"
+    };
+  }
+
+  rpc AddUsersToGroup           (UserGroup.UserReq)   returns (Empty) {
+    option (google.api.http) = {
+      post: "/user/group/users"
+      body: "*"
+    };
+  }
+
+  rpc RemoveUsersFromGroup      (UserGroup.UserReq)   returns (Empty) {
+    option (google.api.http) = {
+      put: "/user/group/users"
+      body: "*"
+    };
+  }
 
   // Network API
   rpc ImportTopoFromFile        (NetworkTopo)     returns (Empty);              // Load topo networks through files
+
   rpc ExportTopoFile            (Network.Id)      returns (NetworkTopo);        // Export topo to files
-  rpc ListAvailableNetworks     (Empty)           returns (Network.List);       // List the network that the user can view/manage. Just the basic topo info, without node
-  rpc DisplayNetworks           (Network.GetReq)  returns (Network.Display);    // Get subnetworks, nodes and link need display.
-  rpc GetNetworkTopo            (Empty)           returns (Network.TopoLists);  // Get network topo that the user can view/manage
-  rpc GetNetworkAvailableTiers  (Network.Id)      returns (Network.Tiers);
-  rpc CreateNetwork             (Network.Create)  returns (Empty);
-  rpc UpdateNetwork             (Network.Update)  returns (Empty);
-  rpc DeleteNetwork             (Network.Id)      returns (Empty);
+
+  rpc ListAvailableNetworks     (Empty)           returns (Network.List) {
+    option (google.api.http) = {
+      get: "/network/available"
+    };
+  } // List the network that the user can view/manage. Just the basic topo info, without node
+
+  rpc DisplayNetworks           (Network.GetReq)  returns (Network.Display) {
+    option (google.api.http) = {
+      get: "/network/display"
+    };
+  } // Get subnetworks, nodes and link need display.
+
+  rpc GetNetworkTopo            (Empty)           returns (Network.TopoLists) {
+    option (google.api.http) = {
+      get: "/network/topo"
+    };
+  } // Get network topo that the user can view/manage
+
+  rpc GetNetworkAvailableTiers  (Network.Id)      returns (Network.Tiers) {
+    option (google.api.http) = {
+      get: "/network/tier"
+    };
+  }
+
+  rpc CreateNetwork             (Network.Create)  returns (Empty) {
+    option (google.api.http) = {
+      post: "/network"
+      body: "*"
+    };
+  }
+
+  rpc UpdateNetwork             (Network.Update)  returns (Empty) {
+    option (google.api.http) = {
+      put: "/network"
+      body: "*"
+    };
+  }
+
+  rpc DeleteNetwork             (Network.Id)      returns (Empty) {
+    option (google.api.http) = {
+      delete: "/network"
+    };
+  }
 
   // Nodes API
-  rpc GetNodesByIds                (Node.GetReq)                        returns (Node.List);    // Node details.
-  rpc GetNodesOfNetwork            (Node.ListReq)                       returns (Node.Infos);   // All nodes in the network and its subnetworks.
-  rpc GetNodesOfNodeGroup          (NodeGroup.Id)                       returns (Node.Infos);   // Nodes in the given Node Group.
-  rpc GetNodesWithoutNodeGroup     (Node.ListReq)                       returns (Node.Infos);   // All nodes in the network without node group.
-  rpc SetNodeServiceConfig         (Node.SetConfig)                     returns (Empty);
-  rpc CreateNode                   (Node.Create)                        returns (Empty);
-  rpc UpdateNode                   (Node.Update)                        returns (Empty);
-  rpc DeleteNode                   (Node.Id)                            returns (Empty);
-  rpc AddNodeConfigOps             (Node.SetConfigOp)                   returns (Ops.Responses);
-  rpc UpdateNodeConfigOp           (Node.SetConfigOp)                   returns (Ops.Responses);
-  rpc RemoveNodeConfigOps          (Node.SetConfigOp)                   returns (Ops.Responses);
-  rpc AddNodeInterface             (Node.NodeInfo.OperateInterface)     returns (Empty);
-  rpc UpdateNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty);
-  rpc RemoveNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty);
+  rpc GetNodesByIds                (Node.GetReq)                        returns (Node.List) {
+    option (google.api.http) = {
+      get: "/node"
+    };
+  }    // Node details.
+  rpc GetNodesOfNetwork            (Node.ListReq)                       returns (Node.Infos) {
+    option (google.api.http) = {
+      get: "/node/network"
+    };
+  }   // All nodes in the network and its subnetworks.
+  rpc GetNodesOfNodeGroup          (NodeGroup.Id)                       returns (Node.Infos) {
+    option (google.api.http) = {
+      get: "/node/group/nodes"
+    };
+  }   // Nodes in the given Node Group.
+  rpc GetNodesWithoutNodeGroup     (Node.ListReq)                       returns (Node.Infos) {
+    option (google.api.http) = {
+      get: "/node/service"
+    };
+  }   // All nodes in the network without node group.
+  rpc SetNodeServiceConfig         (Node.SetConfig)                     returns (Empty) {
+    option (google.api.http) = {
+      put: "/node/config"
+      body: "*"
+    };
+  }
+  rpc CreateNode                   (Node.Create)                        returns (Empty) {
+    option (google.api.http) = {
+      post: "/node"
+      body: "*"
+    };
+  }
+  rpc UpdateNode                   (Node.Update)                        returns (Empty) {
+    option (google.api.http) = {
+      put: "/node"
+      body: "*"
+    };
+  }
+  rpc DeleteNode                   (Node.Id)                            returns (Empty) {
+    option (google.api.http) = {
+      delete: "/node"
+    };
+  }
+  rpc AddNodeConfigOps             (Node.SetConfigOp)                   returns (Ops.Responses) {
+    option (google.api.http) = {
+      post: "/node/config_op"
+      body: "*"
+    };
+  }
+  rpc UpdateNodeConfigOp           (Node.SetConfigOp)                   returns (Ops.Responses) {
+    option (google.api.http) = {
+      put: "/node/config_op"
+      body: "*"
+    };
+  }
+  rpc RemoveNodeConfigOps          (Node.SetConfigOp)                   returns (Ops.Responses) {
+    option (google.api.http) = {
+      delete: "/node/config_op"
+    };
+  }
+  rpc AddNodeInterface             (Node.NodeInfo.OperateInterface)     returns (Empty) {
+    option (google.api.http) = {
+      post: "/node/interface"
+      body: "*"
+    };
+  }
+  rpc UpdateNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty) {
+    option (google.api.http) = {
+      put: "/node/interface"
+      body: "*"
+    };
+  }
+  rpc RemoveNodeInterface          (Node.NodeInfo.OperateInterface)     returns (Empty) {
+    option (google.api.http) = {
+      delete: "/node/interface"
+    };
+  }
 
   // Node Group API
-  rpc GetNodeGroupsByIds          (NodeGroup.Ids)             returns (NodeGroup.List); // Node Group info
-  rpc ListNodeGroups              (NodeGroup.ListReq)         returns (NodeGroup.Ids);  // List Node Group IDs.
-  rpc CreateNodeGroup             (NodeGroup.Create)          returns (Empty);
-  rpc UpdateNodeGroup             (NodeGroup.Update)          returns (Empty);
-  rpc DeleteNodeGroup             (NodeGroup.Id)              returns (Empty);
-  rpc AddNodeGroupConfigOps       (NodeGroup.SetConfigOp)     returns (Ops.Responses);
-  rpc UpdateNodeGroupConfigOp     (NodeGroup.SetConfigOp)     returns (Ops.Responses);
-  rpc RemoveNodeGroupConfigOps    (NodeGroup.SetConfigOp)     returns (Ops.Responses);
+  rpc GetNodeGroupsByIds          (NodeGroup.Ids)             returns (NodeGroup.List) {
+    option (google.api.http) = {
+      get: "/node/group"
+    };
+  } // Node Group info
+  rpc ListNodeGroups              (NodeGroup.ListReq)         returns (NodeGroup.Ids) {
+    option (google.api.http) = {
+      get: "/node/group/list"
+    };
+  }  // List Node Group IDs.
+  rpc CreateNodeGroup             (NodeGroup.Create)          returns (Empty) {
+    option (google.api.http) = {
+      post: "/node/group"
+      body: "*"
+    };
+  }
+  rpc UpdateNodeGroup             (NodeGroup.Update)          returns (Empty) {
+    option (google.api.http) = {
+      put: "/node/group"
+      body: "*"
+    };
+  }
+  rpc DeleteNodeGroup             (NodeGroup.Id)              returns (Empty) {
+    option (google.api.http) = {
+      delete: "/node/group"
+    };
+  }
+  rpc AddNodeGroupConfigOps       (NodeGroup.SetConfigOp)     returns (Ops.Responses) {
+    option (google.api.http) = {
+      post: "/node/group/config_op"
+      body: "*"
+    };
+  }
+  rpc UpdateNodeGroupConfigOp     (NodeGroup.SetConfigOp)     returns (Ops.Responses) {
+    option (google.api.http) = {
+      put: "/node/group/config_op"
+      body: "*"
+    };
+  }
+  rpc RemoveNodeGroupConfigOps    (NodeGroup.SetConfigOp)     returns (Ops.Responses) {
+    option (google.api.http) = {
+      delete: "/node/group/config_op"
+    };
+  }
 
   // Link API
-  rpc GetLinksOfNode    (Node.Id)      returns (Link.List); // All links of a network. Internal and External.
-  rpc CreateLink        (Link.Create)  returns (Empty);
-  rpc UpdateLink        (Link.Update)  returns (Empty);
-  rpc DeleteLink        (Link.Id)      returns (Empty);
+  rpc GetLinksOfNode    (Node.Id)      returns (Link.List) {
+    option (google.api.http) = {
+      get: "/link/node"
+    };
+  } // All links of a network. Internal and External.
+  rpc CreateLink        (Link.Create)  returns (Empty) {
+    option (google.api.http) = {
+      post: "/link"
+      body: "*"
+    };
+  }
+  rpc UpdateLink        (Link.Update)  returns (Empty) {
+    option (google.api.http) = {
+      put: "/link"
+      body: "*"
+    };
+  }
+  rpc DeleteLink        (Link.Id)      returns (Empty) {
+    option (google.api.http) = {
+      delete: "/link"
+    };
+  }
 
   // Service API: Info or Name? ???
-  rpc GetAllServices          (IncludeAsn)    returns (Node.Service.Names);  // All available service names.
-  rpc GetServicesOfNetwork    (Network.Id)    returns (Node.Service.Names);       // Services available in the network.
-  rpc GetServicesOfNodeGroup  (NodeGroup.Id)  returns (Node.Service.Names);       // Services available in the node group.
-  rpc GetServicesOfNode       (Node.Id)       returns (Node.Service.Names);       // Services available on the node.
+  rpc GetAllServices          (IncludeAsn)    returns (Node.Service.Names) {
+    option (google.api.http) = {
+      get: "/service"
+    };
+  }  // All available service names.
+  rpc GetServicesOfNetwork    (Network.Id)    returns (Node.Service.Names) {
+    option (google.api.http) = {
+      get: "/service/network"
+    };
+  }       // Services available in the network.
+  rpc GetServicesOfNodeGroup  (NodeGroup.Id)  returns (Node.Service.Names) {
+    option (google.api.http) = {
+      get: "/service/group"
+    };
+  }       // Services available in the node group.
+  rpc GetServicesOfNode       (Node.Id)       returns (Node.Service.Names) {
+    option (google.api.http) = {
+      get: "/service/node"
+    };
+  }       // Services available on the node.
 
   // Service API: Start
-  rpc StartServiceOnNetwork   (Ops.GeneralReq) returns (Empty);
-  rpc StartServiceOnNodeGroup (Ops.GeneralReq) returns (Empty);
-  rpc StartServiceOnNode      (Ops.GeneralReq) returns (Empty);
+  rpc StartServiceOnNetwork   (Ops.GeneralReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/service/start/network"
+      body: "*"
+    };
+  }
+  rpc StartServiceOnNodeGroup (Ops.GeneralReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/service/start/node/group"
+      body: "*"
+    };
+  }
+  rpc StartServiceOnNode      (Ops.GeneralReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/service/start/node"
+      body: "*"
+    };
+  }
 
   // Service API: Stop
-  rpc StopServiceOnNetwork    (Ops.GeneralReq) returns (Empty);
-  rpc StopServiceOnNodeGroup  (Ops.GeneralReq) returns (Empty);
-  rpc StopServiceOnNode       (Ops.GeneralReq) returns (Empty);
+  rpc StopServiceOnNetwork    (Ops.GeneralReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/service/stop/network"
+      body: "*"
+    };
+  }
+  rpc StopServiceOnNodeGroup  (Ops.GeneralReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/service/stop/node/group"
+      body: "*"
+    };
+  }
+  rpc StopServiceOnNode       (Ops.GeneralReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/service/stop/node"
+      body: "*"
+    };
+  }
 
   // Service API: Reset
-  rpc ResetServiceOnNetwork   (Ops.GeneralReq) returns (Empty);
-  rpc ResetServiceOnNodeGroup (Ops.GeneralReq) returns (Empty);
-  rpc ResetServiceOnNode      (Ops.GeneralReq) returns (Empty);
+  rpc ResetServiceOnNetwork   (Ops.GeneralReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/service/reset/network"
+      body: "*"
+    };
+  }
+  rpc ResetServiceOnNodeGroup (Ops.GeneralReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/service/reset/node/group"
+      body: "*"
+    };
+  }
+  rpc ResetServiceOnNode      (Ops.GeneralReq) returns (Empty) {
+    option (google.api.http) = {
+      post: "/service/reset/node"
+      body: "*"
+    };
+  }
 
   // Service API: Apply Ops (Internal Use)
   rpc ApplyServiceOpsOnNetwork    (Ops.Request) returns (Ops.Responses);
@@ -237,12 +714,28 @@ service Manager {
   rpc ApplyServiceOpsOnNode       (Ops.Request) returns (Ops.Responses);
 
   // Stats
-  rpc GetStatsOfNetwork   (Network.Id)                returns (Network.Stats);      // Numbers of networks, nodes, links, node groups, etc., of a Network.
-  rpc GetStatsOfNodes     (Network.Id)                returns (Node.Stats);         // Numbers of nodes in different states in a network.
-  rpc GetStatsOfServices  (Node.Service.Stats.GetReq) returns (Node.Service.Stats); // Numbers of service nodes in different states of a network. For specified services.
+  rpc GetStatsOfNetwork   (Network.Id)                returns (Network.Stats) {
+    option (google.api.http) = {
+      get: "/network/stats"
+    };
+  }      // Numbers of networks, nodes, links, node groups, etc., of a Network.
+  rpc GetStatsOfNodes     (Network.Id)                returns (Node.Stats) {
+    option (google.api.http) = {
+      get: "/network/stats/node"
+    };
+  }         // Numbers of nodes in different states in a network.
+  rpc GetStatsOfServices  (Node.Service.Stats.GetReq) returns (Node.Service.Stats) {
+    option (google.api.http) = {
+      get: "/network/stats/service"
+    };
+  } // Numbers of service nodes in different states of a network. For specified services.
 
   // Service Metrics
-  rpc GetMetricsOfService (Node.Service.Metrics.GetReq) returns (Node.Service.Metrics); // Metrics in key-value pairs.
+  rpc GetMetricsOfService (Node.Service.Metrics.GetReq) returns (Node.Service.Metrics) {
+    option (google.api.http) = {
+      get: "/service/metric"
+    };
+  } // Metrics in key-value pairs.
 }
 
 /*
@@ -450,7 +943,7 @@ message Auth {
 
   // Result payload for TOTP provisioning.
   message TotpQrCode {
-    bytes qr_png = 1;         // QR image in PNG bytes
+    string qr_png = 1;         // QR image in PNG bytes
     string auth_uri = 2;      // otpauth:// URI for direct import into authenticator apps
     string secret = 3;        // TOTP secret (sensitive; short-lived; do not log)
     string issuer = 4;        // issuer label shown in authenticator apps
