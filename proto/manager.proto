@@ -504,12 +504,13 @@ service Manager {
       body: "*"
     };
   }
-  rpc CreateNode                   (Node.Create)                        returns (Empty) {
+  rpc CreateNode                   (Node.Create)                        returns (Enrollment.NodeIdentity) {
     option (google.api.http) = {
       post: "/node"
       body: "*"
     };
-  }
+  } // Create a node and return its identity (node_id, enrollment_state). Topo and
+    // enrollment share this one call; service_names is the install set.
   rpc UpdateNode                   (Node.Update)                        returns (Empty) {
     option (google.api.http) = {
       put: "/node"
@@ -555,6 +556,43 @@ service Manager {
       delete: "/node/interface"
     };
   }
+
+  // Node Enrollment API (ASN entry point).
+  // Node creation is the unified CreateNode RPC above (returns NodeIdentity);
+  // these operate on an existing node_id.
+  rpc MintEnrollmentToken          (Enrollment.MintTokenReq)            returns (Enrollment.Token) {
+    option (google.api.http) = {
+      post: "/enrollment/token"
+      body: "*"
+    };
+  } // Mint a single-use enrollment token for an existing node.
+  rpc FetchBootstrapScript         (Enrollment.ScriptReq)               returns (Enrollment.Script) {
+    option (google.api.http) = {
+      post: "/enrollment/script"
+      body: "*"
+    };
+  } // Validate+consume token, lazy mint/sign, render full install script.
+  rpc UnbindNode                   (Enrollment.UnbindReq)               returns (Enrollment.NodeIdentity) {
+    option (google.api.http) = {
+      post: "/enrollment/unbind"
+      body: "*"
+    };
+  } // Revoke cert + cancel token; reopen the node for enrollment.
+  rpc GetEnrollmentStatus          (Enrollment.StatusReq)               returns (Enrollment.Status) {
+    option (google.api.http) = {
+      get: "/enrollment/status"
+    };
+  } // Read enrollment + runtime state for a node or token.
+  rpc ListEnrollmentTokens         (Enrollment.ListReq)                 returns (Enrollment.TokenList) {
+    option (google.api.http) = {
+      get: "/enrollment/tokens"
+    };
+  } // List enrollment tokens by network / node.
+  rpc RevokeEnrollmentToken        (Enrollment.TokenId)                 returns (Empty) {
+    option (google.api.http) = {
+      delete: "/enrollment/token"
+    };
+  } // Revoke a single outstanding token by id.
 
   // Node Group API
   rpc GetNodeGroupsByIds          (NodeGroup.Ids)             returns (NodeGroup.List) {
@@ -742,6 +780,76 @@ service Manager {
  * Common
  */
 message Empty {}
+
+/*
+ * Node Enrollment (ASN entry point)
+ *
+ * Node creation is the unified Manager CreateNode (Node.Create -> NodeIdentity);
+ * these messages drive the rest of the flow on an existing node_id. Install specs
+ * come from asn.conf; the rendered script always installs asnsn + the node's
+ * service debs. enrollment_state / node_state reuse the Node enums. Ownership /
+ * trust tier are deferred (added later as new fields). See
+ * workflow/design/NodeEnrollment.md.
+ */
+message Enrollment {
+  // NodeIdentity is returned by CreateNode and UnbindNode.
+  message NodeIdentity {
+    string node_id = 1;
+    repeated string service_names = 2;
+    Node.EnrollmentState enrollment_state = 3;
+  }
+
+  // MintEnrollmentToken: single-use script-fetch token for an EXISTING node.
+  // Allowed only when the node is ENROLLMENT_UNBOUND; non-reentrant; supersedes a
+  // prior unused token. To re-enroll a bound node, call UnbindNode first.
+  message MintTokenReq {
+    string node_id = 1; // existing node; required
+    int64 ttl_seconds = 2;
+    string label = 3;
+  }
+
+  // UnbindNode: revoke the node's current certificate + cancel any outstanding
+  // token, returning it to ENROLLMENT_UNBOUND. Does NOT delete the node
+  // (identity / eligibility / config preserved).
+  message UnbindReq {
+    string node_id = 1; // required
+    string reason = 2; // audit reason (e.g. "machine swap")
+  }
+
+  message Token {
+    string token = 1; // single-use script-fetch credential
+    string token_id = 2;
+    string node_id = 3; // the bound node
+    int64 expires_at = 4;
+  }
+
+  // FetchBootstrapScript: token is the credential; lazy mint/sign for the token's
+  // EXISTING node. Renders the FULL install for the node's service_names (no
+  // service named). Shares one server-side path with the service-API render.
+  message ScriptReq {
+    string token = 1;
+  }
+
+  message Script {
+    bytes content = 1; // rendered bootstrap script (ASN core)
+    string content_type = 2; // e.g. "text/x-shellscript"
+    string node_id = 3; // the existing node this script enrolls / re-keys
+    int64 cert_not_after = 4; // lazily signed cert validity
+  }
+
+  message StatusReq { string node_id = 1; string token_id = 2; }
+  message Status {
+    string node_id = 1;
+    string token_id = 2;
+    Node.EnrollmentState enrollment_state = 3;
+    int64 last_event_at = 4;
+    Node.NodeState node_state = 5; // runtime connectivity
+  }
+
+  message ListReq   { string network_id = 1; string node_id = 2; }
+  message TokenList { repeated Token tokens = 1; }
+  message TokenId   { string token_id = 1; }
+}
 
 message Location {
   double latitude = 1;
@@ -1383,6 +1491,12 @@ message Node {
   NodeInfo topo_info = 8;
   ServiceNode service_node = 10;
 
+  // Enrollment credential-lifecycle axis, orthogonal to the runtime NodeState
+  // carried on service_node. Projection of credential facts; see
+  // workflow/design/NodeEnrollment.md. Ownership / trust tier are deferred and,
+  // when added, take new field numbers (append-only).
+  EnrollmentState enrollment_state = 9;
+
   message GetReq {
     repeated string node_ids = 1;
     bool include_links = 2;
@@ -1450,6 +1564,10 @@ message Node {
     bool managed = 5;
     Location location = 6;
     NodeInfo info = 7;
+    // service eligibility = enrollment install set. Topo callers may leave empty;
+    // enrollment callers list the services to install. type/info may be empty for
+    // enrollment nodes (hardware is learned at registration).
+    repeated string service_names = 8;
   }
 
   message Update {
@@ -1550,6 +1668,15 @@ message Node {
     STATE_CONFIGURING = 3;
     STATE_RUNNING = 4;
     STATE_MALFUNCTIONING = 5;
+  }
+
+  // Credential-lifecycle axis (orthogonal to NodeState above). Mirrors
+  // commonapi.EnrollmentState. See workflow/design/NodeEnrollment.md.
+  enum EnrollmentState {
+    ENROLLMENT_UNBOUND = 0;       // no token/cert: open for (re-)enrollment; also the post-unbind state
+    ENROLLMENT_TOKEN_ISSUED = 1;  // a single-use enrollment token is outstanding
+    ENROLLMENT_CERT_ISSUED = 2;   // certificate lazily signed; awaiting first registration
+    ENROLLMENT_BOUND = 3;         // registered and holding its valid certificate
   }
 
   message ServiceNode {
