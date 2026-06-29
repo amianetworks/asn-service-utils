@@ -52,9 +52,16 @@ STAGE_DOCS_CMD ?= bash $(ASN_BUILDER_DIR)/stage_docs.sh
 BUILD_CONTAINER_BASE_DOCKERFILE ?= $(ASN_BUILDER_DIR)/asn-artifact-base.dockerfile
 BUILD_CONTAINER_BASE_IMAGE ?= asn-artifact-builder-base
 BUILD_CONTAINER_RUNNER_IMAGE ?= $(if $(strip $(PROJECT_ID)),$(PROJECT_ID)-artifact-builder,asn-artifact-builder)
-BUILD_CONTAINER_BASE_IMAGE_TAG ?= $(ASN_RUNTIME_VERSION)
+# Builder base image is local build infrastructure (toolchain + Go module
+# cache), so pin its identity to the framework release line, NOT
+# ASN_RUNTIME_VERSION: that advances on every build (set-version post-success)
+# and would orphan the prepared base image for later steps (build-debian/
+# build-docker) in the same release cycle. Real staleness (Go/API/inputs) is
+# still enforced by the builder_base_image.sh content labels.
+ASN_BUILDER_BASE_VERSION ?= $(or $(strip $(VERSION_BASE)),$(ASN_SERVICE_API_VERSION))
+BUILD_CONTAINER_BASE_IMAGE_TAG ?= $(ASN_BUILDER_BASE_VERSION)
 BUILD_CONTAINER_BASE_API_VERSION ?= $(ASN_SERVICE_API_VERSION)
-BUILD_CONTAINER_BASE_FRAMEWORK_VERSION ?= $(ASN_RUNTIME_VERSION)
+BUILD_CONTAINER_BASE_FRAMEWORK_VERSION ?= $(ASN_BUILDER_BASE_VERSION)
 BUILD_CONTAINER_BASE_GO_VERSION ?= $(GO_VERSION)
 BUILD_CONTAINER_METADATA_FILES += $(ASN_VERSION_FILE)
 BUILD_CONTAINER_CACHE_INPUTS += $(SERVICE_UTILS_DIR)/go.mod $(SERVICE_UTILS_DIR)/go.sum $(ASN_BUILDER_MAKEFILE)
