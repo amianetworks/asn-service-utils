@@ -412,7 +412,8 @@ reserve_plugin_version() {
 
 build_number_from_version() {
     local value="$1"
-    printf '%s\n' "${value##*.}"
+    [ -n "$value" ] || return 1
+    normalize_dev_build_number "${value##*.}"
 }
 
 assert_manifest_identity() {
