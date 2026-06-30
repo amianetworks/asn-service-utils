@@ -2,13 +2,13 @@
 
 syntax = "proto3";
 
-option go_package = "./;proto";
+option go_package = "asn.amiasys.com/controller/proto/management;managementpb";
 
-package asn_controller;
+package asn_management;
 
 import "google/api/annotations.proto";
 
-service Manager {
+service Management {
   // ASNC related operations
   rpc GetInfo     (Empty)         returns (ControllerInfo) {
     option (google.api.http) = {
@@ -784,7 +784,7 @@ message Empty {}
 /*
  * Node Enrollment (ASN entry point)
  *
- * Node creation is the unified Manager CreateNode (Node.Create -> NodeIdentity);
+ * Node creation is the unified Management CreateNode (Node.Create -> NodeIdentity);
  * these messages drive the rest of the flow on an existing node_id. Install specs
  * come from asn.conf; the rendered script always installs asnsn + the node's
  * service debs. enrollment_state / node_state reuse the Node enums. Ownership /
