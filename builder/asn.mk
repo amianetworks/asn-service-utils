@@ -103,7 +103,7 @@ endif
 
 check-version:
 	@$(BUILD_MANIFEST_CMD) check-version \
-		--service "$(ASN_BUILD_IDENTITY)" \
+		--project "$(ASN_BUILD_IDENTITY)" \
 		--version "$(VERSION)" \
 		--mode "$(BUILD_MODE)" \
 		--build "$(BUILD)" \
@@ -115,7 +115,7 @@ check-version:
 
 check-build:
 	@$(BUILD_MANIFEST_CMD) check-build \
-		--service "$(ASN_BUILD_IDENTITY)" \
+		--project "$(ASN_BUILD_IDENTITY)" \
 		--version "$(VERSION)" \
 		--mode "$(BUILD_MODE)" \
 		--build "$(BUILD)" \
