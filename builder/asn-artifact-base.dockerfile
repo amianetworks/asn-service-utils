@@ -2,6 +2,10 @@
 
 # Build artifact base image for ASN service projects.
 
+ARG GO_VERSION=1.26.4
+
+FROM golang:${GO_VERSION} AS go-toolchain
+
 FROM ubuntu:24.04
 
 WORKDIR /asn-service
@@ -10,8 +14,8 @@ ARG GO_VERSION
 RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
     printf 'Binary::apt::APT::Keep-Downloaded-Packages "true";\n' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,id=asn-artifact-builder-base-apt-cache-ubuntu24.04,target=/var/cache/apt,sharing=locked \
-    DEBIAN_FRONTEND=noninteractive apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    DEBIAN_FRONTEND=noninteractive apt update && \
+    DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends \
       build-essential \
       ca-certificates \
       dpkg-dev \
@@ -23,11 +27,9 @@ RUN --mount=type=cache,id=asn-artifact-builder-base-apt-cache-ubuntu24.04,target
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Go
-RUN test -n "$GO_VERSION" && \
-    wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
-    tar -C /etc -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
-    rm -f go${GO_VERSION}.linux-amd64.tar.gz
+# Install Go from the official toolchain image instead of downloading from
+# go.dev during the builder-image build.
+COPY --from=go-toolchain /usr/local/go /etc/go
 ENV PATH="${PATH}:/etc/go/bin"
 RUN go version | grep -q "go${GO_VERSION} "
 #ENV GOPROXY="https://goproxy.io,direct"
