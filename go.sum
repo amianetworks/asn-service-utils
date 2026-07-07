@@ -5,6 +5,8 @@ github.com/amianetworks/am.modules/v26 v26.7.2/go.mod h1:+o3IQreawoDMAOLeqH92Qes
 github.com/amianetworks/am.modules/v26 v26.7.3 h1:54tYpPffLrXLlP48SyhqYEaqKbPsOSq1AsCoZF5ge10=
 github.com/amianetworks/am.modules/v26 v26.7.3/go.mod h1:+o3IQreawoDMAOLeqH92Qes5Y4L9eTvElmIZfnXutHc=
 github.com/amianetworks/asn-service-api/v26 v26.7.8/go.mod h1:lGQOcV8asmTc0hMhhq3C5housYo/ttuxPqQrrLEZVe0=
+github.com/amianetworks/asn-service-api/v26 v26.8.0 h1:v55dW80jVRRexEqffvdF1lFxoic/0WU6EFo5SGQvqsg=
+github.com/amianetworks/asn-service-api/v26 v26.8.0/go.mod h1:lGQOcV8asmTc0hMhhq3C5housYo/ttuxPqQrrLEZVe0=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0/go.mod h1:lvDnEdqiQrp0O42VQGgmlKpxL1AP2+08jFMw88y4klk=
 github.com/bmatcuk/doublestar v1.1.1/go.mod h1:UD6OnuiIn0yFxxA2le/rnRU1G4RaI4UvFv1sNto9p6w=
 github.com/bytedance/gopkg v0.1.4/go.mod h1:v1zWfPm21Fb+OsyXN2VAHdL6TBb2L88anLQgdyje6R4=
