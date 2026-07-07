@@ -2,7 +2,7 @@
 
 services:
   asnsn:
-    image: registry.amiasys.com/asnsn:26.7.5
+    image: registry.amiasys.com/asnsn:26.8.0
     ports:
       - "50052:52767"
     volumes:
