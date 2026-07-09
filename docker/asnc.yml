@@ -62,6 +62,7 @@ services:
     volumes:
       - /etc/machine-id:/etc/machine-id:ro
       - ./asn-config/:/etc/asn/controller/config
+      - ./asn-cert/:/etc/asn/controller/cert
       - ./asn-log/:/var/log/asn/controller
       - ./asn-services:/usr/local/asn/controller/services
       - ./asn-web:/var/www/asn/controller
