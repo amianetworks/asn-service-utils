@@ -1107,7 +1107,7 @@ message Auth {
   message FlowInitReq {
     Device.Info      device_info        = 1;
     CredentialMethod method             = 2;
-    bool             create_if_not_exist = 3; // create the account on first successful credential validation
+//    bool             create_if_not_exist = 3; // create the account on first successful credential validation
 
     string username = 4;
     Phone  phone    = 5;
