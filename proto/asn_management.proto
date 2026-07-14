@@ -1280,6 +1280,17 @@ message User {
   UserGroup.Names groups = 5;
   repeated UserGroup.Access accesses = 6;
 
+  // Bound authentication factors (populated for the current-user profile).
+  bool has_password = 7;          // true if the account has a password set
+  bool totp = 8;                  // true if a TOTP authenticator is enrolled
+  WeChat wechat = 9;              // WeChat binding info
+  Apple apple = 10;              // Apple ID binding info
+  Google google = 11;            // Google ID binding info
+  repeated Passkey passkeys = 12; // registered WebAuthn passkeys
+  bool mfa_enabled = 13;          // true if MFA is required at login
+  int32 created_at = 14;          // account creation time (UNIX seconds)
+  int32 updated_at = 15;          // last account update time (UNIX seconds)
+
   message ID {
     string id = 1;
   }
@@ -1334,6 +1345,34 @@ message User {
   message Phone {
     string country_code = 1;
     string number = 2;
+  }
+
+  message WeChat {
+    bool bound = 1;
+    string nickname = 2;
+    string img_url = 3 [json_name = "imageUrl"];
+  }
+
+  message Apple {
+    bool bound = 1;
+    string email = 2;
+    bool email_verified = 3;
+    bool private_email = 4; // true if Apple hides the real email (relay address)
+  }
+
+  message Google {
+    bool bound = 1;
+    string email = 2;
+    bool email_verified = 3;
+    string nickname = 4;
+    string img_url = 5 [json_name = "imageUrl"];
+  }
+
+  // A single WebAuthn passkey credential registered to the user.
+  message Passkey {
+    string passkey_id = 1;
+    string device_id = 2;
+    string credential_id = 3;
   }
 }
 
@@ -1578,6 +1617,13 @@ message Node {
     bool managed = 6;
     Location location = 7;
     NodeInfo info = 8;
+    // service eligibility = install set, replace semantics. Only applied when
+    // update_services is true: proto3 cannot distinguish an omitted repeated
+    // field from an empty one, so callers that edit only topo fields leave both
+    // unset and the node's services are left untouched. An empty service_names
+    // with update_services true clears the install set; the node itself is kept.
+    repeated string service_names = 9;
+    bool update_services = 10;
   }
 
   message SetConfig {
