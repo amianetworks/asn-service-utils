@@ -51,6 +51,7 @@ STAGE_DOCS_CMD ?= bash $(ASN_BUILDER_DIR)/stage_docs.sh
 ## Generic artifact-builder defaults for ASN projects.
 BUILD_CONTAINER_BASE_DOCKERFILE ?= $(ASN_BUILDER_DIR)/asn-artifact-base.dockerfile
 BUILD_CONTAINER_BASE_IMAGE ?= asn-artifact-builder-base
+BUILD_CONTAINER_BASE_REQUIRE_PINNED_FROM ?= 1
 BUILD_CONTAINER_RUNNER_IMAGE ?= $(if $(strip $(PROJECT_ID)),$(PROJECT_ID)-artifact-builder,asn-artifact-builder)
 BUILD_CONTAINER_BASE_IMAGE_TAG ?= $(ASN_RUNTIME_VERSION)
 BUILD_CONTAINER_BASE_API_VERSION ?= $(ASN_SERVICE_API_VERSION)
