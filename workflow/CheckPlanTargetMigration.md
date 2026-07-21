@@ -135,7 +135,7 @@ Expected framework output:
 
 ```text
 >> Version Identity
-  ASN Framework : 26.8.3
+  ASN Framework : 26.9.0
    Go Toolchain : 1.26.3
 ```
 

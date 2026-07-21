@@ -55,7 +55,7 @@ For every ASN Framework release:
 3. Verify `ASN_RUNTIME_VERSION_DEV` matches the latest approved ASN DEV build manifest.
 4. Verify `ASN_BUILDER_GO_VERSION` matches the framework-supported `GO_VERSION`.
 5. Commit and publish the `service-utils` branch or tag that consuming services
-   will use, for example `v26.8.3`.
+   will use, for example `v26.9.0`.
 6. Communicate the compatible tuple:
 
 ```text
