@@ -522,6 +522,12 @@ service Management {
       delete: "/node"
     };
   }
+  rpc SetNodeOwner                 (Node.SetOwner)                      returns (Empty) {
+    option (google.api.http) = {
+      post: "/node/owner"
+      body: "*"
+    };
+  }
   rpc AddNodeConfigOps             (Node.SetConfigOp)                   returns (Ops.Responses) {
     option (google.api.http) = {
       post: "/node/config_op"
@@ -797,6 +803,9 @@ message Enrollment {
     string node_id = 1;
     repeated string service_names = 2;
     Node.EnrollmentState enrollment_state = 3;
+    // Ownership as stored (OWNER_TYPE_UNKNOWN reads back as GLOBAL).
+    Node.OwnerType owner_type = 4;
+    string         owner_id   = 5;
   }
 
   // MintEnrollmentToken: single-use script-fetch token for an EXISTING node.
@@ -1532,9 +1541,15 @@ message Node {
 
   // Enrollment credential-lifecycle axis, orthogonal to the runtime NodeState
   // carried on service_node. Projection of credential facts; see
-  // workflow/design/NodeEnrollment.md. Ownership / trust tier are deferred and,
-  // when added, take new field numbers (append-only).
+  // workflow/design/NodeEnrollment.md.
   EnrollmentState enrollment_state = 9;
+
+  // Ownership axis (node-level, shared across every service on the node),
+  // decoupled from the enrollment credential. owner_id is empty unless
+  // owner_type is OWNER_TYPE_ACCOUNT. Trust tier remains deferred. See
+  // workflow/design/PrivateNode.md.
+  OwnerType owner_type = 11;
+  string    owner_id   = 12;
 
   message GetReq {
     repeated string node_ids = 1;
@@ -1545,6 +1560,10 @@ message Node {
     string network_id = 1;
     bool include_subnetwork = 2;
     string service = 3;
+    // Optional owner filtering (independent axes; when both set a node must match
+    // both). Empty => that axis is not filtered. See workflow/design/PrivateNode.md.
+    repeated OwnerType owner_types = 4;
+    repeated string    owner_ids   = 5;
   }
 
   message List {
@@ -1573,6 +1592,9 @@ message Node {
     NodeState state = 4;
     string message = 5;
     map<string, string> meta = 6;
+    // Ownership axis (see Node.owner_type/owner_id).
+    OwnerType owner_type = 7;
+    string    owner_id   = 8;
   }
 
   message Display {
@@ -1595,6 +1617,17 @@ message Node {
     TYPE_SERVER = 8;        // server
   }
 
+  // OwnerType is the node ownership classification. OWNER_TYPE_UNKNOWN (wire
+  // default) is normalized to OWNER_TYPE_GLOBAL by the server. The caller
+  // (admin) asserts the owner; the server trusts it and only enforces the
+  // invariant OWNER_TYPE_GLOBAL<=>empty owner_id, OWNER_TYPE_ACCOUNT<=>non-empty
+  // owner_id. Extensible (e.g. a future group/org value reinterprets owner_id).
+  enum OwnerType {
+    OWNER_TYPE_UNKNOWN = 0;
+    OWNER_TYPE_GLOBAL = 1;  // operator/framework-owned; owner_id empty
+    OWNER_TYPE_ACCOUNT = 2; // account-owned; owner_id = account id
+  }
+
   message Create {
     string parent_network_id = 1;
     Type type = 2;
@@ -1607,6 +1640,10 @@ message Node {
     // enrollment callers list the services to install. type/info may be empty for
     // enrollment nodes (hardware is learned at registration).
     repeated string service_names = 8;
+    // Ownership asserted by the admin (trusted verbatim; UNKNOWN => GLOBAL).
+    // See workflow/design/PrivateNode.md.
+    OwnerType owner_type = 9;
+    string    owner_id   = 10;
   }
 
   message Update {
@@ -1630,6 +1667,15 @@ message Node {
     string node_id = 1;
     string service_name = 2;
     string config = 3;
+  }
+
+  // SetOwner sets, transfers, or clears a node's ownership. owner_type
+  // GLOBAL/UNKNOWN with an empty owner_id clears ownership; ACCOUNT requires a
+  // non-empty owner_id. The asserted owner is trusted verbatim.
+  message SetOwner {
+    string node_id = 1;
+    OwnerType owner_type = 2;
+    string owner_id = 3;
   }
 
   message SetConfigOp {
