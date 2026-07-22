@@ -59,12 +59,14 @@ as:
 ```make
 ASN_RUNTIME_VERSION_DEV := <framework-dev-version>
 ASN_RUNTIME_VERSION_PRO := <framework-pro-version>
-ASN_BUILDER_GO_VERSION := <go-version>
+ASN_BUILDER_GO_VERSION_DEV := <framework-dev-go-version>
+ASN_BUILDER_GO_VERSION_PRO := <framework-pro-go-version>
 ASN_RUNTIME_MODE ?= pro
 ASN_RUNTIME_VERSION := <selected-framework-version>
+ASN_BUILDER_GO_VERSION := <selected-framework-go-version>
 ```
 
-`ASN_RUNTIME_VERSION_DEV`, `ASN_RUNTIME_VERSION_PRO`, and `ASN_BUILDER_GO_VERSION` are set by ASN Framework release tooling. Services default to `ASN_RUNTIME_MODE=pro`; DEV ASN runtime testing must be requested explicitly with `ASN_RUNTIME_MODE=dev`. Service plugin work should not edit `builder/ASN_VERSION` directly unless the task is explicitly ASN Framework/runtime or builder toolchain version maintenance.
+The DEV and PRO runtime versions and their matching builder Go versions are set by ASN Framework release tooling. `ASN_RUNTIME_MODE` selects both values as one compatibility lane because Go plugins must use the exact Go toolchain version embedded in their runtime. Services default to `ASN_RUNTIME_MODE=pro`; DEV ASN runtime testing must be requested explicitly with `ASN_RUNTIME_MODE=dev`. Service plugin work should not edit `builder/ASN_VERSION` directly unless the task is explicitly ASN Framework/runtime or builder toolchain version maintenance.
 
 The consuming service product version is independent from both the API version and the framework/runtime version.
 
