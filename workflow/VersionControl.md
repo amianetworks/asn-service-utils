@@ -101,6 +101,8 @@ Variables:
 
 - `ASN_RUNTIME_VERSION_DEV`
 - `ASN_RUNTIME_VERSION_PRO`
+- `ASN_BUILDER_GO_VERSION_DEV`
+- `ASN_BUILDER_GO_VERSION_PRO`
 - `ASN_RUNTIME_MODE`
 - `ASN_RUNTIME_VERSION`
 - `ASN_BUILDER_GO_VERSION`
@@ -109,12 +111,12 @@ Meaning:
 
 - `ASN_RUNTIME_VERSION_PRO` is the stable ASN Framework/runtime dependency used by default.
 - `ASN_RUNTIME_VERSION_DEV` is the approved ASN DEV runtime dependency for explicit integration testing.
-- `ASN_RUNTIME_MODE` selects `pro` or `dev`; services default it to `pro`.
+- `ASN_RUNTIME_MODE` selects a paired runtime and builder-Go lane (`pro` or `dev`); services default it to `pro`.
 - `ASN_RUNTIME_VERSION` is the selected ASN Framework/runtime dependency used by builder and packaging assets.
 - It is consumed by `service-utils/builder/asn.mk` through `include $(SERVICE_UTILS_DIR)/builder/ASN_VERSION`.
 - It is injected into Debian package control files as `@DEPENDS@`.
 - Consuming service projects may also pass `ASN_RUNTIME_VERSION` into Docker build arguments for ASN Controller and ASN Service Node runtime images.
-- `ASN_BUILDER_GO_VERSION` is the Go version required for service-plugin builder images.
+- `ASN_BUILDER_GO_VERSION_DEV` and `ASN_BUILDER_GO_VERSION_PRO` record the exact Go versions embedded in their corresponding runtimes; `ASN_BUILDER_GO_VERSION` is the selected value required for service-plugin builder images.
 - In the common Makefile flow, the consuming service includes its own config first, then includes `service-utils/builder/asn.mk`, then includes the neutral AM Workflow `workflow/make/artifact-builder.mk`. `builder/asn.mk` reads selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` from service-utils for normal Make execution.
 
 Control rule:
@@ -122,7 +124,7 @@ Control rule:
 - `ASN_RUNTIME_VERSION` is not the same thing as `ASN_SERVICE_API_VERSION`.
 - These values do not have to be identical.
 - They must be treated as a compatibility pair: the selected ASN Framework/runtime version must support the selected ASN service API version.
-- `ASN_RUNTIME_VERSION_DEV`, `ASN_RUNTIME_VERSION_PRO`, and `ASN_BUILDER_GO_VERSION` are released by ASN Framework `make set-version` during P6/version maintenance. Service plugin build or workflow work should not edit them directly unless the task is explicitly ASN Framework dependency version maintenance.
+- The DEV and PRO runtime/Go pairs are released by ASN Framework `make set-version` during P6/version maintenance. Maintenance updates the selected lane and preserves the inactive lane. Service plugin build or workflow work should not edit them directly unless the task is explicitly ASN Framework dependency version maintenance.
 
 ### service-utils Checkout Version
 
@@ -186,8 +188,8 @@ Meaning:
 Control rule:
 
 - Toolchain versions are separate from service product version and ASN Framework/runtime version.
-- `ASN_BUILDER_GO_VERSION` is framework-owned and is carried through `service-utils/builder/ASN_VERSION`, just like `ASN_RUNTIME_VERSION_DEV` and `ASN_RUNTIME_VERSION_PRO`.
-- Every ASN Framework P6 must verify that `ASN_RUNTIME_VERSION_PRO` matches the framework PRO `VERSION.BUILD`, `ASN_RUNTIME_VERSION_DEV` matches the latest approved ASN DEV build manifest, and `ASN_BUILDER_GO_VERSION` matches the framework `GO_VERSION`; stale values mean `make set-version` has not been run for the selected release identity.
+- The lane-specific builder Go versions are framework-owned and are carried through `service-utils/builder/ASN_VERSION` with the corresponding runtime versions.
+- Every ASN Framework P6 must verify that the selected runtime version matches the selected release identity and its selected builder Go version matches the exact Go version embedded in that runtime. Stale selected-lane values mean `make set-version` has not been run; inactive-lane values must remain unchanged.
 - The artifact base image is local state and should not be assumed correct only because source files are correct.
 - Rebuild the base image when `ASN_SERVICE_API_VERSION`, Go version, protobuf requirements, private module dependencies, `go.mod`/`go.sum`, the configured service package closure, or builder Dockerfile/Makefile content changes.
 - A workspace-local Go build cache may be mounted into builder runs to speed repeated compilation, but the module cache remains image-owned by default so `check-prepare` cannot be accidentally satisfied by host state.
@@ -281,7 +283,7 @@ Before build or release work, verify:
 4. `service-utils/go.mod` uses the same intended ASN service API version, or a documented compatible exception exists.
 5. `service-utils/builder/ASN_VERSION` `ASN_RUNTIME_MODE` is `pro` by default, or explicitly set to `dev` for ASN DEV integration.
 6. `service-utils/builder/ASN_VERSION` `ASN_RUNTIME_VERSION` is an intended compatible ASN Framework/runtime version.
-7. `service-utils/builder/ASN_VERSION` `ASN_BUILDER_GO_VERSION` is the intended artifact-builder Go toolchain version.
+7. `service-utils/builder/ASN_VERSION` selects the builder Go toolchain paired with the intended runtime lane.
 8. Builder base image has been rebuilt after any API/toolchain/dependency change.
 9. Debian and Docker dependency versions are expected to follow `ASN_RUNTIME_VERSION`.
 10. Service product artifacts are expected to follow `VERSION_BUILD`.
@@ -300,7 +302,7 @@ Good parts:
 
 Unclear or risky parts:
 
-- Old `DEP_*` version names are not contract names. Service-side config should use `ASN_RUNTIME_MODE`, and the selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` must come from `builder/ASN_VERSION`.
+- Old `DEP_*` version names are not contract names. Service-side config should use `ASN_RUNTIME_MODE`, and the selected runtime and matching builder Go version must come from the same lane in `builder/ASN_VERSION`.
 - `update_service_utils` runs through the explicit `make init` lifecycle target and can move the submodule checkout based on `ASN_SERVICE_API_VERSION`.
 - There is no read-only target that reports all version authorities before a build.
 - `build-plugin` increments the development build number as a side effect.
