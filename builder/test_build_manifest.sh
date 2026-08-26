@@ -65,7 +65,7 @@ common_args=(
 )
 identity_args=(
     --asn-service-api-version 26.9.2
-    --asn-runtime-version 26.9.1
+    --asn-runtime-version 26.9.4
     --go-version 1.26.3
     --builder-go-version 1.26.3
     --service-utils-ref utils-ref
@@ -87,7 +87,7 @@ version="$("${manifest_cmd[@]}" commit-plugin \
     --version-build 1.2.101)"
 assert_equals "$version" "1.2.101" "commit-plugin version"
 assert_contains build/Manifest.yaml 'asn_service_api_version: "26.9.2"'
-assert_contains build/Manifest.yaml 'asn_runtime_version: "26.9.1"'
+assert_contains build/Manifest.yaml 'asn_runtime_version: "26.9.4"'
 assert_contains build/Manifest.yaml 'asn_builder_go_version: "1.26.3"'
 assert_contains build/Manifest.yaml 'service_utils_ref: "utils-ref"'
 assert_contains build/Manifest.yaml 'status: "PASS"'
@@ -104,7 +104,7 @@ printf '<!doctype html>\n' > build/docs/index.html
     "${docs_args[@]}" \
     --version-build 1.2.101 >/dev/null
 assert_contains build/Manifest.yaml 'asn_service_api_version: "26.9.2"'
-assert_contains build/Manifest.yaml 'asn_runtime_version: "26.9.1"'
+assert_contains build/Manifest.yaml 'asn_runtime_version: "26.9.4"'
 assert_contains build/Manifest.yaml 'go_version: "1.26.3"'
 assert_contains build/Manifest.yaml 'asn_builder_go_version: "1.26.3"'
 
