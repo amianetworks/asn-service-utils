@@ -94,7 +94,7 @@ message UpdateServiceStateRequest {
 message SendMessageRequest {
   string service_name = 1;
   string message_type = 2;
-  string message = 3;
+  bytes message = 3;
 }
 
 message ReplyNotificationRequest {
