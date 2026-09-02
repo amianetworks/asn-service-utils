@@ -51,7 +51,7 @@ declare the inputs in config and keep the recipe small.
 1. Sync `service-utils` to the ASN Framework approved ref.
 
 ```bash
-ASN_SERVICE_API_VERSION=26.9.4
+ASN_SERVICE_API_VERSION=26.10.0
 SERVICE_UTILS_REF="release/${ASN_SERVICE_API_VERSION}"
 git submodule update --init service-utils
 git -C service-utils fetch origin
