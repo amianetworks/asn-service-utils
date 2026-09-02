@@ -93,21 +93,21 @@ services_provisioned: [ asn, swan, scarlette ]
 #    codes: ["86", "852", "1"] # Default: []
 #  services:
 #    86: # if multiple country codes are using the same config, use comma to separate them, i.e., 86,852,853
-#      provider: "aliyun" # "tencent" || "aliyun"
-#      app_id: ""
-#      app_secret: "" # not needed for tencent
-#      secret_id: "" # not needed for aliyun
-#      secret_key: "" # not needed for aliyun
-#      sign_name: ""
-#      template_id: "" # for SMS verification code
+#      provider: "aliyun" # "tencent" || "aliyun" || "twilio"
+#      app_id: "" # for Twilio, use Verify Service SID
+#      app_secret: "" # Aliyun only
+#      secret_id: "" # Tencent: Secret ID; Twilio: Account SID
+#      secret_key: "" # Tencent: Secret Key; Twilio: Auth Token
+#      sign_name: "" # Aliyun and Tencent needed
+#      template_id: "" # Aliyun and Tencent needed
 #    1: # if multiple country codes are using the same config, use comma to separate them, i.e., 86,852,853
-#      provider: "tencent" # "tencent" || "aliyun"
-#      app_id: ""
-#      app_secret: "" # not needed for tencent
-#      secret_id: "" # not needed for aliyun
-#      secret_key: "" # not needed for aliyun
-#      sign_name: ""
-#      template_id: "" # for SMS verification code
+#      provider: "tencent" # "tencent" || "aliyun" || "twilio"
+#      app_id: "" # for Twilio, use Verify Service SID
+#      app_secret: "" # Aliyun only
+#      secret_id: "" # Tencent: Secret ID; Twilio: Account SID
+#      secret_key: "" # Tencent: Secret Key; Twilio: Auth Token
+#      sign_name: "" # Aliyun and Tencent needed
+#      template_id: "" # Aliyun and Tencent needed
 
 ## Sign In with Apple
 #apple:
@@ -284,6 +284,7 @@ services_provisioned: [ asn, swan, scarlette ]
 #    wait_min: 1 # Minimum wait time after an attempt in second. Default: 1 Seconds
 #    wait_max: 43200 # Maximum waiting time after an attempt in second. Default: 43200 Seconds
 #    amp_factor: 2 # The waiting time after each failure will be extended according to the amplification factor. Default: 3
+#    mfa: 5 # Default: 5
 #
 #  # Config the concurrent authentication to limit the number of concurrent authentication entity allowed per user.
 #  # You can configure the maximum number of entities allowed to log in, and if exceeded, it will be handled according to the auto replacement policy.
@@ -313,6 +314,21 @@ services_provisioned: [ asn, swan, scarlette ]
 #    mini_program: -1 # The number of login devices under this category allowed per user. Default: -1
 #    pc: -1 # The number of login devices under this category allowed per user. Default: -1
 #    unknown: -1 # The number of login devices under this category allowed per user. Default: -1
+#
+#  # Password flow (forgot-password recovery and in-session change) configuration.
+#  password_reset:
+#    ttl: 10 # Flow token lifetime in minutes. Default: 10
+#    max_attempts: 5 # Failed verification attempts before the flow token is invalidated. Default: 5
+#
+#  # Auth flow (stateful login credential phase) configuration.
+#  auth_flow:
+#    ttl: 10 # Credential-phase flow token lifetime in minutes. Default: 10
+#    max_attempts: 5 # Failed verification attempts before the flow token is invalidated. Default: 5
+#
+#  # How often (in seconds) the server flushes its batch of revoked access tokens to
+#  # connected clients over the ClientConnect stream. Lower = revocations propagate
+#  # faster but more frequent pushes. Non-positive falls back to 1. Default: 1
+#  revoke_sync_interval: 1
 
 ## Authorization Configurations
 #authorization:
@@ -333,6 +349,13 @@ services_provisioned: [ asn, swan, scarlette ]
 ## Group Configurations
 #group:
 #  name: "^[0-9a-zA-Z_.-]{2,36}$"
+#  # The following apply when a group is created with a prefix/suffix instead of an
+#  # exact name. The generated name is "<prefix><separator><token><separator><suffix>",
+#  # with empty parts and their separators omitted, and it must still match "name".
+#  affix: "^[0-9a-zA-Z_.-]{0,16}$" # pattern the prefix and suffix must match
+#  separator: "-"                  # joins prefix, token and suffix
+#  token_length: 8                 # length of the generated random token
+#  max_attempts: 5                 # retries when a generated name is already taken
 
 ## Role Configurations
 #role:
