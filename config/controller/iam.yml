@@ -325,6 +325,27 @@ services_provisioned: [ asn, swan, scarlette ]
 #    ttl: 10 # Credential-phase flow token lifetime in minutes. Default: 10
 #    max_attempts: 5 # Failed verification attempts before the flow token is invalidated. Default: 5
 #
+#  # Session delegation: exchanging a live session for a one-time ticket that a second
+#  # device redeems into a session of its own (app -> browser hand-off, or a device that
+#  # cannot practically log in on its own). Disabled by default: delegation widens the
+#  # blast radius of a single stolen session, so it must be opted into deliberately.
+#  delegation:
+#    enabled: false # Whether to allow session delegation. Default: false
+#    ticket_expire: 60 # Ticket lifetime in SECONDS (not minutes) - it only has to survive one hop. Default: 60
+#    max_expire: 120 # Longest lifetime in minutes any delegated session may be granted. Non-positive means the parent session's own ceiling is the only limit. Default: 120
+#    allow_refresh: false # Whether a delegated session may be granted a refresh token. Without one it dies at its access token expiry and cannot be renewed. Default: false
+#    # Default lifetime in minutes per device category of the REDEEMING device, used when
+#    # the caller does not request one. 0 falls back to authorization.jwt.access.expire.
+#    # Every value is still clamped by max_expire and by the parent session's own ceiling.
+#    default_expire:
+#      phone: 0
+#      tablet: 0
+#      wearable: 0
+#      browser: 0
+#      mini_program: 0
+#      pc: 0
+#      unknown: 0
+#
 #  # How often (in seconds) the server flushes its batch of revoked access tokens to
 #  # connected clients over the ClientConnect stream. Lower = revocations propagate
 #  # faster but more frequent pushes. Non-positive falls back to 1. Default: 1
