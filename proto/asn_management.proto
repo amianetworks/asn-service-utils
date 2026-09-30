@@ -571,7 +571,7 @@ service Management {
       post: "/enrollment/script"
       body: "*"
     };
-  } // Validate+consume token, lazy mint/sign, render full install script.
+  } // Validate token, sign a candidate cert, render full install/upgrade script.
   rpc UnbindNode                   (Enrollment.UnbindReq)               returns (Enrollment.NodeIdentity) {
     option (google.api.http) = {
       post: "/enrollment/unbind"
@@ -592,7 +592,13 @@ service Management {
     option (google.api.http) = {
       delete: "/enrollment/token"
     };
-  } // Revoke a single outstanding token by id.
+  } // Revoke a single outstanding token by id (and its candidate certs).
+  rpc FetchUninstallScript         (Enrollment.UninstallReq)            returns (Enrollment.UninstallScript) {
+    option (google.api.http) = {
+      post: "/enrollment/uninstall-script"
+      body: "*"
+    };
+  } // Remove a service from the node record and render its host uninstall script.
 
   // Node Group API
   rpc GetNodeGroupsByIds          (NodeGroup.Ids)             returns (NodeGroup.List) {
@@ -798,33 +804,37 @@ message Enrollment {
     Node.EnrollmentState enrollment_state = 3;
   }
 
-  // MintEnrollmentToken: single-use script-fetch token for an EXISTING node.
-  // Allowed only when the node is ENROLLMENT_UNBOUND; non-reentrant; supersedes a
-  // prior unused token. To re-enroll a bound node, call UnbindNode first.
+  // MintEnrollmentToken: script-fetch token for an EXISTING node, reusable until
+  // it expires; supersedes the node's prior token. Its candidate certificates can
+  // bind only while the node has no bound certificate, so to re-key a bound node
+  // call UnbindNode first.
   message MintTokenReq {
     string node_id = 1; // existing node; required
-    int64 ttl_seconds = 2;
+    int64 ttl_seconds = 2; // 0 = default; capped by servicenode.enrollment.token_ttl
     string label = 3;
   }
 
-  // UnbindNode: revoke the node's current certificate + cancel any outstanding
-  // token, returning it to ENROLLMENT_UNBOUND. Does NOT delete the node
-  // (identity / eligibility / config preserved).
+  // UnbindNode: revoke the node's bound certificate, drop its candidate
+  // certificates, and cancel any outstanding token, returning it to
+  // ENROLLMENT_UNBOUND. Does NOT delete the node (identity / eligibility /
+  // config preserved).
   message UnbindReq {
     string node_id = 1; // required
     string reason = 2; // audit reason (e.g. "machine swap")
   }
 
   message Token {
-    string token = 1; // single-use script-fetch credential
+    string token = 1; // script-fetch credential, reusable until expires_at
     string token_id = 2;
     string node_id = 3; // the bound node
     int64 expires_at = 4;
   }
 
-  // FetchBootstrapScript: token is the credential; lazy mint/sign for the token's
-  // EXISTING node. Renders the FULL install for the node's service_names (no
-  // service named). Shares one server-side path with the service-API render.
+  // FetchBootstrapScript: token is the credential (not consumed). Signs a fresh
+  // candidate certificate for the token's EXISTING node and renders the FULL
+  // install/upgrade for the node's service_names (no service named); the first
+  // candidate to register binds. Shares one server-side path with the service-API
+  // render.
   message ScriptReq {
     string token = 1;
   }
@@ -833,7 +843,24 @@ message Enrollment {
     bytes content = 1; // rendered bootstrap script (ASN core)
     string content_type = 2; // e.g. "text/x-shellscript"
     string node_id = 3; // the existing node this script enrolls / re-keys
-    int64 cert_not_after = 4; // lazily signed cert validity
+    int64 cert_not_after = 4; // validity of the candidate cert in content
+  }
+
+  // FetchUninstallScript: remove service_name from the node's service_names and
+  // render the script that purges its deb on the host. When that leaves the node
+  // without services, the node is also unbound and the script purges asnsn and
+  // the node credential. Decided from the controller record; carries no secret.
+  message UninstallReq {
+    string node_id = 1; // required
+    string service_name = 2; // required
+    string reason = 3; // audit reason
+  }
+
+  message UninstallScript {
+    bytes content = 1;
+    string content_type = 2; // e.g. "text/x-shellscript"
+    string node_id = 3;
+    bool last_service = 4; // node unbound; script also removes asnsn
   }
 
   message StatusReq { string node_id = 1; string token_id = 2; }
