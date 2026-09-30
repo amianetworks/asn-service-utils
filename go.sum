@@ -7,6 +7,7 @@ github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.11.1 h1:rxzVgxc0whK9mbDB
 github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.11.1/go.mod h1:ilLKYJEK2nW9PnrQOniPwhzH2CfEok7CKz8MPPQbNN4=
 github.com/amianetworks/am.modules/v26 v26.10.0 h1:cmqpKkLuD2eT2JyhgeUzWvj+XcJcnpBhTEg2VuBWGUE=
 github.com/amianetworks/am.modules/v26 v26.10.0/go.mod h1:QkwnzYO0AkKkAxpcojcCBu6iDG3J5WvsjzBsq6iMsPQ=
+github.com/amianetworks/am.modules/v26 v26.11.0/go.mod h1:QkwnzYO0AkKkAxpcojcCBu6iDG3J5WvsjzBsq6iMsPQ=
 github.com/amianetworks/asn-service-api/v26 v26.10.1 h1:Ex0543xzHQD+Hz0uEd7dvSD6cv3NHJfBPogIvGZaRt4=
 github.com/amianetworks/asn-service-api/v26 v26.10.1/go.mod h1:hod+nm1qbK/w6s7DP7Bp2RfbhL+mcaczKpAryRrLD00=
 github.com/amianetworks/asn-service-api/v26 v26.10.2 h1:GncbqGHWprIAa0B5fNbUo9Peb/4Qddie61hgxXptOY4=
