@@ -74,7 +74,7 @@ The consuming service product version is independent from both the API version a
 
 ### API Line Rules
 
-From `asn-service-api 26.11.0` and runtime line `26.11`, two rules tie the API
+From `asn-service-api 26.12.0` and runtime line `26.11`, two rules tie the API
 version, the runtime version, and the plugin ABI together (design:
 ASN `workflow/design/VersionCompatibility.md`, "API Line Rules"):
 
@@ -125,7 +125,7 @@ dependency and builder Go toolchain for builder/package/runtime dependency paths
 under normal Make execution.
 
 `ASN_SERVICE_API_VERSION` and `ASN_RUNTIME_VERSION` are still different
-versions — `26.11.0` versus `26.11.<build>` — but the runtime's `X.Y` must equal
+versions — `26.12.0` versus `26.11.<build>` — but the runtime's `X.Y` must equal
 the API's `X.Y` (see API Line Rules).
 
 ## Service Implementation Contract
@@ -239,7 +239,7 @@ Treat these as templates. Production deployment requires service-specific review
 
 ## Release Safety Rules
 
-- The runtime `X.Y` must equal the API `X.Y`; the full versions differ (`26.11.<build>` versus `26.11.0`).
+- The runtime `X.Y` must equal the API `X.Y`; the full versions differ (`26.11.<build>` versus `26.12.0`).
 - ASN Services default to `ASN_RUNTIME_MODE=pro`; use `ASN_RUNTIME_MODE=dev` only for explicit ASN DEV integration testing.
 - Do not edit `builder/ASN_VERSION` from a service repo unless explicitly performing ASN Framework dependency version maintenance.
 - Do not run `update_service_utils` casually; it performs networked git operations and can move the submodule checkout.
