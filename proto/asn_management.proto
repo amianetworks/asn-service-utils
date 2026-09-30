@@ -565,7 +565,7 @@ service Management {
       post: "/enrollment/token"
       body: "*"
     };
-  } // Mint a single-use enrollment token for an existing node.
+  } // Mint an enrollment token (reusable until it expires) for an existing node.
   rpc FetchBootstrapScript         (Enrollment.ScriptReq)               returns (Enrollment.Script) {
     option (google.api.http) = {
       post: "/enrollment/script"
@@ -1744,10 +1744,10 @@ message Node {
   // Credential-lifecycle axis (orthogonal to NodeState above). Mirrors
   // commonapi.EnrollmentState. See workflow/design/NodeEnrollment.md.
   enum EnrollmentState {
-    ENROLLMENT_UNBOUND = 0;       // no token/cert: open for (re-)enrollment; also the post-unbind state
-    ENROLLMENT_TOKEN_ISSUED = 1;  // a single-use enrollment token is outstanding
-    ENROLLMENT_CERT_ISSUED = 2;   // certificate lazily signed; awaiting first registration
-    ENROLLMENT_BOUND = 3;         // registered and holding its valid certificate
+    ENROLLMENT_UNBOUND = 0;       // no token, candidate, or bound cert: open for (re-)enrollment; also the post-unbind state
+    ENROLLMENT_TOKEN_ISSUED = 1;  // a token is outstanding; no live candidate and no bound certificate
+    ENROLLMENT_CERT_ISSUED = 2;   // candidate certificate(s) signed at script fetch; none has registered yet
+    ENROLLMENT_BOUND = 3;         // registered: its certificate is the node's one bound certificate
   }
 
   message ServiceNode {

@@ -2,7 +2,7 @@
 # Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
 # Enforce the API-line version policy (asn-service-api README "Versioning";
-# ASN design/service_package_dependency.md section 4):
+# ASN workflow/design/VersionCompatibility.md, "Enforcement at Build Time"):
 #   - asn-service-api is released only as X.Y.0;
 #   - every runtime lane that is set (ASN_RUNTIME_VERSION_PRO / _DEV) is on the
 #     API's X.Y, and the lane ASN_RUNTIME_MODE selects is set;

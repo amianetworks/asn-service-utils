@@ -76,7 +76,7 @@ The consuming service product version is independent from both the API version a
 
 From `asn-service-api 26.11.0` and runtime line `26.11`, two rules tie the API
 version, the runtime version, and the plugin ABI together (design:
-ASN `design/service_package_dependency.md`):
+ASN `workflow/design/VersionCompatibility.md`, "API Line Rules"):
 
 1. asn-service-api is released only as `X.Y.0`. Every API change, Go toolchain
    change, or change of a module shared between runtimes and plugins (as
