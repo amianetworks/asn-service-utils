@@ -21,10 +21,11 @@ that migration.
 
 ## What Changed
 
-The artifact builder now expects consuming services to provide a build manifest
-command through `BUILD_MANIFEST_CMD`. SWAN sets this to the generic
-`bash service-utils/builder/build_manifest.sh` helper and supplies
-service-specific artifact lists from its root Make/config layer.
+The AM Workflow artifact builder owns the build manifest command
+(`BUILD_MANIFEST_CMD`, its `workflow/scripts/artifact-builder/build_manifest.sh`);
+consuming services supply service-specific artifact lists from their root
+Make/config layer. service-utils adds only ASN policy on top: `check-version`
+also runs `builder/asn_version_policy.sh`.
 
 The important behavior changes are:
 
@@ -54,8 +55,11 @@ For every ASN Framework release:
 2. Verify `ASN_RUNTIME_VERSION_PRO` matches the ASN Framework PRO `VERSION.BUILD`.
 3. Verify `ASN_RUNTIME_VERSION_DEV` matches the latest approved ASN DEV build manifest.
 4. Verify `ASN_BUILDER_GO_VERSION` matches the framework-supported `GO_VERSION`.
-5. Commit and publish the `service-utils` branch or tag that consuming services
-   will use, for example `v26.10.2`.
+   `make check-version` enforces that both runtime versions are on the API's
+   `X.Y` and that the PRO and DEV Go versions are equal.
+5. Commit and publish the `service-utils` branch that consuming services will
+   use. It is always `release/X.Y.0` for asn-service-api `X.Y.0`, for example
+   `release/26.11.0`.
 6. Communicate the compatible tuple:
 
 ```text

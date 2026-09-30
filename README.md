@@ -35,10 +35,12 @@ ASN_SERVICE_API    ASN_SERVICE_UTILS    ASN Framework    ASN Service
 git tag/version    git branch/tag       runtime version  product version
 ```
 
-The API version and `service-utils` checkout are normally paired. In the current Makefile convention, a consuming service sets:
+The API version and `service-utils` checkout are paired. asn-service-api is
+released only as `X.Y.0`, so the matching branch is always `release/X.Y.0`. A
+consuming service sets:
 
 ```make
-ASN_SERVICE_API_VERSION := <api-version>
+ASN_SERVICE_API_VERSION := <X.Y.0>
 SERVICE_UTILS_REF := release/$(ASN_SERVICE_API_VERSION)
 ```
 
@@ -70,6 +72,38 @@ The DEV and PRO runtime versions and their matching builder Go versions are set 
 
 The consuming service product version is independent from both the API version and the framework/runtime version.
 
+### API Line Rules
+
+From `asn-service-api 26.11.0` and runtime line `26.11`, two rules tie the API
+version, the runtime version, and the plugin ABI together (design:
+ASN `design/service_package_dependency.md`):
+
+1. asn-service-api is released only as `X.Y.0`. Every API change, Go toolchain
+   change, or change of a module shared between runtimes and plugins (as
+   recorded by this branch's `go.mod`) starts the next line.
+2. The runtime version is `X.Y.<build>`: its `X.Y` equals the API's `X.Y`, for
+   PRO and DEV alike, and PRO and DEV use the same Go toolchain.
+
+So the runtime line `X.Y` identifies the plugin ABI, and a service package
+depends on the whole line rather than on one runtime build:
+
+```text
+Depends: asnsn (>= @DEPENDS_MIN@), asnsn (<< @DEPENDS_NEXT@)
+Depends: asnc (>= @DEPENDS_MIN@), asnc (<< @DEPENDS_NEXT@)
+```
+
+`builder/asn.mk` derives `DEBIAN_DEPENDS_MIN` (`X.Y`) and `DEBIAN_DEPENDS_NEXT`
+(`X.(Y+1)`) from `ASN_SERVICE_API_VERSION`. A service that needs a runtime fix
+in a specific build may raise `DEBIAN_DEPENDS_MIN` (for example `26.11.5`) and
+records why in its release notes.
+
+`make check-version`, which runs before every build
+(`builder/asn_version_policy.sh`), fails when the API version is not `X.Y.0`,
+when a set runtime lane (`ASN_RUNTIME_VERSION_PRO` / `_DEV`) is not on the
+API's `X.Y`, when the lane `ASN_RUNTIME_MODE` selects is empty, or when both
+lanes are set and their builder Go versions differ. A lane is empty only at the
+start of a line, before it has a build of that kind.
+
 ## Makefile Control Order
 
 A typical consuming service Makefile includes files in this order:
@@ -90,7 +124,9 @@ Because `builder/ASN_VERSION` is included after the service config through
 dependency and builder Go toolchain for builder/package/runtime dependency paths
 under normal Make execution.
 
-This is why `ASN_SERVICE_API_VERSION` and `ASN_RUNTIME_VERSION` must not be treated as the same version. They are a compatibility pair.
+`ASN_SERVICE_API_VERSION` and `ASN_RUNTIME_VERSION` are still different
+versions — `26.11.0` versus `26.11.<build>` — but the runtime's `X.Y` must equal
+the API's `X.Y` (see API Line Rules).
 
 ## Service Implementation Contract
 
@@ -203,7 +239,7 @@ Treat these as templates. Production deployment requires service-specific review
 
 ## Release Safety Rules
 
-- Do not assume `ASN_SERVICE_API_VERSION` equals `ASN_RUNTIME_VERSION`.
+- The runtime `X.Y` must equal the API `X.Y`; the full versions differ (`26.11.<build>` versus `26.11.0`).
 - ASN Services default to `ASN_RUNTIME_MODE=pro`; use `ASN_RUNTIME_MODE=dev` only for explicit ASN DEV integration testing.
 - Do not edit `builder/ASN_VERSION` from a service repo unless explicitly performing ASN Framework dependency version maintenance.
 - Do not run `update_service_utils` casually; it performs networked git operations and can move the submodule checkout.

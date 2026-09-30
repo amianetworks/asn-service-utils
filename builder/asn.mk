@@ -35,17 +35,26 @@ endif
 ASN_BUILD_IDENTITY ?= $(or $(strip $(PROJECT_ID)),$(strip $(SERVICE)))
 GO_VERSION ?= $(ASN_BUILDER_GO_VERSION)
 
+## One asn-service-api line X.Y.0 = one ASN runtime line X.Y = one plugin ABI.
+## Service packages depend on the whole runtime line:
+##   Depends: asnsn (>= @DEPENDS_MIN@), asnsn (<< @DEPENDS_NEXT@)
+## An API version that is not X.Y.Z leaves both empty; check-version rejects it.
+## See asn-service-api README "Versioning".
+ASN_SERVICE_API_LINE := $(shell printf '%s\n' '$(ASN_SERVICE_API_VERSION)' | awk -F. 'NF == 3 { print $$1 "." $$2 }')
+ASN_SERVICE_API_NEXT_LINE := $(shell printf '%s\n' '$(ASN_SERVICE_API_VERSION)' | awk -F. 'NF == 3 { print $$1 "." ($$2 + 1) }')
+
 export SERVICE_UTILS_DIR
-export ASN_SERVICE_API_VERSION ASN_RUNTIME_MODE ASN_RUNTIME_VERSION ASN_RUNTIME_VERSION_DEV ASN_RUNTIME_VERSION_PRO ASN_BUILDER_GO_VERSION ASN_BUILDER_GO_VERSION_DEV ASN_BUILDER_GO_VERSION_PRO
+export ASN_SERVICE_API_VERSION ASN_SERVICE_API_LINE ASN_SERVICE_API_NEXT_LINE ASN_RUNTIME_MODE ASN_RUNTIME_VERSION ASN_RUNTIME_VERSION_DEV ASN_RUNTIME_VERSION_PRO ASN_BUILDER_GO_VERSION ASN_BUILDER_GO_VERSION_DEV ASN_BUILDER_GO_VERSION_PRO
 export CHECK_VERSION_ROWS CHECK_VERSION_EXTRA_ROWS CHECK_BUILD_ROWS CHECK_BUILD_EXTRA_ROWS
 
 ##----------------------------------------------------------------------------##
-## Commands supplied by service-utils.
+## Commands supplied by service-utils. BUILD_MANIFEST_CMD, BUILDER_BASE_IMAGE_CMD,
+## DEBIAN_PACKAGE_CMD and PUBLISH_VARS_CMD are owned by AM Workflow.
 PROTO_TOOLS_CMD ?= bash $(ASN_BUILDER_DIR)/proto_tools.sh
-BUILD_MANIFEST_CMD ?= bash $(ASN_BUILDER_DIR)/build_manifest.sh
-BUILDER_BASE_IMAGE_CMD ?= bash $(ASN_BUILDER_DIR)/builder_base_image.sh
-DEBIAN_PACKAGE_CMD ?= bash $(ASN_BUILDER_DIR)/debian_package.sh
 STAGE_DOCS_CMD ?= bash $(ASN_BUILDER_DIR)/stage_docs.sh
+# ASN API-line policy. Not part of BUILD_MANIFEST_CMD: AM Workflow owns that
+# command (and overrides it), and this policy is ASN's.
+ASN_VERSION_POLICY_CMD ?= bash $(ASN_BUILDER_DIR)/asn_version_policy.sh
 
 ##----------------------------------------------------------------------------##
 ## Generic artifact-builder defaults for ASN projects.
@@ -67,7 +76,10 @@ endif
 GO_MOD_REFERENCE_FILE ?= $(SERVICE_UTILS_DIR)/go.mod
 GO_BUILD_PARALLELISM ?= 2
 GO_BUILD_PARALLELISM_FLAG ?= $(if $(strip $(GO_BUILD_PARALLELISM)),-p=$(GO_BUILD_PARALLELISM),)
-DEBIAN_DEPENDS_VERSION ?= $(ASN_RUNTIME_VERSION)
+# Lower bound defaults to the start of the line; a service that needs a runtime
+# fix in a specific build raises it (e.g. 26.11.5) and records why.
+DEBIAN_DEPENDS_MIN ?= $(ASN_SERVICE_API_LINE)
+DEBIAN_DEPENDS_NEXT ?= $(ASN_SERVICE_API_NEXT_LINE)
 IMAGE_BUILD_ARG_VALUES ?= ASN_C_VERSION=$(ASN_RUNTIME_VERSION) ASN_SN_VERSION=$(ASN_RUNTIME_VERSION) SERVICE_VERSION=@VERSION_BUILD@
 
 BUILD_MANIFEST_ARTIFACT_EXTRA_ARGS += \
@@ -113,6 +125,7 @@ check-version:
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--go-version "$(GO_VERSION)" \
 		$(BUILD_MANIFEST_ARGS)
+	@$(ASN_VERSION_POLICY_CMD)
 
 check-build:
 	@$(BUILD_MANIFEST_CMD) check-build \

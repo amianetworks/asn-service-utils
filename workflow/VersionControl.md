@@ -114,16 +114,17 @@ Meaning:
 - `ASN_RUNTIME_MODE` selects a paired runtime and builder-Go lane (`pro` or `dev`); services default it to `pro`.
 - `ASN_RUNTIME_VERSION` is the selected ASN Framework/runtime dependency used by builder and packaging assets.
 - It is consumed by `service-utils/builder/asn.mk` through `include $(SERVICE_UTILS_DIR)/builder/ASN_VERSION`.
-- It is injected into Debian package control files as `@DEPENDS@`.
+- It is not injected into Debian package control files. Service packages depend on the runtime line derived from `ASN_SERVICE_API_VERSION` (`@DEPENDS_MIN@` / `@DEPENDS_NEXT@`, see Debian Packages).
 - Consuming service projects may also pass `ASN_RUNTIME_VERSION` into Docker build arguments for ASN Controller and ASN Service Node runtime images.
 - `ASN_BUILDER_GO_VERSION_DEV` and `ASN_BUILDER_GO_VERSION_PRO` record the exact Go versions embedded in their corresponding runtimes; `ASN_BUILDER_GO_VERSION` is the selected value required for service-plugin builder images.
 - In the common Makefile flow, the consuming service includes its own config first, then includes `service-utils/builder/asn.mk`, then includes the neutral AM Workflow `workflow/make/artifact-builder.mk`. `builder/asn.mk` reads selected `ASN_RUNTIME_VERSION` and `ASN_BUILDER_GO_VERSION` from service-utils for normal Make execution.
 
 Control rule:
 
-- `ASN_RUNTIME_VERSION` is not the same thing as `ASN_SERVICE_API_VERSION`.
-- These values do not have to be identical.
-- They must be treated as a compatibility pair: the selected ASN Framework/runtime version must support the selected ASN service API version.
+- `ASN_RUNTIME_VERSION` (`X.Y.<build>`) is not the same version as `ASN_SERVICE_API_VERSION` (`X.Y.0`), but from line 26.11 their `X.Y` must be equal: one API line = one runtime line = one plugin ABI.
+- asn-service-api is released only as `X.Y.0`; an API change, a Go toolchain change, or a change of any module shared between runtimes and plugins (as recorded by this branch's `go.mod`) starts the next line.
+- Every set lane (`ASN_RUNTIME_VERSION_PRO`, `ASN_RUNTIME_VERSION_DEV`) is on the API's `X.Y`, and when both are set `ASN_BUILDER_GO_VERSION_PRO` equals `ASN_BUILDER_GO_VERSION_DEV`. A lane is empty only at the start of a line, before it has a build of that kind; ASN `make set-version` clears a lane left on the previous line.
+- `check-version` (run before every build, `builder/asn_version_policy.sh`) fails when any of these does not hold, or when the lane `ASN_RUNTIME_MODE` selects is empty.
 - The DEV and PRO runtime/Go pairs are released by ASN Framework `make set-version` during P6/version maintenance. Maintenance updates the selected lane and preserves the inactive lane. Service plugin build or workflow work should not edit them directly unless the task is explicitly ASN Framework dependency version maintenance.
 
 ### service-utils Checkout Version
@@ -251,10 +252,25 @@ Expected behavior:
 The shared AM Workflow artifact builder replaces package control placeholders:
 
 - `@VERSION@` becomes `$(VERSION_BUILD)`.
-- `@DEPENDS@` becomes `$(ASN_RUNTIME_VERSION)`.
+- `@DEPENDS_MIN@` becomes `$(DEBIAN_DEPENDS_MIN)`, by default the API line `X.Y`.
+- `@DEPENDS_NEXT@` becomes `$(DEBIAN_DEPENDS_NEXT)`, the next line `X.(Y+1)`.
 - `@SERVICE@` becomes the Debian service name.
 
-This means Debian package version and ASN runtime dependency version are controlled by different sources.
+`builder/asn.mk` derives both bounds from `ASN_SERVICE_API_VERSION`. A service
+control file depends on the whole runtime line:
+
+```text
+Depends: asnsn (>= @DEPENDS_MIN@), asnsn (<< @DEPENDS_NEXT@), ...
+Depends: asnc (>= @DEPENDS_MIN@), asnc (<< @DEPENDS_NEXT@), ...
+```
+
+Any PRO or DEV runtime on the line satisfies it, and services on the same line
+can be installed together. A service that needs a fix in a specific runtime
+build raises `DEBIAN_DEPENDS_MIN` (for example `26.11.5`) and records why.
+`@DEPENDS@` is retired; a control file still using it can no longer be packaged.
+
+This means the Debian package version follows the service product version and
+the ASN runtime dependency follows the API line.
 
 ### Docker Images
 
@@ -280,12 +296,12 @@ Before build or release work, verify:
 1. The consuming service's configured `ASN_SERVICE_API_VERSION` matches the intended Go API version.
 2. The consuming service's `go.mod` uses the same intended ASN service API version.
 3. `service-utils` checkout state is intentional for the selected `SERVICE_UTILS_REF`.
-4. `service-utils/go.mod` uses the same intended ASN service API version, or a documented compatible exception exists.
+4. `service-utils/go.mod` uses the same ASN service API version. It is the reference for every module shared between runtimes and plugins on this line.
 5. `service-utils/builder/ASN_VERSION` `ASN_RUNTIME_MODE` is `pro` by default, or explicitly set to `dev` for ASN DEV integration.
-6. `service-utils/builder/ASN_VERSION` `ASN_RUNTIME_VERSION` is an intended compatible ASN Framework/runtime version.
-7. `service-utils/builder/ASN_VERSION` selects the builder Go toolchain paired with the intended runtime lane.
+6. `service-utils/builder/ASN_VERSION` `ASN_RUNTIME_VERSION_PRO` and `_DEV`, where set, are on the API's `X.Y`, and the selected lane is set (enforced by `check-version`).
+7. `service-utils/builder/ASN_VERSION` PRO and DEV builder Go versions are equal when both lanes are set (enforced by `check-version`).
 8. Builder base image has been rebuilt after any API/toolchain/dependency change.
-9. Debian and Docker dependency versions are expected to follow `ASN_RUNTIME_VERSION`.
+9. Debian dependencies follow the API line (`DEBIAN_DEPENDS_MIN` / `DEBIAN_DEPENDS_NEXT`); Docker runtime build arguments follow `ASN_RUNTIME_VERSION`.
 10. Service product artifacts are expected to follow `VERSION_BUILD`.
 
 ## Mechanism Review
@@ -298,7 +314,7 @@ Good parts:
 - `make/config.mk` gives each consuming service one visible place to declare service-side version intent.
 - `builder/ASN_VERSION` keeps the ASN Framework/runtime dependency under ASN Framework release control.
 - Build-number checks prevent development build numbers from being published to production repositories and production build numbers from being published to the development repository.
-- Debian package generation uses the service product version for package version and `ASN_RUNTIME_VERSION` for ASN runtime dependency.
+- Debian package generation uses the service product version for package version and the API line range for the ASN runtime dependency.
 
 Unclear or risky parts:
 
@@ -327,7 +343,7 @@ Recommended improvements:
 
 Agents working on ASN Service Plugin versioning should follow these rules:
 
-- Do not assume `ASN_SERVICE_API_VERSION` and `ASN_RUNTIME_VERSION` must be equal.
+- `ASN_SERVICE_API_VERSION` and `ASN_RUNTIME_VERSION` differ as full versions, but their `X.Y` must be equal.
 - Do not edit `service-utils/builder/ASN_VERSION` unless explicitly assigned ASN Framework dependency version maintenance.
 - Do not change dependency versions without approval.
 - Do not run `update_service_utils`, `make init`, `make prepare`, Docker builds, package publishing, or networked release operations without approval.
@@ -342,7 +358,6 @@ Agents working on ASN Service Plugin versioning should follow these rules:
 
 ## Open Questions
 
-- How should each ASN Service record the approved compatibility pairing between `ASN_SERVICE_API_VERSION` and `ASN_RUNTIME_VERSION`?
 - Should consuming services pin `service-utils` by branch, tag, or exact commit for reproducible releases?
 - Should `update_service_utils` use a branch, tag, or exact commit?
 - Should there be a read-only version check target that reports all version sources without changing the submodule checkout?
