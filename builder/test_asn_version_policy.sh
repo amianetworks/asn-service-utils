@@ -16,7 +16,7 @@ fail() {
 ok=(
     --asn-service-api-version 26.12.0
     --asn-runtime-version-pro 26.11.3
-    --asn-runtime-version-dev 26.12.100
+    --asn-runtime-version-dev 26.12.101
     --builder-go-version-pro 1.26.5
     --builder-go-version-dev 1.26.5
     --runtime-mode pro
@@ -42,7 +42,7 @@ expect_fail() {
 expect_fail "has patch 1; asn-service-api is released only as X.Y.0" --asn-service-api-version 26.12.0
 expect_fail "is not X.Y.Z" --asn-service-api-version v26.12.0
 expect_fail "ASN_RUNTIME_VERSION_PRO 26.10.11 is not on API line 26.11" --asn-runtime-version-pro 26.10.11
-expect_fail "ASN_RUNTIME_VERSION_DEV 26.12.100 is not on API line 26.11" --asn-runtime-version-dev 26.12.100
+expect_fail "ASN_RUNTIME_VERSION_DEV 26.12.101 is not on API line 26.11" --asn-runtime-version-dev 26.12.101
 expect_fail "differs from ASN_BUILDER_GO_VERSION_DEV 1.26.6" --builder-go-version-dev 1.26.6
 expect_fail "ASN_RUNTIME_MODE must be pro or dev" --runtime-mode stable
 
@@ -58,13 +58,13 @@ expect_fail "ASN_RUNTIME_VERSION_DEV is not set, but ASN_RUNTIME_MODE=dev select
 # An empty lane is not compared for Go, but a set lane needs its Go version.
 "${policy[@]}" "${ok[@]}" --asn-runtime-version-dev "" --builder-go-version-dev 1.26.6 ||
     fail "Go versions must not be compared when a lane is empty"
-expect_fail "ASN_BUILDER_GO_VERSION_DEV is not set for ASN_RUNTIME_VERSION_DEV 26.12.100" \
+expect_fail "ASN_BUILDER_GO_VERSION_DEV is not set for ASN_RUNTIME_VERSION_DEV 26.12.101" \
     --builder-go-version-dev ""
 # A set but unselected lane must still be on the line.
 expect_fail "ASN_RUNTIME_VERSION_DEV 26.10.116 is not on API line 26.11" --asn-runtime-version-dev 26.10.116
 
 # Environment inputs, as builder/asn.mk exports them.
-ASN_SERVICE_API_VERSION=26.12.0 ASN_RUNTIME_VERSION_PRO=26.11.3 ASN_RUNTIME_VERSION_DEV=26.12.100 \
+ASN_SERVICE_API_VERSION=26.12.0 ASN_RUNTIME_VERSION_PRO=26.11.3 ASN_RUNTIME_VERSION_DEV=26.12.101 \
     ASN_BUILDER_GO_VERSION_PRO=1.26.5 ASN_BUILDER_GO_VERSION_DEV=1.26.5 "${policy[@]}" ||
     fail "environment inputs should pass"
 
