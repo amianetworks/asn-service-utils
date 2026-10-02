@@ -8,12 +8,14 @@ github.com/amianetworks/am.drivers.sapphire.iam/v26 v26.11.1/go.mod h1:ilLKYJEK2
 github.com/amianetworks/am.modules/v26 v26.10.0 h1:cmqpKkLuD2eT2JyhgeUzWvj+XcJcnpBhTEg2VuBWGUE=
 github.com/amianetworks/am.modules/v26 v26.10.0/go.mod h1:QkwnzYO0AkKkAxpcojcCBu6iDG3J5WvsjzBsq6iMsPQ=
 github.com/amianetworks/am.modules/v26 v26.11.0/go.mod h1:QkwnzYO0AkKkAxpcojcCBu6iDG3J5WvsjzBsq6iMsPQ=
+github.com/amianetworks/am.modules/v26 v26.11.1/go.mod h1:e2tAIVK6eDcH7yTsFVJiWfngEREjLu1sJSicQoFjWNc=
 github.com/amianetworks/asn-service-api/v26 v26.10.1 h1:Ex0543xzHQD+Hz0uEd7dvSD6cv3NHJfBPogIvGZaRt4=
 github.com/amianetworks/asn-service-api/v26 v26.10.1/go.mod h1:hod+nm1qbK/w6s7DP7Bp2RfbhL+mcaczKpAryRrLD00=
 github.com/amianetworks/asn-service-api/v26 v26.10.2 h1:GncbqGHWprIAa0B5fNbUo9Peb/4Qddie61hgxXptOY4=
 github.com/amianetworks/asn-service-api/v26 v26.10.2/go.mod h1:hod+nm1qbK/w6s7DP7Bp2RfbhL+mcaczKpAryRrLD00=
 github.com/amianetworks/asn-service-api/v26 v26.11.0/go.mod h1:hod+nm1qbK/w6s7DP7Bp2RfbhL+mcaczKpAryRrLD00=
 github.com/amianetworks/asn-service-api/v26 v26.12.0/go.mod h1:hod+nm1qbK/w6s7DP7Bp2RfbhL+mcaczKpAryRrLD00=
+github.com/amianetworks/asn-service-api/v26 v26.13.0/go.mod h1:hod+nm1qbK/w6s7DP7Bp2RfbhL+mcaczKpAryRrLD00=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0/go.mod h1:lvDnEdqiQrp0O42VQGgmlKpxL1AP2+08jFMw88y4klk=
 github.com/bmatcuk/doublestar v1.1.1/go.mod h1:UD6OnuiIn0yFxxA2le/rnRU1G4RaI4UvFv1sNto9p6w=
 github.com/bytedance/gopkg v0.1.4/go.mod h1:v1zWfPm21Fb+OsyXN2VAHdL6TBb2L88anLQgdyje6R4=
