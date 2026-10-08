@@ -12,6 +12,7 @@ github.com/amianetworks/am.modules/v26 v26.10.0/go.mod h1:QkwnzYO0AkKkAxpcojcCBu
 github.com/amianetworks/am.modules/v26 v26.11.0/go.mod h1:QkwnzYO0AkKkAxpcojcCBu6iDG3J5WvsjzBsq6iMsPQ=
 github.com/amianetworks/am.modules/v26 v26.11.1 h1:vfm+Q1rVvZCVkxidd7KiAPAwAPFG/IfCj9XJ5PIiHQg=
 github.com/amianetworks/am.modules/v26 v26.11.1/go.mod h1:e2tAIVK6eDcH7yTsFVJiWfngEREjLu1sJSicQoFjWNc=
+github.com/amianetworks/am.modules/v26 v26.11.3/go.mod h1:e2tAIVK6eDcH7yTsFVJiWfngEREjLu1sJSicQoFjWNc=
 github.com/amianetworks/asn-service-api/v26 v26.10.1 h1:Ex0543xzHQD+Hz0uEd7dvSD6cv3NHJfBPogIvGZaRt4=
 github.com/amianetworks/asn-service-api/v26 v26.10.1/go.mod h1:hod+nm1qbK/w6s7DP7Bp2RfbhL+mcaczKpAryRrLD00=
 github.com/amianetworks/asn-service-api/v26 v26.10.2 h1:GncbqGHWprIAa0B5fNbUo9Peb/4Qddie61hgxXptOY4=
