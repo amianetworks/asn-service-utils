@@ -59,7 +59,7 @@ For every ASN Framework release:
    `X.Y` and that the PRO and DEV Go versions are equal.
 5. Commit and publish the `service-utils` branch that consuming services will
    use. It is always `release/X.Y.0` for asn-service-api `X.Y.0`, for example
-   `release/26.14.0`.
+   `release/26.15.0`.
 6. Communicate the compatible tuple:
 
 ```text
