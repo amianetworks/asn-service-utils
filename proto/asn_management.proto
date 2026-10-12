@@ -504,24 +504,25 @@ service Management {
       body: "*"
     };
   }
-  rpc CreateNode                   (Node.Create)                        returns (Enrollment.NodeIdentity) {
+  rpc CreateNode                   (Node.Create)                        returns (Node.Id) {
     option (google.api.http) = {
       post: "/node"
       body: "*"
     };
-  } // Create a node and return its identity (node_id, enrollment_state). Topo and
-    // enrollment share this one call; service_names is the install set.
+  } // Create a node (topology only); service_names is its initial service set.
+    // No script: installing is GetNodeInstallScript.
   rpc UpdateNode                   (Node.Update)                        returns (Empty) {
     option (google.api.http) = {
       put: "/node"
       body: "*"
     };
   }
-  rpc DeleteNode                   (Node.Id)                            returns (Empty) {
+  rpc DeleteNode                   (Node.Id)                            returns (Node.Script) {
     option (google.api.http) = {
       delete: "/node"
     };
-  }
+  } // Delete the node and its credential. Returns an uninstall token for the host
+    // cleanup (all services, asnsn, credential) when it was installed; optional.
   rpc AddNodeConfigOps             (Node.SetConfigOp)                   returns (Ops.Responses) {
     option (google.api.http) = {
       post: "/node/config_op"
@@ -557,48 +558,41 @@ service Management {
     };
   }
 
-  // Node Enrollment API (ASN entry point).
-  // Node creation is the unified CreateNode RPC above (returns NodeIdentity);
-  // these operate on an existing node_id.
-  rpc MintEnrollmentToken          (Enrollment.MintTokenReq)            returns (Enrollment.Token) {
+  // Node Lifecycle API. Every call returning Node.Script hands out a token for
+  // the public GET /enrollment/script?token= endpoint (curl ... | sudo bash);
+  // an empty token means there is nothing to run on the host.
+  // See workflow/design/NodeEnrollment.md.
+  rpc GetNodeInstallScript         (Node.Id)                            returns (Node.Script) {
     option (google.api.http) = {
-      post: "/enrollment/token"
+      post: "/node/install"
       body: "*"
     };
-  } // Mint an enrollment token (reusable until it expires) for an existing node.
-  rpc FetchBootstrapScript         (Enrollment.ScriptReq)               returns (Enrollment.Script) {
+  } // Install token: installs or upgrades asnsn and every service of the node to
+    // this controller's versions. Reentrant; the first host to register binds.
+  rpc UninstallNode                (Node.Id)                            returns (Node.Script) {
     option (google.api.http) = {
-      post: "/enrollment/script"
+      post: "/node/uninstall"
       body: "*"
     };
-  } // Validate token, sign a candidate cert, render full install/upgrade script.
-  rpc UnbindNode                   (Enrollment.UnbindReq)               returns (Enrollment.NodeIdentity) {
+  } // Revoke the node's credential and keep the node (topology, services) for a
+    // later install. Returns the uninstall token for the host; optional.
+  rpc AddNodeService               (Node.ServiceReq)                    returns (Node.Script) {
     option (google.api.http) = {
-      post: "/enrollment/unbind"
+      post: "/node/service/add"
       body: "*"
     };
-  } // Revoke cert + cancel token; reopen the node for enrollment.
-  rpc GetEnrollmentStatus          (Enrollment.StatusReq)               returns (Enrollment.Status) {
+  } // Add a service to the node. Returns the node's install token when the node
+    // is installed, so the host can install the new service deb.
+  rpc RemoveNodeService            (Node.ServiceReq)                    returns (Node.Script) {
     option (google.api.http) = {
-      get: "/enrollment/status"
-    };
-  } // Read enrollment + runtime state for a node or token.
-  rpc ListEnrollmentTokens         (Enrollment.ListReq)                 returns (Enrollment.TokenList) {
-    option (google.api.http) = {
-      get: "/enrollment/tokens"
-    };
-  } // List enrollment tokens by network / node.
-  rpc RevokeEnrollmentToken        (Enrollment.TokenId)                 returns (Empty) {
-    option (google.api.http) = {
-      delete: "/enrollment/token"
-    };
-  } // Revoke a single outstanding token by id (and its candidate certs).
-  rpc FetchUninstallScript         (Enrollment.UninstallReq)            returns (Enrollment.UninstallScript) {
-    option (google.api.http) = {
-      post: "/enrollment/uninstall-script"
+      post: "/node/service/remove"
       body: "*"
     };
-  } // Remove a service from the node record and render its host uninstall script.
+  } // Remove a service from the node. Returns an uninstall token that purges its
+    // deb on the host when the node is installed; optional.
+  rpc FetchNodeScript              (Node.ScriptReq)                     returns (Node.ScriptContent);
+    // Token-authenticated (no admin session): render the script a Node.Script
+    // token stands for. Served by the hand-written GET /enrollment/script.
 
   // Node Group API
   rpc GetNodeGroupsByIds          (NodeGroup.Ids)             returns (NodeGroup.List) {
@@ -786,96 +780,6 @@ service Management {
  * Common
  */
 message Empty {}
-
-/*
- * Node Enrollment (ASN entry point)
- *
- * Node creation is the unified Management CreateNode (Node.Create -> NodeIdentity);
- * these messages drive the rest of the flow on an existing node_id. Install specs
- * come from asn.conf; the rendered script always installs asnsn + the node's
- * service debs. enrollment_state / node_state reuse the Node enums.
- * See workflow/design/NodeEnrollment.md.
- */
-message Enrollment {
-  // NodeIdentity is returned by CreateNode and UnbindNode.
-  message NodeIdentity {
-    string node_id = 1;
-    repeated string service_names = 2;
-    Node.EnrollmentState enrollment_state = 3;
-  }
-
-  // MintEnrollmentToken: script-fetch token for an EXISTING node, reusable until
-  // it expires; supersedes the node's prior token. Its candidate certificates can
-  // bind only while the node has no bound certificate, so to re-key a bound node
-  // call UnbindNode first.
-  message MintTokenReq {
-    string node_id = 1; // existing node; required
-    int64 ttl_seconds = 2; // 0 = default; capped by servicenode.enrollment.token_ttl
-    string label = 3;
-  }
-
-  // UnbindNode: revoke the node's bound certificate, drop its candidate
-  // certificates, and cancel any outstanding token, returning it to
-  // ENROLLMENT_UNBOUND. Does NOT delete the node (identity / eligibility /
-  // config preserved).
-  message UnbindReq {
-    string node_id = 1; // required
-    string reason = 2; // audit reason (e.g. "machine swap")
-  }
-
-  message Token {
-    string token = 1; // script-fetch credential, reusable until expires_at
-    string token_id = 2;
-    string node_id = 3; // the bound node
-    int64 expires_at = 4;
-  }
-
-  // FetchBootstrapScript: token is the credential (not consumed). Signs a fresh
-  // candidate certificate for the token's EXISTING node and renders the FULL
-  // install/upgrade for the node's service_names (no service named); the first
-  // candidate to register binds. Shares one server-side path with the service-API
-  // render.
-  message ScriptReq {
-    string token = 1;
-  }
-
-  message Script {
-    bytes content = 1; // rendered bootstrap script (ASN core)
-    string content_type = 2; // e.g. "text/x-shellscript"
-    string node_id = 3; // the existing node this script enrolls / re-keys
-    int64 cert_not_after = 4; // validity of the candidate cert in content
-  }
-
-  // FetchUninstallScript: remove service_name from the node's service_names and
-  // render the script that purges its deb on the host. When that leaves the node
-  // without services, the node is also unbound and the script purges asnsn and
-  // the node credential. Decided from the controller record; carries no secret.
-  message UninstallReq {
-    string node_id = 1; // required
-    string service_name = 2; // required
-    string reason = 3; // audit reason
-  }
-
-  message UninstallScript {
-    bytes content = 1;
-    string content_type = 2; // e.g. "text/x-shellscript"
-    string node_id = 3;
-    bool last_service = 4; // node unbound; script also removes asnsn
-  }
-
-  message StatusReq { string node_id = 1; string token_id = 2; }
-  message Status {
-    string node_id = 1;
-    string token_id = 2;
-    Node.EnrollmentState enrollment_state = 3;
-    int64 last_event_at = 4;
-    Node.NodeState node_state = 5; // runtime connectivity
-  }
-
-  message ListReq   { string network_id = 1; string node_id = 2; }
-  message TokenList { repeated Token tokens = 1; }
-  message TokenId   { string token_id = 1; }
-}
 
 message Location {
   double latitude = 1;
@@ -1556,10 +1460,14 @@ message Node {
   NodeInfo topo_info = 8;
   ServiceNode service_node = 10;
 
-  // Enrollment credential-lifecycle axis, orthogonal to the runtime NodeState
-  // carried on service_node. Projection of credential facts; see
-  // workflow/design/NodeEnrollment.md.
-  EnrollmentState enrollment_state = 9;
+  reserved 9;
+
+  // Install axis, orthogonal to the runtime NodeState carried on service_node.
+  // Derived from the node credential; see workflow/design/NodeEnrollment.md.
+  InstallState install_state = 11;
+  // need_update: installed, and asnsn or a service on the host is older than
+  // this controller's version (or not reported). Upgrade = run the install script.
+  bool need_update = 12;
 
   message GetReq {
     repeated string node_ids = 1;
@@ -1628,9 +1536,8 @@ message Node {
     bool managed = 5;
     Location location = 6;
     NodeInfo info = 7;
-    // service eligibility = enrollment install set. Topo callers may leave empty;
-    // enrollment callers list the services to install. type/info may be empty for
-    // enrollment nodes (hardware is learned at registration).
+    // Initial service set; the install script installs these. type/info may be
+    // empty (hardware is learned at registration).
     repeated string service_names = 8;
   }
 
@@ -1642,13 +1549,8 @@ message Node {
     bool managed = 6;
     Location location = 7;
     NodeInfo info = 8;
-    // service eligibility = install set, replace semantics. Only applied when
-    // update_services is true: proto3 cannot distinguish an omitted repeated
-    // field from an empty one, so callers that edit only topo fields leave both
-    // unset and the node's services are left untouched. An empty service_names
-    // with update_services true clears the install set; the node itself is kept.
-    repeated string service_names = 9;
-    bool update_services = 10;
+    // Services are changed only through AddNodeService / RemoveNodeService.
+    reserved 9, 10;
   }
 
   message SetConfig {
@@ -1741,13 +1643,41 @@ message Node {
     STATE_MALFUNCTIONING = 5;
   }
 
-  // Credential-lifecycle axis (orthogonal to NodeState above). Mirrors
-  // commonapi.EnrollmentState. See workflow/design/NodeEnrollment.md.
-  enum EnrollmentState {
-    ENROLLMENT_UNBOUND = 0;       // no token, candidate, or bound cert: open for (re-)enrollment; also the post-unbind state
-    ENROLLMENT_TOKEN_ISSUED = 1;  // a token is outstanding; no live candidate and no bound certificate
-    ENROLLMENT_CERT_ISSUED = 2;   // candidate certificate(s) signed at script fetch; none has registered yet
-    ENROLLMENT_BOUND = 3;         // registered: its certificate is the node's one bound certificate
+  // Install axis (orthogonal to NodeState above). See
+  // workflow/design/NodeEnrollment.md.
+  enum InstallState {
+    INSTALL_NOT_INSTALLED = 0; // no bound certificate and no live candidate
+    INSTALL_PENDING = 1;       // install script fetched; no host has registered yet
+    INSTALL_INSTALLED = 2;     // a host registered and holds the node's one bound certificate
+  }
+
+  // Script is a token for GET /enrollment/script?token=. Empty token: nothing
+  // to run on the host.
+  message Script {
+    enum Kind {
+      KIND_NONE = 0;
+      KIND_INSTALL = 1;   // install / upgrade asnsn and the node's services
+      KIND_UNINSTALL = 2; // remove service debs (and asnsn + credential for a node uninstall)
+    }
+    string node_id = 1;
+    Kind kind = 2;
+    string token = 3;      // reusable until expires_at
+    int64 expires_at = 4;  // unix seconds
+  }
+
+  message ServiceReq {
+    string node_id = 1;
+    string service_name = 2;
+  }
+
+  message ScriptReq {
+    string token = 1;
+  }
+
+  message ScriptContent {
+    bytes content = 1;
+    string content_type = 2; // e.g. "text/x-shellscript"
+    string node_id = 3;
   }
 
   message ServiceNode {
@@ -1755,6 +1685,7 @@ message Node {
     string message = 2;
     NodeInfo register_info = 3;
     repeated Service services = 4;
+    string version = 5; // asnsn version the node last registered with
 
     message Service {
       string name = 1;
@@ -1765,6 +1696,7 @@ message Node {
       string node_group_id = 6;
       repeated Node.Service.ConfigOp config_ops= 7;
       string meta = 8;
+      string version = 9; // version the node reported; empty when not reported
     }
   }
 
