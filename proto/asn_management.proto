@@ -1156,8 +1156,8 @@ service Management {
   // `accountIds` must all be UUIDs, otherwise `shared.request.param_invalid`
   // (meta `field=account_ids`). For the `asn-admin` group two guards apply, both
   // failing with `shared.auth.permission_denied`: the caller cannot remove
-  // themselves, and the request is rejected when the number of `accountIds` equals
-  // the current member count (so `asn-admin` keeps at least one member). Other IAM
+  // themselves, and the request is rejected when it would leave the group with no
+  // member (non-members and duplicates in `accountIds` are not counted). Other IAM
   // errors are returned unchanged.
   rpc RemoveUsersFromGroup      (UserGroup.UserReq)   returns (Empty) {
     option (google.api.http) = {
@@ -1213,7 +1213,8 @@ service Management {
   // root's `network-tiers`, and every link whose first endpoint is a node of this network.
   //
   // Errors:
-  // - `shared.request.param_invalid`: `networkId` is not a root network (this includes unknown IDs).
+  // - `asn.network.not_found`: `networkId` does not exist.
+  // - `shared.request.param_invalid`: `networkId` is not a root network.
   // - `shared.system.internal`: YAML encoding failed.
   rpc ExportTopoFile            (Network.Id)      returns (NetworkTopo);
 
@@ -1273,8 +1274,8 @@ service Management {
   //
   // Auth: requires X-Auth-Token. A caller with any system-wide access (scope `asn`) gets every root
   // network. Otherwise the result is built from the networks named in the caller's network-scoped
-  // accesses (of any operation); a granted network whose direct parent is also granted is not
-  // returned separately. Order is not guaranteed. The list is empty when the caller has no accesses.
+  // accesses (of any operation); a granted network that has a granted ancestor is not
+  // returned separately (it is already inside that ancestor's tree). Order is not guaranteed. The list is empty when the caller has no accesses.
   rpc GetNetworkTopo            (Empty)           returns (Network.TopoLists) {
     option (google.api.http) = {
       get: "/network/topo"
@@ -1394,10 +1395,12 @@ service Management {
   //
   // Returns the full `Node` record (topology, install state, runtime state and
   // per-service state/config) for each requested ID, sorted by node name.
-  // IDs that do not exist are silently skipped.
+  // IDs that do not exist, and nodes the caller may not view, are silently
+  // skipped.
   //
   // Auth: `view` or `manage` access to at least one requested node (an ASN-wide
-  // grant, or a grant on the node's network or an ancestor network).
+  // grant, or a grant on the node's network or an ancestor network). Only the
+  // nodes the caller may view are returned.
   //
   // Request (query parameters):
   // - `nodeIds` (required, repeated): `?nodeIds=a&nodeIds=b`.
@@ -1627,6 +1630,8 @@ service Management {
   // - `asn.node.not_found`: the node does not exist.
   // - `shared.service.not_found`: the service is unknown to this controller or
   //   not on the node.
+  // - `shared.resource.not_found` (`errMeta.field` = `op_id`, `errMeta.id`):
+  //   the node has no op with this `opId` for the service.
   rpc UpdateNodeConfigOp           (Node.SetConfigOp)                   returns (Ops.Responses) {
     option (google.api.http) = {
       put: "/node/config_op"
@@ -1930,7 +1935,7 @@ service Management {
   // does not wait. The response does not carry the new group's ID; find it
   // with ListNodeGroups.
   //
-  // Auth: `view` or `manage` access to `networkId`.
+  // Auth: `manage` access to `networkId`.
   //
   // Request: `name` (required), `networkId` (required), `service` (required, a
   // service known to this controller), `remark`, `nodes` (member node IDs),
@@ -1959,7 +1964,7 @@ service Management {
   // (full replacement; the service cannot be changed). The effective config is
   // then pushed in the background to every node that was or now is a member.
   //
-  // Auth: `view` or `manage` access to the node group's network.
+  // Auth: `manage` access to the node group's network.
   //
   // Request: `nodeGroupId` (required), `name` (required), `remark`, `nodes`,
   // `config` (YAML text; may be empty).
@@ -2008,7 +2013,7 @@ service Management {
   // Response: one `Ops.Response` per member node. `frameworkErr` is
   // `shared.service.unreachable` for a member that is not connected and
   // `shared.service.timeout` for one that did not answer in time. A group
-  // without members returns an empty list after the timeout.
+  // without members returns an empty list immediately.
   //
   // Errors:
   // - `shared.group.not_found`: the node group does not exist.
@@ -2035,6 +2040,8 @@ service Management {
   // Errors:
   // - `shared.group.not_found`: the node group does not exist.
   // - `shared.request.required_field_missing` (`errMeta.field` = `op_params`).
+  // - `shared.resource.not_found` (`errMeta.field` = `op_id`, `errMeta.id`):
+  //   the group has no op with this `opId`.
   rpc UpdateNodeGroupConfigOp     (NodeGroup.SetConfigOp)     returns (Ops.Responses) {
     option (google.api.http) = {
       put: "/node/group/config_op"
@@ -2119,8 +2126,8 @@ service Management {
   // The two end nodes cannot change: `fromNodeId`/`toNodeId` must be the
   // link's existing node pair, in either order; the order given is stored.
   //
-  // Auth: requires `manage` access to the link. Currently only callers with
-  // system-wide `manage` access pass this check.
+  // Auth: requires `manage` access to the network (or an ancestor) of either
+  // end node, or system-wide `manage` access.
   //
   // Request: `linkId`, `fromNodeId` and `toNodeId` are required. Interfaces,
   // when set, must exist on their node.
@@ -2141,8 +2148,8 @@ service Management {
   // when one of their nodes is deleted or when the interface they use is
   // deleted from a node.
   //
-  // Auth: requires `manage` access to the link. Currently only callers with
-  // system-wide `manage` access pass this check.
+  // Auth: requires `manage` access to the network (or an ancestor) of either
+  // end node, or system-wide `manage` access.
   //
   // Request: `DELETE /link?linkId=<id>`; `linkId` is required.
   //
@@ -2311,8 +2318,9 @@ service Management {
   }
   // Stop a service on every member node of a node group.
   //
-  // Asynchronous, like `StopServiceOnNetwork`. Targets all member nodes of the
-  // group, whatever the group's own `serviceName` is.
+  // Asynchronous, like `StopServiceOnNetwork`. Only applies when the group's
+  // service equals the requested `serviceName`; otherwise no node is targeted
+  // and the call still succeeds.
   //
   // Auth: requires `manage` access to the group's network.
   //
@@ -2371,8 +2379,9 @@ service Management {
   }
   // Reset a service on every member node of a node group.
   //
-  // Asynchronous, like `ResetServiceOnNetwork`. Targets all member nodes of
-  // the group, whatever the group's own `serviceName` is.
+  // Asynchronous, like `ResetServiceOnNetwork`. Only applies when the group's
+  // service equals the requested `serviceName`; otherwise no node is targeted
+  // and the call still succeeds.
   //
   // Auth: requires `manage` access to the group's network.
   //
@@ -2416,7 +2425,7 @@ service Management {
   // service's configured timeout; nodes that did not reply by then get a
   // response with `frameworkErr` starting with `shared.service.timeout`, and
   // nodes that could not be reached get `shared.service.unreachable`. When
-  // the scope has no nodes, the call returns an empty list after the timeout.
+  // the scope has no nodes, the call returns an empty list immediately.
   //
   // Auth: requires `manage` access to the network.
   //
@@ -2874,7 +2883,8 @@ message Auth {
   message TotpQrCode {
     // Base64-encoded PNG image of the QR code (no `data:` prefix); it encodes an `otpauth://totp/` URI with the issuer, username, and secret.
     string qr_png = 1;
-    // Not populated by the Controller; always empty.
+    // The `otpauth://totp/<issuer>:<username>?issuer=...&secret=...` URI encoded in
+    // `qrPng`; usable as a tap-to-add link on mobile.
     string auth_uri = 2;
     // TOTP secret for manual entry into an authenticator app.
     string secret = 3;
