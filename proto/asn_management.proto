@@ -1887,6 +1887,36 @@ service Management {
   // - `shared.resource.limit_reached`: the node already has the maximum number
   //   of unregistered candidate certificates.
   rpc FetchNodeScript              (Node.ScriptReq)                     returns (Node.ScriptContent);
+  // Run a node task on nodes.
+  //
+  // Sends the controller's task `task` to each node and returns once it is
+  // sent; it does not wait for the outcome. The node runs the task's script as
+  // a systemd unit outside asnsn and reports the result, which appears as
+  // `serviceNode.lastTask` of the node. One task runs per node at a time.
+  // Tasks: `probe` (reports the host environment and changes nothing; runs on
+  // a node in Maintenance too).
+  //
+  // Auth: `manage` access to every node.
+  //
+  // Request: `nodeIds` (required, at least one), `task` (required).
+  //
+  // Response: one result per node, with the sent `taskId`, or `error` naming
+  // why the task was not sent:
+  // - `asn.node.not_found`: the node does not exist.
+  // - `asn.node.task_unsupported`: the node did not register the task
+  //   capability (built before node tasks, or not running under systemd), or
+  //   the task does not run in the node's Maintenance kind.
+  // - `asn.node.connect_failed`: the node is not connected.
+  // - `asn.node.task_in_progress`: another task is in flight on the node.
+  // - `shared.resource.limit_reached`: the controller's limit of nodes with a
+  //   task in flight (`servicenode.task.max_concurrent`) is reached.
+  // - `shared.request.param_invalid`: unknown task.
+  rpc RunNodeTask                  (Node.TaskRun)                       returns (Node.TaskRunResult) {
+    option (google.api.http) = {
+      post: "/node/task/run"
+      body: "*"
+    };
+  }
 
   // Node Group API
 
@@ -4205,6 +4235,61 @@ message Node {
     string service_name = 2;
   }
 
+  // Request of RunNodeTask.
+  message TaskRun {
+    // Node IDs (required, at least one).
+    repeated string node_ids = 1;
+    // Task name (required), for example `probe`.
+    string task = 2;
+  }
+
+  // Response of RunNodeTask: one result per requested node, in request order.
+  message TaskRunResult {
+    repeated Item results = 1;
+
+    message Item {
+      // Node ID.
+      string node_id = 1;
+      // ID of the task sent; empty when `error` is set.
+      string task_id = 2;
+      // Why the task was not sent (the structured error message); empty when
+      // it was sent.
+      string error = 3;
+    }
+  }
+
+  // A node task's identity while it is in flight.
+  message TaskRef {
+    string task_id = 1;
+    // Task name.
+    string name = 2;
+    // When the controller sent it (Unix seconds).
+    int64 sent_at = 3;
+    // When the controller stops waiting for its report (Unix seconds).
+    int64 deadline = 4;
+  }
+
+  // A node task's last known result.
+  message TaskResult {
+    string task_id = 1;
+    // Task name.
+    string name = 2;
+    // `OK`, `FAILED`, `REFUSED`, `TIMEOUT`, or `INTERRUPTED` as the node
+    // reported it; empty when `outcome` is `no_report`.
+    string status = 3;
+    // `reported`, or `no_report` when the task's timeout passed without a
+    // report.
+    string outcome = 4;
+    // The task script's exit status.
+    int32 exit_status = 5;
+    // One-line summary the task wrote, or the refusal reason.
+    string message = 6;
+    // When the controller sent the task (Unix seconds; 0 when unknown).
+    int64 sent_at = 7;
+    // When the result was recorded (Unix seconds).
+    int64 at = 8;
+  }
+
   // Request of FetchNodeScript.
   message ScriptReq {
     // A token from `Node.Script.token` (required).
@@ -4239,6 +4324,20 @@ message Node {
     // `asnsn` version the node last registered with (for example `v26.17.3`);
     // empty when the node never registered.
     string version = 5;
+    // Capabilities the node listed at its last registration, for example
+    // `maintenance` and `task`; empty for a node that never registered or was
+    // built before capabilities.
+    repeated string capabilities = 6;
+    // Why a node in `STATE_MAINTENANCE` was admitted into Maintenance:
+    // `below_window` (older than `servicenode.minimum_version`) or
+    // `above_window` (not older than `servicenode.maximum_version`). Empty for
+    // every other node, including one in `STATE_MAINTENANCE` because its
+    // registration is in progress or was refused.
+    string maintenance_kind = 7;
+    // The node task in flight on the node; null when none.
+    Node.TaskRef in_flight_task = 8;
+    // The node's last node task result; null when it never ran one.
+    Node.TaskResult last_task = 9;
 
     // One service on the node.
     message Service {
