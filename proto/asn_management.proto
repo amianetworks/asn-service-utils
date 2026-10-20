@@ -3545,6 +3545,11 @@ message UserGroup {
   // set; a `TYPE_NETWORK` group has one entry with `networks` set. Empty for
   // `TYPE_UNKNOWN` groups.
   repeated Access accesses = 7;
+  // For a `TYPE_NETWORK` group a service keeps for a root network
+  // (EnsureNetworkAdminGroup), that service; empty otherwise. Read-only. The
+  // group can still be edited; the service restores its access when it
+  // reconciles.
+  string creator_service = 8;
 
   // Identifies one user group.
   //
@@ -3700,6 +3705,9 @@ message Network {
   repeated Network subnets = 7;
   // Nodes placed directly in this network (not those of subnetworks).
   repeated Node.Info nodes = 8;
+  // True for the root network the controller created at its first start
+  // (`network.default_root_network`). Read-only.
+  bool default_root = 9;
 
   // Name-only network tree, returned by `ListAvailableNetworks`.
   message List {
