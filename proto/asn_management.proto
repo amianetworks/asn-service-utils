@@ -1813,11 +1813,25 @@ service Management {
   // load it at once; a node that is not connected loads it when it next
   // registers. Adding a service the node already has changes nothing.
   //
-  // If the node holds a credential (`INSTALL_PENDING` or `INSTALL_INSTALLED`),
-  // the response carries a new install token (`KIND_INSTALL`): running the
-  // install script again installs the new service package on the host and
-  // skips what is already installed. Otherwise `token` is empty and the next
-  // install script will include the service.
+  // A node whose `serviceNode.capabilities` include `task` changes the host
+  // remotely: the service is recorded without telling the node, and an
+  // `install` node task installs its package and restarts `asnsn`, which loads
+  // it. **`asnsn` and every service on the node restart.** The response
+  // carries `taskId` when the task was sent at once, or `taskPending` with
+  // `pendingReason` (`offline`, `maintenance`, `busy`) when it is queued; the
+  // queued task is sent when the node can take it, and its result appears as
+  // `serviceNode.lastTask`. A node in Maintenance keeps the install queued
+  // until it is admitted normally. When the node already reports the service
+  // at the version this controller serves, nothing is installed and none of
+  // `taskId`, `taskPending`, `token` is set. Adding a service again whose
+  // package is missing or older queues a new install.
+  //
+  // Any other node: if it holds a credential (`INSTALL_PENDING` or
+  // `INSTALL_INSTALLED`), the response carries a new install token
+  // (`KIND_INSTALL`): running the install script again installs the new
+  // service package on the host and skips what is already installed.
+  // Otherwise `token` is empty and the next install script will include the
+  // service.
   //
   // Auth: `manage` access to the node.
   //
@@ -1843,10 +1857,20 @@ service Management {
   // registers. The node keeps `asnsn` and its credential even when this was
   // its last service.
   //
-  // If the node holds a credential, the response carries an uninstall token
-  // (`KIND_UNINSTALL`) whose script purges that service's package from the
-  // host and restarts `asnsn`. Running it is optional. Otherwise `token` is
-  // empty.
+  // A node whose `serviceNode.capabilities` include `task` changes the host
+  // remotely: an `uninstall` node task purges the service's package and
+  // restarts `asnsn`. **`asnsn` and every service on the node restart; on a
+  // node in Maintenance, or in Maintenance when the task runs, the other
+  // services stay stopped until the node leaves Maintenance.** The response
+  // carries `taskId` or `taskPending` with `pendingReason`, as for
+  // AddNodeService; the task runs in Maintenance too. A service no longer on
+  // the node is accepted when the controller knows its package, so a failed
+  // purge can be repeated.
+  //
+  // Any other node: if it holds a credential, the response carries an
+  // uninstall token (`KIND_UNINSTALL`) whose script purges that service's
+  // package from the host and restarts `asnsn`. Running it is optional.
+  // Otherwise `token` is empty.
   //
   // Auth: `manage` access to the node.
   //
@@ -1857,7 +1881,8 @@ service Management {
   //   `service_name`).
   // - `asn.node.not_found`: the node does not exist.
   // - `shared.auth.permission_denied` (reason "service is not eligible for this
-  //   node"): the service is not on the node.
+  //   node"): the service is not on the node (a node without the `task`
+  //   capability).
   // - `shared.request.param_invalid`: the service has no install package
   //   configured on the controller; nothing is removed.
   rpc RemoveNodeService            (Node.ServiceReq)                    returns (Node.Script) {
@@ -1893,8 +1918,10 @@ service Management {
   // sent; it does not wait for the outcome. The node runs the task's script as
   // a systemd unit outside asnsn and reports the result, which appears as
   // `serviceNode.lastTask` of the node. One task runs per node at a time.
-  // Tasks: `probe` (reports the host environment and changes nothing; runs on
-  // a node in Maintenance too).
+  // Tasks:
+  // - `probe`: reports the host environment and changes nothing; runs on a
+  //   node in Maintenance too.
+  // - `upgrade`: see UpgradeNodes.
   //
   // Auth: `manage` access to every node.
   //
@@ -1908,12 +1935,40 @@ service Management {
   //   the task does not run in the node's Maintenance kind.
   // - `asn.node.connect_failed`: the node is not connected.
   // - `asn.node.task_in_progress`: another task is in flight on the node.
+  // - `asn.node.up_to_date`: nothing to change (`upgrade`).
   // - `shared.resource.limit_reached`: the controller's limit of nodes with a
   //   task in flight (`servicenode.task.max_concurrent`) is reached.
   // - `shared.request.param_invalid`: unknown task.
   rpc RunNodeTask                  (Node.TaskRun)                       returns (Node.TaskRunResult) {
     option (google.api.http) = {
       post: "/node/task/run"
+      body: "*"
+    };
+  }
+  // Upgrade nodes to this controller's versions.
+  //
+  // The same as RunNodeTask with `task` = `upgrade`. On each node the task
+  // upgrades `asnsn` and every service recorded on the node that the node
+  // reports to the versions this controller serves, from the configured APT
+  // sources, in one apt transaction that never removes a package. The node
+  // restarts `asnsn`, and so every service on it, and registers again on the
+  // new versions; on success it leaves Maintenance. A recorded service the
+  // node does not report is skipped. The task's result
+  // appears as `serviceNode.lastTask`; a failure before `asnsn` is stopped
+  // restores the APT sources and leaves the node as it was.
+  //
+  // Runs on a node in the normal state or below the controller's version
+  // window; a node above the window is refused with
+  // `asn.node.task_unsupported`.
+  //
+  // Auth: `manage` access to every node.
+  //
+  // Request: `nodeIds` (required, at least one).
+  //
+  // Response: as RunNodeTask.
+  rpc UpgradeNodes                 (Node.UpgradeReq)                    returns (Node.TaskRunResult) {
+    option (google.api.http) = {
+      post: "/node/upgrade"
       body: "*"
     };
   }
@@ -3818,9 +3873,10 @@ message Node {
   // `asnsn` version the node registered with is below this controller's
   // version (or unparsable), or one of its services reported a version below
   // the one loaded on the controller (a service that reported no version
-  // counts as older). To upgrade, run the install script again: call
-  // GetNodeInstallScript (`POST /node/install`); there is no per-service
-  // upgrade.
+  // counts as older). To upgrade: UpgradeNodes (`POST /node/upgrade`) for a
+  // node whose `serviceNode.capabilities` include `task`, otherwise run the
+  // install script again (GetNodeInstallScript, `POST /node/install`); there
+  // is no per-service upgrade.
   bool need_update = 12;
 
   // Request of GetNodesByIds (`GET /node`).
@@ -4225,6 +4281,16 @@ message Node {
     string token = 3;
     // Token expiry as unix seconds; 0 when `token` is empty.
     int64 expires_at = 4;
+    // ID of the node task that changes the host, when it was sent at once
+    // (a node with the `task` capability); `token` is then empty.
+    string task_id = 5;
+    // True when the node task is queued instead; see `pendingReason`.
+    bool task_pending = 6;
+    // Why the task is queued: `offline` (the node is not connected),
+    // `maintenance` (the node is in Maintenance; an install waits until it is
+    // admitted normally), or `busy` (another task runs on the node, or the
+    // controller's task limit is reached).
+    string pending_reason = 7;
   }
 
   // Request of AddNodeService and RemoveNodeService.
@@ -4255,7 +4321,15 @@ message Node {
       // Why the task was not sent (the structured error message); empty when
       // it was sent.
       string error = 3;
+      reserved 4;
+      reserved "message";
     }
+  }
+
+  // Request of UpgradeNodes.
+  message UpgradeReq {
+    // Node IDs (required, at least one).
+    repeated string node_ids = 1;
   }
 
   // A node task's identity while it is in flight.
@@ -4282,8 +4356,10 @@ message Node {
     string outcome = 4;
     // The task script's exit status.
     int32 exit_status = 5;
-    // One-line summary the task wrote, or the refusal reason.
-    string message = 6;
+    // The task's own message is a log line (asnsn's log and the controller's
+    // audit), not part of the result.
+    reserved 6;
+    reserved "message";
     // When the controller sent the task (Unix seconds; 0 when unknown).
     int64 sent_at = 7;
     // When the result was recorded (Unix seconds).
@@ -4338,6 +4414,24 @@ message Node {
     Node.TaskRef in_flight_task = 8;
     // The node's last node task result; null when it never ran one.
     Node.TaskResult last_task = 9;
+    // Service package changes queued for node tasks, oldest first.
+    repeated PendingChange pending_changes = 10;
+
+    // A queued service package change.
+    message PendingChange {
+      // Service name.
+      string service = 1;
+      // Service package (deb) name.
+      string package = 2;
+      // `install` or `uninstall`.
+      string change = 3;
+      // Who asked, for example `operator:alice`.
+      string actor = 4;
+      // When it was asked (Unix seconds).
+      int64 requested_at = 5;
+      // The task carrying it once sent; empty while it waits.
+      string sent_task_id = 6;
+    }
 
     // One service on the node.
     message Service {
