@@ -1083,7 +1083,11 @@ service Management {
   //   (meta `field=operations`).
   // - `accesses[0].networks`: network IDs; empty fails with
   //   `shared.request.required_field_missing` (meta `field=networks`); an unknown ID
-  //   fails with `asn.network.not_found`.
+  //   fails with `asn.network.not_found`. The networks must sit under one root
+  //   network, otherwise `shared.request.param_invalid`.
+  // - A group whose networks include a root network grants `view` only; `manage`
+  //   fails with `shared.request.param_invalid` (meta `field=operations`). Manage
+  //   on a root comes only from its admin group (`root_network_id`).
   //
   // A group with the same `name` already existing fails with
   // `shared.group.name_already_exists`. On success the controller creates the group
@@ -1104,8 +1108,14 @@ service Management {
   // IAM error. Only `TYPE_NETWORK` groups can be updated; other types fail with
   // `shared.resource.state_invalid`. `accesses` follows the same rules as
   // `CreateUserGroup`, and `accesses[0].networks` / `operations` replace the
-  // previous grant entirely. `remark` is always applied, so an empty `remark`
-  // clears it. Membership is not changed.
+  // previous grant entirely. The access of a root admin group (`root_network_id`
+  // set) is fixed: anything but its root and `view` and `manage` fails with
+  // `shared.resource.state_invalid`, so only its remark changes, and the update
+  // restores that access if it was changed outside the controller: only the
+  // group's own `<name>-access` is written, and any other access is revoked from
+  // the group. A further admin group of the same root, or one whose root is
+  // gone, cannot be updated (`shared.resource.state_invalid`); delete it. `remark` is
+  // always applied, so an empty `remark` clears it. Membership is not changed.
   rpc UpdateUserGroup           (UserGroup.Update)    returns (Empty) {
     option (google.api.http) = {
       put: "/user/group"
@@ -1120,7 +1130,9 @@ service Management {
   //
   // Query parameter `userGroupName` names the group; an unknown name returns the
   // IAM error. Built-in service admin groups (`TYPE_SERVICE`, e.g. `asn-admin`)
-  // cannot be deleted (`shared.resource.state_invalid`). The controller deletes the
+  // and the admin group of an existing root (`root_network_id` set; deleted with
+  // the root) cannot be deleted (`shared.resource.state_invalid`); a further
+  // admin group of the same root, or one whose root is gone, can. The controller deletes the
   // group's IAM access `<name>-access` and then the group itself; member accounts
   // are not deleted, they only lose the access the group granted.
   rpc DeleteUserGroup           (UserGroup.Name)      returns (Empty) {
@@ -3524,8 +3536,11 @@ message User {
 // Two kinds exist (see `type`): built-in service admin groups named
 // `<service>-admin` (for `asn` and every loaded service, created automatically at
 // controller startup and granting `view` and `manage` on that whole service;
-// members of `asn-admin` are ASN admins), and network groups created with
-// `CreateUserGroup` that grant operations on chosen networks. Returned by
+// members of `asn-admin` are ASN admins), and network groups that grant
+// operations on networks under one root network. Every root network has one
+// network group of its own, its admin group, created and deleted with the root
+// and granting `view` and `manage` on the root; manage on a root comes only from
+// it. Other network groups are created with `CreateUserGroup`. Returned by
 // `GetUserGroups` (`GET /user/group`).
 message UserGroup {
   // Group name; unique.
@@ -3545,11 +3560,16 @@ message UserGroup {
   // set; a `TYPE_NETWORK` group has one entry with `networks` set. Empty for
   // `TYPE_UNKNOWN` groups.
   repeated Access accesses = 7;
-  // For a `TYPE_NETWORK` group a service keeps for a root network
-  // (EnsureNetworkAdminGroup), that service; empty otherwise. Read-only. The
-  // group can still be edited; the service restores its access when it
-  // reconciles.
+  // Legacy: for a `TYPE_NETWORK` group that ASN 26.19 kept per root network and
+  // service (EnsureNetworkAdminGroup), that service; empty otherwise. Nothing
+  // creates one any more. Read-only.
   string creator_service = 8;
+  // For the admin group of a root network, that root's ID; empty otherwise.
+  // Read-only. The group's access is fixed (an update naming it restores it) and
+  // it is deleted with its root; its members are the root's administrators, the
+  // only ones besides `asn-admin` (IAM written around ASN aside). A further admin group of the same root, or one
+  // whose root is gone, may be deleted.
+  string root_network_id = 9;
 
   // Identifies one user group.
   //
@@ -3645,8 +3665,8 @@ message UserGroup {
     // controller startup; grants `view` and `manage` on the whole service. Cannot
     // be updated or deleted.
     TYPE_SERVICE = 1;
-    // Network group created by `CreateUserGroup`; grants the configured operations
-    // on the configured networks.
+    // Network group: a root admin group (`root_network_id` set), or a group
+    // created by `CreateUserGroup`; grants its operations on its networks.
     TYPE_NETWORK = 2;
   }
 }
@@ -3705,8 +3725,8 @@ message Network {
   repeated Network subnets = 7;
   // Nodes placed directly in this network (not those of subnetworks).
   repeated Node.Info nodes = 8;
-  // True for the root network the controller created at its first start
-  // (`network.default_root_network`). Read-only.
+  // True for the root network the controller configuration names
+  // (`network.default_root_network`), however the root was created. Read-only.
   bool default_root = 9;
 
   // Name-only network tree, returned by `ListAvailableNetworks`.
