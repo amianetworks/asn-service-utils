@@ -1986,14 +1986,16 @@ service Management {
   }
   // Turn the auto-upgrade switch of nodes on or off.
   //
-  // With the switch on, whenever the node is admitted normally and `asnsn` or
-  // a service deb on it is older than this controller serves on the same
-  // line, the controller upgrades the whole node (as UpgradeNodes): `asnsn`
-  // and every service on it restart. One attempt is made per target version
-  // set; after a failure the node is held (`serviceNode.autoUpgradeHeld`)
-  // until the target changes or the switch is turned off and on again.
-  // Setting the value a node already has changes nothing. Nodes on an older
-  // line are never upgraded automatically. The switch belongs to the node:
+  // With the switch on, whenever the node is admitted normally (inside the
+  // version window `servicenode.minimum_version` to `maximum_version`,
+  // whatever its line) and `asnsn` or a service deb on it is older than this
+  // controller serves, the controller upgrades the whole node (as
+  // UpgradeNodes): `asnsn` and every service on it restart. One attempt is
+  // made per target version set; after a failure the node is held
+  // (`serviceNode.autoUpgradeHeld`) until the target changes or the switch is
+  // turned off and on again. Setting the value a node already has changes
+  // nothing. A node in Maintenance, outside the window, is never upgraded
+  // automatically. The switch belongs to the node:
   // any service on the node may change it too, and every service on the node
   // is told.
   //
