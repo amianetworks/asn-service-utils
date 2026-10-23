@@ -1984,6 +1984,77 @@ service Management {
       body: "*"
     };
   }
+  // Turn the auto-upgrade switch of nodes on or off.
+  //
+  // With the switch on, whenever the node is admitted normally and `asnsn` or
+  // a service deb on it is older than this controller serves on the same
+  // line, the controller upgrades the whole node (as UpgradeNodes): `asnsn`
+  // and every service on it restart. One attempt is made per target version
+  // set; after a failure the node is held (`serviceNode.autoUpgradeHeld`)
+  // until the target changes or the switch is turned off and on again.
+  // Setting the value a node already has changes nothing. Nodes on an older
+  // line are never upgraded automatically. The switch belongs to the node:
+  // any service on the node may change it too, and every service on the node
+  // is told.
+  //
+  // Auth: `manage` access to every node.
+  //
+  // Request: `nodeIds` (required, at least one), `enabled`.
+  //
+  // Response: one result per node, in request order, with `error` naming why
+  // the switch was not set:
+  // - `asn.node.not_found`: the node does not exist.
+  // - `asn.node.task_unsupported`: turning it on for a node that did not
+  //   register the task capability.
+  // - `shared.auth.permission_denied`: no `manage` access to the node.
+  rpc SetNodeAutoUpgrade           (Node.AutoUpgradeReq)                returns (Node.AutoUpgradeResult) {
+    option (google.api.http) = {
+      post: "/node/auto-upgrade"
+      body: "*"
+    };
+  }
+  // Upgrade every node below the version window that the caller manages.
+  //
+  // Selects each node the caller holds `manage` access to whose recorded
+  // `asnsn` version is below `servicenode.minimum_version`, connected or not,
+  // and upgrades it as UpgradeNodes, paced by the controller's task limit: a
+  // node's queued uninstall goes first, an offline node is upgraded when it
+  // registers again. The nodes move to the controller's line; `asnsn` and
+  // every service on each node restart; there is no downgrade, so a later
+  // controller rollback to the old line leaves them above its window. A
+  // failed upgrade is recorded, not sent again. Calling it again keeps the
+  // queued requests; repeat it for nodes recorded below the window later, or
+  // to retry nodes whose upgrade failed.
+  //
+  // Auth: `manage` access, per node; nodes without it are not selected.
+  //
+  // Request: empty.
+  //
+  // Response: one result per selected node: `outcome` `sent` (with `taskId`),
+  // `queued` (with `pendingReason` `busy` or `offline`), `needs_script` (the
+  // node cannot run node tasks; use its install script), or `error`.
+  rpc UpgradeMaintenanceNodes      (Node.MaintenanceUpgradeReq)         returns (Node.MaintenanceUpgradeResult) {
+    option (google.api.http) = {
+      post: "/node/upgrade/maintenance"
+      body: "*"
+    };
+  }
+  // Stop the batch upgrades not yet sent.
+  //
+  // Clears the queued UpgradeMaintenanceNodes request of every node the
+  // caller holds `manage` access to; an upgrade already sent runs to its end.
+  //
+  // Auth: `manage` access, per node.
+  //
+  // Request: empty.
+  //
+  // Response: the IDs of the nodes whose request was cleared.
+  rpc CancelMaintenanceUpgrades    (Node.MaintenanceUpgradeReq)         returns (Node.MaintenanceCancelResult) {
+    option (google.api.http) = {
+      post: "/node/upgrade/maintenance/cancel"
+      body: "*"
+    };
+  }
 
   // Node Group API
 
@@ -4360,6 +4431,55 @@ message Node {
     repeated string node_ids = 1;
   }
 
+  // Request of SetNodeAutoUpgrade.
+  message AutoUpgradeReq {
+    // Node IDs (required, at least one).
+    repeated string node_ids = 1;
+    // The switch's new value.
+    bool enabled = 2;
+  }
+
+  // Response of SetNodeAutoUpgrade: one result per requested node, in request
+  // order.
+  message AutoUpgradeResult {
+    repeated Item results = 1;
+
+    message Item {
+      // Node ID.
+      string node_id = 1;
+      // Why the switch was not set (the structured error message); empty when
+      // it was set or already had the value.
+      string error = 2;
+    }
+  }
+
+  // Request of UpgradeMaintenanceNodes and CancelMaintenanceUpgrades.
+  message MaintenanceUpgradeReq {}
+
+  // Response of UpgradeMaintenanceNodes: one result per selected node.
+  message MaintenanceUpgradeResult {
+    repeated Item results = 1;
+
+    message Item {
+      // Node ID.
+      string node_id = 1;
+      // `sent`, `queued`, `needs_script`, or `error`.
+      string outcome = 2;
+      // ID of the upgrade task when `outcome` is `sent`.
+      string task_id = 3;
+      // `busy` or `offline` when `outcome` is `queued`.
+      string pending_reason = 4;
+      // The structured error message when `outcome` is `error`.
+      string error = 5;
+    }
+  }
+
+  // Response of CancelMaintenanceUpgrades.
+  message MaintenanceCancelResult {
+    // IDs of the nodes whose queued batch upgrade was cleared.
+    repeated string node_ids = 1;
+  }
+
   // A node task's identity while it is in flight.
   message TaskRef {
     string task_id = 1;
@@ -4444,6 +4564,42 @@ message Node {
     Node.TaskResult last_task = 9;
     // Service package changes queued for node tasks, oldest first.
     repeated PendingChange pending_changes = 10;
+    // The node's auto-upgrade switch (SetNodeAutoUpgrade), who set it last
+    // (for example `operator:alice` or `service:<name>`), and when (Unix
+    // seconds; 0 when never set).
+    bool auto_upgrade = 11;
+    string auto_upgrade_set_by = 12;
+    int64 auto_upgrade_set_at = 13;
+    // True when the last automatic upgrade for the versions this controller
+    // serves now did not bring the node to them; it is not tried again until
+    // those versions change or the switch is turned off and on again.
+    bool auto_upgrade_held = 14;
+    // The last automatic upgrade sent; null when none.
+    AutoUpgradeAttempt auto_upgrade_attempt = 15;
+    // The node's batch upgrade (UpgradeMaintenanceNodes), queued or carried
+    // by a task; null when none.
+    PendingUpgrade pending_upgrade = 16;
+
+    // An automatic upgrade that was sent.
+    message AutoUpgradeAttempt {
+      // Package versions it moved the node to: `asnsn` and each service in
+      // scope.
+      map<string, string> target = 1;
+      // The upgrade task.
+      string task_id = 2;
+      // When it was sent (Unix seconds).
+      int64 at = 3;
+    }
+
+    // A queued or sent batch upgrade.
+    message PendingUpgrade {
+      // Who asked, for example `operator:alice`.
+      string actor = 1;
+      // When it was asked (Unix seconds).
+      int64 requested_at = 2;
+      // The task carrying it once sent; empty while it waits.
+      string sent_task_id = 3;
+    }
 
     // A queued service package change.
     message PendingChange {
