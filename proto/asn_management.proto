@@ -2015,48 +2015,6 @@ service Management {
       body: "*"
     };
   }
-  // Upgrade every node below the version window that the caller manages.
-  //
-  // Selects each node the caller holds `manage` access to whose recorded
-  // `asnsn` version is below `servicenode.minimum_version`, connected or not,
-  // and upgrades it as UpgradeNodes, paced by the controller's task limit: a
-  // node's queued uninstall goes first, an offline node is upgraded when it
-  // registers again. The nodes move to the controller's line; `asnsn` and
-  // every service on each node restart; there is no downgrade, so a later
-  // controller rollback to the old line leaves them above its window. A
-  // failed upgrade is recorded, not sent again. Calling it again keeps the
-  // queued requests; repeat it for nodes recorded below the window later, or
-  // to retry nodes whose upgrade failed.
-  //
-  // Auth: `manage` access, per node; nodes without it are not selected.
-  //
-  // Request: empty.
-  //
-  // Response: one result per selected node: `outcome` `sent` (with `taskId`),
-  // `queued` (with `pendingReason` `busy` or `offline`), `needs_script` (the
-  // node cannot run node tasks; use its install script), or `error`.
-  rpc UpgradeMaintenanceNodes      (Node.MaintenanceUpgradeReq)         returns (Node.MaintenanceUpgradeResult) {
-    option (google.api.http) = {
-      post: "/node/upgrade/maintenance"
-      body: "*"
-    };
-  }
-  // Stop the batch upgrades not yet sent.
-  //
-  // Clears the queued UpgradeMaintenanceNodes request of every node the
-  // caller holds `manage` access to; an upgrade already sent runs to its end.
-  //
-  // Auth: `manage` access, per node.
-  //
-  // Request: empty.
-  //
-  // Response: the IDs of the nodes whose request was cleared.
-  rpc CancelMaintenanceUpgrades    (Node.MaintenanceUpgradeReq)         returns (Node.MaintenanceCancelResult) {
-    option (google.api.http) = {
-      post: "/node/upgrade/maintenance/cancel"
-      body: "*"
-    };
-  }
 
   // Node Group API
 
@@ -4455,33 +4413,6 @@ message Node {
     }
   }
 
-  // Request of UpgradeMaintenanceNodes and CancelMaintenanceUpgrades.
-  message MaintenanceUpgradeReq {}
-
-  // Response of UpgradeMaintenanceNodes: one result per selected node.
-  message MaintenanceUpgradeResult {
-    repeated Item results = 1;
-
-    message Item {
-      // Node ID.
-      string node_id = 1;
-      // `sent`, `queued`, `needs_script`, or `error`.
-      string outcome = 2;
-      // ID of the upgrade task when `outcome` is `sent`.
-      string task_id = 3;
-      // `busy` or `offline` when `outcome` is `queued`.
-      string pending_reason = 4;
-      // The structured error message when `outcome` is `error`.
-      string error = 5;
-    }
-  }
-
-  // Response of CancelMaintenanceUpgrades.
-  message MaintenanceCancelResult {
-    // IDs of the nodes whose queued batch upgrade was cleared.
-    repeated string node_ids = 1;
-  }
-
   // A node task's identity while it is in flight.
   message TaskRef {
     string task_id = 1;
@@ -4576,11 +4507,13 @@ message Node {
     // serves now did not bring the node to them; it is not tried again until
     // those versions change or the switch is turned off and on again.
     bool auto_upgrade_held = 14;
-    // The last automatic upgrade sent; null when none.
+    // The last automatic upgrade sent, with its result once its task ended;
+    // null when none. It stays until the next automatic upgrade, whatever
+    // other tasks run meanwhile, and is cleared when the switch is turned
+    // from off to on.
     AutoUpgradeAttempt auto_upgrade_attempt = 15;
-    // The node's batch upgrade (UpgradeMaintenanceNodes), queued or carried
-    // by a task; null when none.
-    PendingUpgrade pending_upgrade = 16;
+    reserved 16;
+    reserved "pending_upgrade";
 
     // An automatic upgrade that was sent.
     message AutoUpgradeAttempt {
@@ -4591,16 +4524,11 @@ message Node {
       string task_id = 2;
       // When it was sent (Unix seconds).
       int64 at = 3;
-    }
-
-    // A queued or sent batch upgrade.
-    message PendingUpgrade {
-      // Who asked, for example `operator:alice`.
-      string actor = 1;
-      // When it was asked (Unix seconds).
-      int64 requested_at = 2;
-      // The task carrying it once sent; empty while it waits.
-      string sent_task_id = 3;
+      // `ok` when the node reported `OK`, `failed` for any other status or
+      // no report before the task's timeout; empty while the task runs.
+      string status = 4;
+      // When the task ended (Unix seconds); 0 while it runs.
+      int64 ended_at = 5;
     }
 
     // A queued service package change.
