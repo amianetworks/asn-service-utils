@@ -1232,8 +1232,8 @@ service Management {
 
   // Lists the networks the caller can access, as a name-only tree.
   //
-  // Returns a lightweight tree (`networkId`, `name`, `subnets`) without nodes, intended for
-  // network pickers. Top-level entries are sorted by name.
+  // Returns a lightweight tree (`networkId`, `name`, `defaultRoot`, `subnets`) without nodes,
+  // intended for network pickers. Top-level entries are sorted by name.
   //
   // Auth: requires X-Auth-Token. Which networks are returned depends on the caller's accesses:
   // - A caller with any system-wide access (scope `asn`) gets every root network with its full subtree.
@@ -1439,10 +1439,14 @@ service Management {
   // Auth: `view` or `manage` access to the network.
   //
   // Request (query parameters): `networkId` (required), `includeSubnetwork`
-  // (optional, default false). `service` is ignored.
+  // (optional, default false), and the optional filters `name`,
+  // `nodeGroupId`, `services`, `needUpdate` (see `Node.ListReq`); a node is
+  // returned only when it matches every filter given. `service` is ignored.
   //
-  // Errors: `asn.network.not_found` when `networkId` does not exist.
-  rpc GetNodesOfNetwork            (Node.ListReq)                       returns (Node.Infos) {
+  // Errors:
+  // - `asn.network.not_found` when `networkId` does not exist.
+  // - `shared.group.not_found` when `nodeGroupId` does not exist.
+  rpc GetNodesOfNetwork           (Node.ListReq)                       returns (Node.Infos) {
     option (google.api.http) = {
       get: "/node/network"
     };
@@ -1951,7 +1955,10 @@ service Management {
   // - `shared.resource.limit_reached`: the controller's limit of nodes with a
   //   task in flight (`servicenode.task.max_concurrent`) is reached.
   // - `shared.request.param_invalid`: unknown task.
-  rpc RunNodeTask                  (Node.TaskRun)                       returns (Node.TaskRunResult) {
+  // The list is not exhaustive: each node is authorized on its own, so an
+  // auth error (`shared.auth.*`) of the caller or of that node appears as its
+  // `error`, and so may an internal error (`shared.system.*`).
+  rpc RunNodeTask                 (Node.TaskRun)                       returns (Node.TaskRunResult) {
     option (google.api.http) = {
       post: "/node/task/run"
       body: "*"
@@ -3770,6 +3777,8 @@ message Network {
       string name = 2;
       // Child networks, recursively.
       repeated Topo subnets = 3;
+      // As `Network.defaultRoot`. Read-only.
+      bool default_root = 4;
     }
 
     // Top-level networks the caller can access, sorted by name.
@@ -3960,6 +3969,20 @@ message Node {
     // GetNodesWithoutNodeGroup only: service name; nodes that are in a node
     // group of this service are excluded. Ignored by GetNodesOfNetwork.
     string service = 3;
+    // The filters below are GetNodesOfNetwork only, and ignored by
+    // GetNodesWithoutNodeGroup.
+    //
+    // Nodes whose name contains this text, ignoring case; empty matches every
+    // node.
+    string name = 4;
+    // Nodes that are members of this node group; empty matches every node.
+    string node_group_id = 5;
+    // Nodes whose service set (`serviceNode.services`) has any of these
+    // services (repeated query parameter `?services=a&services=b`); empty
+    // matches every node.
+    repeated string services = 6;
+    // Nodes whose `needUpdate` has this value; unset matches every node.
+    optional bool need_update = 7;
   }
 
   // Response of GetNodesByIds.
@@ -4016,6 +4039,8 @@ message Node {
     // value is the metadata string the service stored for this node (may be
     // empty). Empty for a node in `STATE_UNREGISTERED`.
     map<string, string> meta = 6;
+    // As `Node.needUpdate`.
+    bool need_update = 7;
   }
 
   // Node as shown on the network display (DisplayNetworks).
@@ -4495,7 +4520,11 @@ message Node {
     Node.TaskRef in_flight_task = 8;
     // The node's last node task result; null when it never ran one.
     Node.TaskResult last_task = 9;
-    // Service package changes queued for node tasks, oldest first.
+    // Service package changes queued for node tasks, oldest first. A service
+    // has at most one entry not yet sent: a new change replaces it, and only
+    // waits behind an entry already sent. An entry leaves the list when the
+    // task carrying it ends; an `install` the node already reports at the
+    // target version leaves it without being sent (no `sentTaskId`).
     repeated PendingChange pending_changes = 10;
     // The node's auto-upgrade switch (SetNodeAutoUpgrade), who set it last
     // (for example `operator:alice` or `service:<name>`), and when (Unix
