@@ -1037,6 +1037,53 @@ service Management {
     };
   }
 
+  // Adds accounts to a service as members.
+  //
+  // Admin only (ASN admin, see `GetUsersByIDs`); otherwise
+  // `shared.auth.permission_denied`.
+  //
+  // `service` must be a loaded service, otherwise `shared.service.not_found`;
+  // `asn` fails with `shared.request.param_invalid` (meta `field=service`), as
+  // every account is in `asn`. `accountIds` must all be UUIDs, otherwise
+  // `shared.request.param_invalid` (meta `field=account_ids`), and all accounts
+  // of `asn`, otherwise `shared.request.param_invalid` naming the others (meta
+  // `accounts`); all are checked before any is added.
+  //
+  // Each account is registered with the service in IAM and joins no group, so
+  // it is a member, not an administrator. Adding an account already in the
+  // service changes nothing; an administrator stays one. Not atomic: when IAM
+  // fails on an account, the accounts added before it remain.
+  //
+  // A member becomes an administrator with `AddUsersToGroup` on
+  // `<service>-admin`, and a member again with `RemoveUsersFromGroup` on it.
+  rpc AddUsersToService (User.ServiceReq)   returns (Empty) {
+    option (google.api.http) = {
+      post: "/user/service/users"
+      body: "*"
+    };
+  }
+
+  // Returns an account's role in `asn` and in every loaded service.
+  //
+  // Admin only (ASN admin, see `GetUsersByIDs`); otherwise
+  // `shared.auth.permission_denied`.
+  //
+  // Query parameter `id` must be an account UUID, otherwise
+  // `shared.request.param_invalid` (meta `field=id`), and an account of `asn`,
+  // otherwise `shared.request.param_invalid` (meta `id`).
+  //
+  // `services` lists `asn` first, then the loaded services by name. A service
+  // whose `manage` access the account holds through an `asn` group (members of
+  // `<service>-admin`, of `asn-admin` for `asn`) is `ROLE_ADMIN`; otherwise one
+  // the account is registered with is `ROLE_MEMBER`, and any other
+  // `ROLE_NOT_JOINED`. An IAM failure fails the request; no partial list is
+  // returned.
+  rpc GetUserServices   (User.ID)           returns (User.ServiceRoles) {
+    option (google.api.http) = {
+      get: "/user/services"
+    };
+  }
+
   // User Group API
 
   // Returns user groups by name, with members and access grants.
@@ -3418,6 +3465,40 @@ message User {
     // another account's ID requires an ASN admin, otherwise
     // `shared.auth.permission_denied`.
     string id = 1;
+  }
+
+  // Request of `AddUsersToService` (`POST /user/service/users`).
+  message ServiceReq {
+    // Loaded service to add the accounts to; not `asn`.
+    string service = 1;
+    // Account IDs (UUID strings) of `asn` accounts.
+    repeated string account_ids = 2;
+  }
+
+  // Response of `GetUserServices` (`GET /user/services`).
+  message ServiceRoles {
+    // The account's role per service: `asn` first, then the loaded services by
+    // name.
+    repeated ServiceRole services = 1;
+
+    // The account's role in one service.
+    message ServiceRole {
+      // Service name.
+      string service = 1;
+      // Role of the account in the service.
+      Role role = 2;
+    }
+
+    // Role of an account in a service.
+    enum Role {
+      ROLE_UNSPECIFIED = 0;
+      // Not registered with the service.
+      ROLE_NOT_JOINED = 1;
+      // Registered with the service, without `manage` access to it.
+      ROLE_MEMBER = 2;
+      // Holds `manage` access to the service.
+      ROLE_ADMIN = 3;
+    }
   }
 
   // List of account IDs.
