@@ -4685,6 +4685,8 @@ message Node {
       // Service version the node reported (for example `v26.17.3`); empty
       // when not reported.
       string version = 9;
+      // Name of the node group `nodeGroupId`; empty when none.
+      string node_group_name = 10;
     }
   }
 
