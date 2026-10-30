@@ -7,6 +7,7 @@ option go_package = "asn.amiasys.com/controller/proto/management;managementpb";
 package asn_management;
 
 import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
 
 service Management {
   // ASNC related operations
@@ -2710,21 +2711,57 @@ service Management {
 
   // --- Service Metrics ---
 
-  // Get a service's display metrics for a network.
+  // Get the metrics templates of services for a network.
   //
-  // Returns the key-value metrics that the service's controller plugin
-  // reports for the given network. Metric keys, value formats and units are
-  // defined by each service; the framework defines none and passes the map
-  // through unchanged. The map may be empty.
+  // A template declares the keys of a service's metrics data for the network
+  // and how they are displayed (fields, layout, display text in zh-CN and
+  // en-US). A service may return a different template per network, and a
+  // template may change over time; fetch it again when needed. The
+  // controller calls the services concurrently, each bounded to 3 s, and
+  // fills no defaults.
+  //
+  // Auth: requires `view` or `manage` access to the network.
+  //
+  // Request: `GET /service/metric/template?networkId=<id>&serviceNames=a&serviceNames=b`;
+  // `networkId` is required. `serviceNames` is optional; when empty, the
+  // services of the network are covered.
+  //
+  // Response: `templates` is keyed by service name; each entry holds either
+  // the template or `errorCode` (`asn.service.metrics_invalid` or
+  // `asn.service.metrics_unavailable`). One service's failure does not fail
+  // the call.
+  //
+  // Errors: `shared.request.required_field_missing` (meta `field=network_id`);
+  // `asn.network.not_found` when the network does not exist;
+  // `shared.service.not_found` when a requested service is not loaded on the
+  // controller.
+  rpc GetMetricsTemplatesOfServices (Node.Service.MetricsTemplates.GetReq) returns (Node.Service.MetricsTemplates) {
+    option (google.api.http) = {
+      get: "/service/metric/template"
+    };
+  }
+
+  // Get a service's metrics data for a network.
+  //
+  // Returns the data the service reports for the network, checked against
+  // the service's template for the network: every key is declared and every
+  // value matches its declared type. Values are in the base unit of their
+  // field. A network-scope field covers the network and all its subnetworks;
+  // a service-scope field does not follow the network. Each call to the
+  // service is bounded to 3 s.
   //
   // Auth: requires `view` or `manage` access to the network.
   //
   // Request: `GET /service/metric?networkId=<id>&serviceName=<name>`; both are
   // required.
   //
-  // Errors: `shared.service.not_found` when the service is not loaded on the
-  // controller; `shared.system.internal` when the service fails to produce
-  // metrics; `asn.network.not_found` when the network does not exist.
+  // Errors: `shared.request.required_field_missing` (meta `field=network_id`
+  // or `field=service_name`); `asn.network.not_found` when the network does
+  // not exist; `shared.service.not_found` when the service is not loaded on
+  // the controller; `asn.service.metrics_invalid` (meta `service`, `path`
+  // when known) when the template or data breaks the contract;
+  // `asn.service.metrics_unavailable` (meta `service`) when the service
+  // returns an error or does not answer in time.
   rpc GetMetricsOfService (Node.Service.Metrics.GetReq) returns (Node.Service.Metrics) {
     option (google.api.http) = {
       get: "/service/metric"
@@ -4738,8 +4775,12 @@ message Node {
 
     // Metrics a service reports for a network (GetMetricsOfService).
     message Metrics {
-      // Metric values by metric name, as provided by the service.
-      map<string, string> metrics = 1;
+      reserved 1;
+      reserved "metrics";
+
+      // Metrics data, checked against the service's template for the
+      // network; `{}` when the service reports nothing.
+      google.protobuf.Struct data = 2;
 
       // Request of GetMetricsOfService.
       message GetReq {
@@ -4748,6 +4789,149 @@ message Node {
         // Service name (required; a service loaded on the controller).
         string service_name = 2;
       }
+    }
+
+    // Metrics templates of services for a network
+    // (GetMetricsTemplatesOfServices).
+    message MetricsTemplates {
+      // Entries keyed by service name.
+      map<string, Entry> templates = 1;
+
+      // The template of one service, or why there is none.
+      message Entry {
+        // The template; absent when `error_code` is set.
+        MetricsTemplate template = 1;
+        // `asn.service.metrics_invalid` or `asn.service.metrics_unavailable`;
+        // empty when `template` is set.
+        string error_code = 2;
+      }
+
+      // Request of GetMetricsTemplatesOfServices.
+      message GetReq {
+        // Network ID (required).
+        string network_id = 1;
+        // Services to cover (repeated query parameter); empty means the
+        // services of the network. An unknown name fails with
+        // `shared.service.not_found`.
+        repeated string service_names = 2;
+      }
+    }
+
+    // How a service's metrics for a network are displayed. Display text is
+    // never inline: `title`, `name`, `help`, `suffix` and option names are
+    // keys of `dict`. Unset attributes take the consumer's defaults
+    // (`precision` 2, `level` `none`, `scope` `network`, ranking `limit` 5,
+    // table `limit` 50; a widget `title` defaults to its first field's name,
+    // a series `name` to its list field's name, the template `title` to the
+    // service name). An empty template means no metrics for the network.
+    message MetricsTemplate {
+      // Dict key labelling the service; empty means the service name.
+      string title = 1;
+      // Declared keys of the data.
+      map<string, MetricsField> fields = 2;
+      // Panels in display order.
+      repeated MetricsPanel layout = 3;
+      // Display text by language (`zh-CN`, `en-US`).
+      map<string, MetricsDict> dict = 4;
+    }
+
+    // Display text of one language: key to text.
+    message MetricsDict {
+      map<string, string> texts = 1;
+    }
+
+    // One declared key of the metrics data.
+    message MetricsField {
+      // `int`, `float`, `string`, `bool`, `enum`, `time` (Unix
+      // milliseconds), `object` or `list`.
+      string type = 1;
+      // Dict key; empty only on a list item.
+      string name = 2;
+      // Base unit of an int or float: `count`, `percent`, `bytes`,
+      // `bytes_per_sec`, `bits_per_sec`, `packets_per_sec`, `ms` or `none`.
+      string unit = 3;
+      // Decimal places of a float, 0–6.
+      optional int32 precision = 4;
+      // Dict key shown after an int or float value.
+      string suffix = 5;
+      // Dict key shown as a hint.
+      string help = 6;
+      // Colour level of an int or float: `none`, `ok`, `low`, `medium`,
+      // `high` or `critical`.
+      string level = 7;
+      // Top-level fields: `network` (the network and its subnetworks) or
+      // `service` (does not follow the network; shown as service-wide).
+      string scope = 8;
+      // Values of an enum.
+      repeated MetricsOption options = 9;
+      // Members of an object.
+      map<string, MetricsField> fields = 10;
+      // Element of a list.
+      MetricsField item = 11;
+    }
+
+    // One value of an enum field.
+    message MetricsOption {
+      string key = 1;
+      // Dict key.
+      string name = 2;
+      // Colour level.
+      string level = 3;
+    }
+
+    // A group of widgets.
+    message MetricsPanel {
+      // Dict key.
+      string title = 1;
+      repeated MetricsWidget widgets = 2;
+    }
+
+    // A widget. Field references are member names joined by `.` from the top
+    // of the data; `label`, `value`, `columns` and series `x` / `y` name
+    // members of a list element.
+    message MetricsWidget {
+      // `stat`, `gauge`, `breakdown`, `ranking`, `line`, `kv`, `status` or
+      // `table`.
+      string widget = 1;
+      // Dict key.
+      string title = 2;
+      // Dict key.
+      string help = 3;
+      string field = 4;
+      repeated string fields = 5;
+      string total = 6;
+      string secondary = 7;
+      // Colours the value instead of the field's level; absent when unset.
+      MetricsThresholds thresholds = 8;
+      // Breakdown style: `pie`, `bars` or `badges`.
+      string style = 9;
+      string label = 10;
+      string value = 11;
+      // Rows shown by ranking and table; 0 means unset.
+      int32 limit = 12;
+      repeated MetricsSeries series = 13;
+      string detail = 14;
+      repeated string columns = 15;
+    }
+
+    // One series of a line widget.
+    message MetricsSeries {
+      // List of objects.
+      string field = 1;
+      // Time member.
+      string x = 2;
+      // Int or float member.
+      string y = 3;
+      // Dict key.
+      string name = 4;
+      // Colour level.
+      string level = 5;
+    }
+
+    // Below `warn` ok, from `warn` medium, from `error` high.
+    message MetricsThresholds {
+      double warn = 1;
+      double error = 2;
     }
 
     // A config op of a service on a node.
