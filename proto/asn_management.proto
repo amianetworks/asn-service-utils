@@ -983,6 +983,32 @@ service Management {
     };
   }
 
+  // Lists one page of accounts with their full records and the total count.
+  //
+  // Admin only (ASN admin, see `GetUsersByIDs`); otherwise
+  // `shared.auth.permission_denied`.
+  //
+  // Query parameters:
+  // - `serviceNames` (repeated): the IAM services whose accounts are listed; an
+  //   account in several is listed once. When empty, only `asn` is listed. Each
+  //   name other than `asn` must be a loaded service, otherwise
+  //   `shared.service.not_found`.
+  // - `keyword` (optional): case-insensitive substring of the username, email,
+  //   phone number, or a third-party binding's name or email.
+  // - `offset`: accounts to skip; negative fails with
+  //   `shared.request.param_invalid` (meta `field=offset`).
+  // - `limit`: page size; 0 means 20, above 500 fails with
+  //   `shared.query.page_too_large`.
+  //
+  // Accounts are ordered oldest first. Each has the same fields as in
+  // `GetUsersByIDs`, as seen from the first listed service (`asn` when none).
+  // `total` counts every account matching the services and keyword.
+  rpc ListUsersPaged  (User.PageReq)        returns (User.Page) {
+    option (google.api.http) = {
+      get: "/user/page"
+    };
+  }
+
   // Creates a new account in the `asn` IAM service.
   //
   // Admin only (ASN admin, see `GetUsersByIDs`); otherwise
@@ -3450,11 +3476,11 @@ message UpdatePortReq {
 // A user account and, depending on the endpoint, its groups, access and bound
 // authentication factors.
 //
-// Returned by `GetUsersByIDs` (`GET /user`), `AuthGetCurrentUser`
-// (`GET /auth/user`) and as `account` in login results. Which fields are filled
-// depends on the endpoint:
+// Returned by `GetUsersByIDs` (`GET /user`), `ListUsersPaged`
+// (`GET /user/page`), `AuthGetCurrentUser` (`GET /auth/user`) and as `account`
+// in login results. Which fields are filled depends on the endpoint:
 // - Login result `account`: only `id`, `username`, `email`, `phone`.
-// - `GetUsersByIDs`: all fields except `accesses`.
+// - `GetUsersByIDs`, `ListUsersPaged`: all fields except `accesses`.
 // - `AuthGetCurrentUser`: all fields.
 message User {
   // Account ID (UUID string).
@@ -3556,6 +3582,28 @@ message User {
     // (`?ids=a&ids=b`). Unknown IDs are skipped; an invalid UUID fails with
     // `shared.request.param_invalid`.
     repeated string ids = 2;
+  }
+
+  // Request of `ListUsersPaged` (`GET /user/page`).
+  message PageReq {
+    // IAM services whose accounts are listed, as repeated query keys. Empty
+    // lists `asn` only.
+    repeated string service_names = 1;
+    // Case-insensitive substring of the username, email, phone number, or a
+    // third-party binding's name or email. Optional.
+    string keyword = 2;
+    // Accounts to skip; must not be negative.
+    int32 offset = 3;
+    // Page size; 0 means 20, at most 500.
+    int32 limit = 4;
+  }
+
+  // Response of `ListUsersPaged` (`GET /user/page`).
+  message Page {
+    // Accounts matching the services and keyword.
+    int64 total = 1;
+    // This page of accounts, oldest first.
+    repeated User users = 2;
   }
 
   // Response of `ListUsers` (`GET /user/list`).
