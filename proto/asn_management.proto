@@ -1514,12 +1514,14 @@ service Management {
   //
   // Request (query parameters): `networkId` (required), `includeSubnetwork`
   // (optional, default false), and the optional filters `name`,
-  // `nodeGroupId`, `services`, `needUpdate` (see `Node.ListReq`); a node is
-  // returned only when it matches every filter given. `service` is ignored.
+  // `nodeGroupId`, `services`, `needUpdate`, `labelId` (see `Node.ListReq`);
+  // a node is returned only when it matches every filter given. `service` is
+  // ignored.
   //
   // Errors:
   // - `asn.network.not_found` when `networkId` does not exist.
   // - `shared.group.not_found` when `nodeGroupId` does not exist.
+  // - `asn.label.not_found` when `labelId` does not exist.
   rpc GetNodesOfNetwork           (Node.ListReq)                       returns (Node.Infos) {
     option (google.api.http) = {
       get: "/node/network"
@@ -2093,6 +2095,141 @@ service Management {
   rpc SetNodeAutoUpgrade           (Node.AutoUpgradeReq)                returns (Node.AutoUpgradeResult) {
     option (google.api.http) = {
       post: "/node/auto-upgrade"
+      body: "*"
+    };
+  }
+
+  // Node Label API
+  //
+  // Node labels (workflow/alpha/ASN.NodeLabels.md): a root label belongs to
+  // one root network and goes only on that root's nodes; a platform label
+  // (`rootId` `platform`) goes on any node. Nodes carry labels by ID, so a
+  // rename changes only the name. A label name has 1 to 64 characters with no
+  // leading or trailing whitespace and is unique within its root, or among
+  // platform labels; a root label and a platform label may share a name.
+  //
+  // Root labels, and attaching or detaching them, need `manage` access on the
+  // label's root network itself (its admin group) or system-level access;
+  // `manage` on a subnetwork is not enough. Platform labels, and attaching or
+  // detaching them, need system-level access.
+
+  // List the labels of a network's root.
+  //
+  // Returns the root labels of the root of `networkId` and the platform labels
+  // carried by a node of that root (read-only there), sorted by name.
+  //
+  // Auth: `view` or `manage` access to the network.
+  //
+  // Request (query parameter): `networkId` (required).
+  //
+  // Errors: `asn.network.not_found` when `networkId` does not exist.
+  rpc ListLabels                   (Label.ListReq)                      returns (Label.List) {
+    option (google.api.http) = {
+      get: "/node/label"
+    };
+  }
+  // List every platform label, sorted by name; read-only for every caller
+  // but those with system-level access.
+  //
+  // Auth: `view` or `manage` access on a root network, or system-level access.
+  //
+  // Errors: `shared.auth.permission_denied`.
+  rpc ListPlatformLabels           (Empty)                              returns (Label.List) {
+    option (google.api.http) = {
+      get: "/node/label/platform"
+    };
+  }
+  // Create a label.
+  //
+  // Auth: a root label, `rootId` a root network: `manage` access on that root
+  // itself or system-level access. A platform label, `rootId` `platform`:
+  // system-level access.
+  //
+  // Request: `rootId` (required), `name` (required).
+  //
+  // Errors:
+  // - `asn.network.not_found`: `rootId` does not exist.
+  // - `shared.request.param_invalid` (`errMeta.field` = `root_id`): `rootId`
+  //   is not a root network; (`errMeta.field` = `name`): the name breaks the
+  //   name rules.
+  // - `shared.resource.already_exists` (`errMeta.name`): a label of the same
+  //   scope has the name.
+  // - `shared.auth.permission_denied`.
+  rpc CreateLabel                  (Label.Create)                       returns (Label.Id) {
+    option (google.api.http) = {
+      post: "/node/label"
+      body: "*"
+    };
+  }
+  // Rename a label; nodes keep it, since they refer to it by ID.
+  //
+  // Auth: as CreateLabel, by the label's scope.
+  //
+  // Request: `labelId` (required), `name` (required).
+  //
+  // Errors: `asn.label.not_found`, `shared.request.param_invalid`
+  // (`errMeta.field` = `name`), `shared.resource.already_exists`,
+  // `shared.auth.permission_denied`.
+  rpc RenameLabel                  (Label.Rename)                       returns (Empty) {
+    option (google.api.http) = {
+      put: "/node/label"
+      body: "*"
+    };
+  }
+  // Delete a label and remove it from every node carrying it.
+  //
+  // Refused while an event rule or a log parser binding refers to the label.
+  //
+  // Auth: as CreateLabel, by the label's scope.
+  //
+  // Request (query parameter): `labelId` (required).
+  //
+  // Errors:
+  // - `asn.label.not_found`.
+  // - `asn.label.in_use`: referred to; `errMeta.rules` and `errMeta.bindings`
+  //   count the references of each kind.
+  // - `shared.auth.permission_denied`.
+  rpc DeleteLabel                  (Label.Id)                           returns (Empty) {
+    option (google.api.http) = {
+      delete: "/node/label"
+    };
+  }
+  // Attach every label to every node.
+  //
+  // A root label goes only on the nodes of its root; a node carries at most
+  // 32 labels. Every check passes before any write; attaching a label a node
+  // already carries changes nothing. A failed write may leave earlier nodes
+  // changed; repeating the call is safe.
+  //
+  // Auth: for each label, as CreateLabel by its scope, on each node's root.
+  //
+  // Request: `nodeIds` (required), `labelIds` (required).
+  //
+  // Errors:
+  // - `asn.node.not_found` (`errMeta.id` = comma-separated missing IDs).
+  // - `asn.label.not_found` (`errMeta.id` = comma-separated missing IDs).
+  // - `shared.request.param_invalid` (`errMeta.field` = `label_ids`): a root
+  //   label on a node of another root.
+  // - `shared.resource.limit_reached`: a node would carry more than 32 labels.
+  // - `shared.auth.permission_denied`.
+  rpc AddNodeLabels                (Label.NodesReq)                     returns (Empty) {
+    option (google.api.http) = {
+      post: "/node/labels/add"
+      body: "*"
+    };
+  }
+  // Detach every label from every node; detaching a label a node does not
+  // carry changes nothing.
+  //
+  // Auth: as AddNodeLabels.
+  //
+  // Request: `nodeIds` (required), `labelIds` (required).
+  //
+  // Errors: `asn.node.not_found`, `asn.label.not_found`,
+  // `shared.auth.permission_denied`.
+  rpc RemoveNodeLabels             (Label.NodesReq)                     returns (Empty) {
+    option (google.api.http) = {
+      post: "/node/labels/remove"
       body: "*"
     };
   }
@@ -4112,6 +4249,8 @@ message Node {
   // install script again (GetNodeInstallScript, `POST /node/install`); there
   // is no per-service upgrade.
   bool need_update = 12;
+  // Every label the node carries, root and platform, sorted by name.
+  repeated Label labels = 13;
 
   // Request of GetNodesByIds (`GET /node`).
   message GetReq {
@@ -4149,6 +4288,8 @@ message Node {
     repeated string services = 6;
     // Nodes whose `needUpdate` has this value; unset matches every node.
     optional bool need_update = 7;
+    // Nodes carrying this label; empty matches every node.
+    string label_id = 8;
   }
 
   // Response of GetNodesByIds.
@@ -4207,6 +4348,8 @@ message Node {
     map<string, string> meta = 6;
     // As `Node.needUpdate`.
     bool need_update = 7;
+    // As `Node.labels`.
+    repeated Label labels = 8;
   }
 
   // Node as shown on the network display (DisplayNetworks).
@@ -5095,6 +5238,58 @@ message Link {
 // for that service when the node has no config of its own, and the group's
 // config ops are pushed to all member nodes. Groups are created through
 // `CreateNodeGroup` or by a service plugin for its own service.
+// A node label: a root label (`rootId` a root network) or a platform label
+// (`rootId` `platform`).
+message Label {
+  // Label ID (UUID string), assigned by the server at CreateLabel.
+  string id = 1;
+  // Label name.
+  string name = 2;
+  // Root network of a root label; `platform` for a platform label.
+  string root_id = 3;
+
+  // Request of ListLabels (`GET /node/label`).
+  message ListReq {
+    // Network ID (required); its root's labels are listed.
+    string network_id = 1;
+  }
+
+  // Labels, sorted by name.
+  message List {
+    repeated Label labels = 1;
+  }
+
+  // Request of CreateLabel (`POST /node/label`).
+  message Create {
+    // Root network ID, or `platform` for a platform label (required).
+    string root_id = 1;
+    // Label name (required).
+    string name = 2;
+  }
+
+  // Request of RenameLabel (`PUT /node/label`).
+  message Rename {
+    // Label ID (required).
+    string label_id = 1;
+    // New name (required).
+    string name = 2;
+  }
+
+  // A label ID: the response of CreateLabel, the request of DeleteLabel.
+  message Id {
+    // Label ID.
+    string label_id = 1;
+  }
+
+  // Request of AddNodeLabels and RemoveNodeLabels.
+  message NodesReq {
+    // Node IDs (required).
+    repeated string node_ids = 1;
+    // Label IDs (required).
+    repeated string label_ids = 2;
+  }
+}
+
 message NodeGroup {
   // Node group ID (UUID).
   string node_group_id = 1;
