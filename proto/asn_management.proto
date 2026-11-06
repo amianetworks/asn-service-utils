@@ -2234,6 +2234,151 @@ service Management {
     };
   }
 
+  // Operation Audit API
+  //
+  // Operation audit (workflow/alpha/ASN.OperationAudit.md §8): one record per
+  // business operation on ASN, by an account, a service or ASN itself, kept
+  // with its result. Records are read by conditions over a time range of at
+  // most 92 days; conditions match exactly, with no keywords.
+  //
+  // Auth: a query is admitted when one access of the caller covers all of
+  // it; otherwise `shared.auth.permission_denied`. The query is never
+  // narrowed or widened.
+  // - System-level access: every query, the platform scope (`platform`) and
+  //   account history (`subjectId`) included.
+  // - `view` or `manage` access on a root network: queries naming
+  //   `rootIds` among those roots, or a `networkId` under them.
+  // - `view` or `manage` access on a network that is not a root: queries
+  //   naming that `networkId`, or one under it.
+  // - `manage` access on service X (its service admin): queries with
+  //   `service` X or `caller` X, over every root and the platform scope.
+  // Other queries name `rootIds` or `networkId`.
+  //
+  // Errors common to the record, summary, trend and export reads:
+  // - `shared.request.param_invalid`: `rootIds` and `networkId` both set
+  //   (`errMeta.field` = `network_id`), `networkId` a root network, an
+  //   unknown condition value, or a range that is empty or longer than 92
+  //   days.
+  // - `asn.network.not_found`: `networkId` does not exist.
+  // - `shared.auth.permission_denied`.
+
+  // List records, newest first, one page at a time.
+  //
+  // Request (query parameters): the conditions and range of `Audit.Query`,
+  // `page` and `size`.
+  //
+  // Errors: as above; `shared.query.page_too_large` when `size` is above 500.
+  rpc ListAuditRecords             (Audit.Query)                        returns (Audit.Records) {
+    option (google.api.http) = {
+      get: "/audit/record"
+    };
+  }
+  // Sum up the records of a query: counts by risk level, by event type and
+  // subject type (events and alarms apart), the subjects with the most alarms,
+  // counts by `service` and by `caller`, and the trend.
+  //
+  // Request (query parameters): the conditions and range of `Audit.Query`,
+  // `bucketSeconds` (required) and `top`.
+  rpc GetAuditSummary              (Audit.Query)                        returns (Audit.Summary) {
+    option (google.api.http) = {
+      get: "/audit/summary"
+    };
+  }
+  // Count the records of a query in buckets of `bucketSeconds`.
+  //
+  // Request (query parameters): the conditions and range of `Audit.Query`,
+  // `bucketSeconds` (required).
+  rpc GetAuditTrend                (Audit.Query)                        returns (Audit.Trend) {
+    option (google.api.http) = {
+      get: "/audit/trend"
+    };
+  }
+  // What the records of a catalog mean: event types, operation codes with
+  // their names and default risk levels, object types, subject types, risk
+  // levels, results, origins and the time presets.
+  //
+  // Auth: every signed-in account.
+  //
+  // Request (query parameter): `catalog`; empty or `asn` (the only catalog
+  // for now).
+  //
+  // Errors: `shared.request.param_invalid` (`errMeta.field` = `catalog`).
+  rpc GetAuditCatalog              (Audit.CatalogReq)                   returns (Audit.Catalog) {
+    option (google.api.http) = {
+      get: "/audit/catalog"
+    };
+  }
+  // List the saved filters the caller may read, newest first: the caller's
+  // own (`account`), those of each root it may read (`root`), and, with
+  // system-level access, the platform's (`platform`). `writable` marks those
+  // the caller may change.
+  //
+  // Request (query parameter): `keyword`, a case-insensitive substring of
+  // the name; optional.
+  rpc ListAuditFilters             (Audit.FilterListReq)                returns (Audit.Filters) {
+    option (google.api.http) = {
+      get: "/audit/filter"
+    };
+  }
+  // Save a filter: conditions and a time range, under a name unique in its
+  // scope. A filter holds no root, network or node: the view it is applied
+  // in gives them; its tags are `service` and `caller` only. At most 20
+  // filters per scope owner.
+  //
+  // Auth: `account`: every signed-in account, for itself. `root`: `manage`
+  // access on that root network itself, or system-level access.
+  // `platform`: system-level access.
+  //
+  // Request: `scope` (required), `rootId` (scope `root`), `name` (required),
+  // `query` (conditions and range; `rootIds`, `networkId`,
+  // `includeSubnetwork`, `nodeIds`, `page`, `size`, `bucketSeconds` and
+  // `top` must be empty).
+  //
+  // Errors:
+  // - `shared.request.param_invalid`: a field above set, a bad scope, an
+  //   unknown condition value or time preset.
+  // - `shared.resource.already_exists`: the name is taken in the scope.
+  // - `shared.resource.limit_reached`: the owner has 20 filters.
+  // - `asn.network.not_found`: `rootId` does not exist.
+  // - `shared.auth.permission_denied`.
+  rpc CreateAuditFilter            (Audit.Filter)                       returns (Audit.Filter) {
+    option (google.api.http) = {
+      post: "/audit/filter"
+      body: "*"
+    };
+  }
+  // Change a saved filter's name, conditions or range.
+  //
+  // Auth: as CreateAuditFilter, by the filter's scope.
+  //
+  // Request: `id`, `scope` and `rootId` naming the filter, and its new
+  // `name` and `query`.
+  //
+  // Errors: as CreateAuditFilter; `shared.resource.not_found` when the
+  // filter does not exist in the scope.
+  rpc UpdateAuditFilter            (Audit.Filter)                       returns (Audit.Filter) {
+    option (google.api.http) = {
+      put: "/audit/filter"
+      body: "*"
+    };
+  }
+  // Delete a saved filter.
+  //
+  // Auth: as CreateAuditFilter, by the filter's scope.
+  //
+  // Request (query parameters): `id`, `scope`, `rootId` (scope `root`).
+  //
+  // Errors: `shared.resource.not_found`, `shared.auth.permission_denied`.
+  rpc DeleteAuditFilter            (Audit.FilterRef)                    returns (Empty) {
+    option (google.api.http) = {
+      delete: "/audit/filter"
+    };
+  }
+  // The records of a query are exported by `GET /audit/export` with the
+  // query parameters of ListAuditRecords and `format` (`csv` or `jsonl`): a
+  // file download, newest first, not a JSON envelope. Authorized as
+  // ListAuditRecords; each export is itself recorded.
+
   // Node Group API
 
   // Get node groups by ID.
@@ -5287,6 +5432,234 @@ message Label {
     repeated string node_ids = 1;
     // Label IDs (required).
     repeated string label_ids = 2;
+  }
+}
+
+// Operation audit (workflow/alpha/ASN.OperationAudit.md). Times are unix
+// milliseconds.
+message Audit {
+  // A query: conditions, a time range and, per call, paging or buckets.
+  // Conditions match exactly; a repeated condition matches any of its values;
+  // every condition set must match.
+  message Query {
+    // The `Service` tag: the service whose data or function the record is
+    // about; `asn` for ASN's own.
+    string service = 1;
+    // The `Caller` tag: `asn` for the management API and ASN itself, the
+    // service for the service API.
+    string caller = 2;
+    // Root networks, or `platform` for what belongs to no root. Not with
+    // `networkId`.
+    repeated string root_ids = 3;
+    // A network that is not a root: the records of its root on the nodes
+    // now in it. Not with `rootIds`.
+    string network_id = 4;
+    // With `networkId`: also the nodes now in its subnetworks.
+    bool include_subnetwork = 5;
+    // Nodes the records are on.
+    repeated string node_ids = 6;
+    // Who acted: an account ID, a service name; account history.
+    string subject_id = 7;
+    // `account`, `service`, `system`.
+    repeated string subject_types = 8;
+    // Event types, such as `asn.node`; see GetAuditCatalog.
+    repeated string event_types = 9;
+    // Operation codes; see GetAuditCatalog.
+    repeated int64 operations = 10;
+    // `success`, `failed`.
+    repeated string results = 11;
+    // `info`, `warn`, `low`, `medium`, `high`, `critical`; `low` and above
+    // are alarms.
+    repeated string risk_levels = 12;
+    // Object types, such as `node`; see GetAuditCatalog.
+    repeated string object_types = 13;
+    // Object IDs.
+    repeated string object_ids = 14;
+    // Where the record was made: `local` for the controller, a node ID for
+    // what a node reported.
+    repeated string origins = 15;
+    // Range start, inclusive (unix ms). With `stop`, unless `timePreset`.
+    int64 start = 16;
+    // Range end, exclusive (unix ms).
+    int64 stop = 17;
+    // A preset of GetAuditCatalog, such as `last_24_hours`, instead of
+    // `start` and `stop`.
+    string time_preset = 18;
+    // ListAuditRecords: page from 0.
+    int32 page = 19;
+    // ListAuditRecords: records per page; 0 means 50, at most 500.
+    int32 size = 20;
+    // GetAuditSummary, GetAuditTrend: trend bucket width in seconds
+    // (required); at most 2000 buckets in the range.
+    int64 bucket_seconds = 21;
+    // GetAuditSummary: subjects in `topAlarmSubjects`; 0 means 10.
+    int32 top = 22;
+  }
+
+  // A record.
+  message Record {
+    int64 time = 1;
+    // `account`, `service`, `system`.
+    string subject_type = 2;
+    // Account ID, service name, empty for ASN itself; `unknownUser` for a
+    // refused login no account matched.
+    string subject_id = 3;
+    // The account's username when the subject is an account.
+    string username = 4;
+    // The device an account acted from.
+    string device_id = 5;
+    // The address the subject acted from.
+    string subject_ip = 6;
+    string event_type = 7;
+    int64 operation = 8;
+    // `success`, `failed`.
+    string result = 9;
+    string risk_level = 10;
+    string object_type = 11;
+    string object_id = 12;
+    // A part of the object, such as a login factor.
+    string object_part = 13;
+    // One plain sentence of what was done; a failed record ends with the
+    // reason and its error code.
+    string message = 14;
+    // `local`, or the node the record was reported from.
+    string origin = 15;
+    string service = 16;
+    string caller = 17;
+    // Root network ID, or `platform`.
+    string root_id = 18;
+    string node_id = 19;
+    // Details of the operation: names, what changed, affected members.
+    map<string, string> fields = 20;
+    // A service's own tags.
+    map<string, string> tags = 21;
+  }
+
+  // Response of ListAuditRecords.
+  message Records {
+    // Records matching the query.
+    int64 total = 1;
+    // This page, newest first.
+    repeated Record records = 2;
+  }
+
+  // Records and alarms (risk `low` and above) of one value.
+  message Count {
+    int64 events = 1;
+    int64 alarms = 2;
+  }
+
+  // An account or service with alarms.
+  message SubjectCount {
+    string subject_id = 1;
+    // Of its latest alarm.
+    string subject_type = 2;
+    int64 alarms = 3;
+  }
+
+  // The records of [start, stop).
+  message Bucket {
+    int64 start = 1;
+    int64 stop = 2;
+    // Records that are not alarms.
+    int64 events = 3;
+    int64 alarms = 4;
+  }
+
+  // Response of GetAuditSummary.
+  message Summary {
+    // By risk level, every level present.
+    map<string, int64> by_level = 1;
+    // Records that are not alarms, and alarms, by event type.
+    map<string, int64> events_by_type = 2;
+    map<string, int64> alarms_by_type = 3;
+    // By subject type.
+    map<string, int64> events_by_subject_type = 4;
+    map<string, int64> alarms_by_subject_type = 5;
+    // Subjects with the most alarms, most first; ASN itself left out.
+    repeated SubjectCount top_alarm_subjects = 6;
+    // By `service` and by `caller`.
+    map<string, Count> by_service = 7;
+    map<string, Count> by_caller = 8;
+    repeated Bucket trend = 9;
+  }
+
+  // Response of GetAuditTrend.
+  message Trend {
+    repeated Bucket buckets = 1;
+  }
+
+  // Request of GetAuditCatalog.
+  message CatalogReq {
+    // Empty or `asn`.
+    string catalog = 1;
+  }
+
+  // A catalog entry's key and display names.
+  message Name {
+    string key = 1;
+    string name_en = 2;
+    string name_zh = 3;
+  }
+
+  // An operation code.
+  message Operation {
+    int64 code = 1;
+    string event_type = 2;
+    // The object type its records usually carry.
+    string object_type = 3;
+    string name_en = 4;
+    string name_zh = 5;
+    // Its records' level, unless a record states another.
+    string risk_level = 6;
+  }
+
+  // Response of GetAuditCatalog.
+  message Catalog {
+    string catalog = 1;
+    repeated Name event_types = 2;
+    repeated Operation operations = 3;
+    repeated Name object_types = 4;
+    repeated string subject_types = 5;
+    repeated string risk_levels = 6;
+    repeated string results = 7;
+    repeated string time_presets = 8;
+  }
+
+  // A saved filter: the request and response of CreateAuditFilter and
+  // UpdateAuditFilter, and an item of ListAuditFilters.
+  message Filter {
+    // Filter ID (UUID), assigned at create.
+    string id = 1;
+    // `account` (the caller's own), `root`, `platform`.
+    string scope = 2;
+    // The root network of a `root` filter.
+    string root_id = 3;
+    // 1 to 128 characters, unique in the scope.
+    string name = 4;
+    // Conditions and range; see CreateAuditFilter for the fields it holds.
+    Query query = 5;
+    int64 create_time = 6;
+    int64 update_time = 7;
+    // Response only: the caller may change or delete it.
+    bool writable = 8;
+  }
+
+  // Request of DeleteAuditFilter.
+  message FilterRef {
+    string id = 1;
+    string scope = 2;
+    string root_id = 3;
+  }
+
+  // Request of ListAuditFilters.
+  message FilterListReq {
+    string keyword = 1;
+  }
+
+  // Response of ListAuditFilters.
+  message Filters {
+    repeated Filter filters = 1;
   }
 }
 
