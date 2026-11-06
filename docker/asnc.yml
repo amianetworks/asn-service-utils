@@ -1,35 +1,20 @@
 # Copyright 2026 Amiasys Corporation and/or its affiliates. All rights reserved.
 
 services:
-  asn-mdb:
-    container_name: asn-mdb
-    image: mongo:8  # the mongodb version
-    restart: always   # auto restart the container if it fails
-    ulimits:
-      nofile: 100000
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: amia  # db root username,
-      MONGO_INITDB_ROOT_PASSWORD: ${ASNC_MONGO_ROOT_PASSWORD:?set ASNC_MONGO_ROOT_PASSWORD}  # db root user password
+  # The controller's stores: PostgreSQL 18 with TimescaleDB (the image creates
+  # the timescaledb extension in POSTGRES_DB). Sapphire IAM uses it too.
+  asn-pdb:
+    image: timescale/timescaledb:latest-pg18
+    container_name: asn-pdb
+    restart: always
     ports:
-      - "27017:27017"  # port forwarding (localPort:containerPort)
+      - "5432:5432"
     volumes:
-      - mongodb_data:/data/db  # data volumes, (localDirectory:containerDirectory)
-    command: --bind_ip_all --auth
-  asn-idb:
-    image: influxdb:2.7
-    container_name: asn-idb
-    ports:
-      - "8086:8086"
-    volumes:
-      - influxdb_data:/var/lib/influxdb2
+      - postgres_data:/var/lib/postgresql
     environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: amia
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${ASNC_INFLUXDB_ADMIN_PASSWORD:?set ASNC_INFLUXDB_ADMIN_PASSWORD}
-      DOCKER_INFLUXDB_INIT_ORG: amia
-      DOCKER_INFLUXDB_INIT_BUCKET: asn
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${ASNC_INFLUXDB_ADMIN_TOKEN:?set ASNC_INFLUXDB_ADMIN_TOKEN}
-      DOCKER_INFLUXDB_INIT_RETENTION: 0
+      POSTGRES_USER: amia
+      POSTGRES_PASSWORD: ${ASNC_POSTGRES_PASSWORD:?set ASNC_POSTGRES_PASSWORD}
+      POSTGRES_DB: asn
   asn-rdb:
     container_name: asn-rdb
     image: redis:8
@@ -39,12 +24,12 @@ services:
     volumes:
       - redis_data:/data
   sapphire-iam:
-    image: registry.amiasys.com/sapphire.iam:26.12.0
+    image: registry.amiasys.com/sapphire.iam:27.0.0
     container_name: sapphire-iam
     privileged: true
     restart: always
     depends_on:
-      - "asn-mdb"
+      - "asn-pdb"
     network_mode: host
     volumes:
       - ./iam-cert/:/etc/sapphire/cert/
@@ -52,11 +37,10 @@ services:
       - ./iam-log/:/var/log/sapphire/
   asnc:
     restart: always
-    image: registry.amiasys.com/asnc:26.10.11
+    image: registry.amiasys.com/asnc:26.25.6
     network_mode: host
     depends_on:
-      - "asn-mdb"
-      - "asn-idb"
+      - "asn-pdb"
       - "asn-rdb"
       - "sapphire-iam"
     volumes:
@@ -68,9 +52,7 @@ services:
       - ./asn-web:/var/www/asn/controller
 
 volumes:
-  mongodb_data:
-    driver: local
-  influxdb_data:
+  postgres_data:
     driver: local
   redis_data:
     driver: local

@@ -143,41 +143,24 @@ func main() {
 	asncD := asncDocker{
 		Services: map[string]DockerService{},
 		Volumes: map[string]Volume{
-			"influxdb_data": {Driver: "local"},
+			"postgres_data": {Driver: "local"},
 			"ldap_slap":     {Driver: "local"},
 			"ldap_data":     {Driver: "local"},
 		},
 	}
-	asncD.Services["asn-mdb"] = DockerService{
-		ContainerName: "asn-mdb",
-		Image:         "mongo:8",
+	// The controller's stores: PostgreSQL 18 with TimescaleDB; the image creates
+	// the timescaledb extension in POSTGRES_DB. Sapphire IAM uses it too.
+	asncD.Services["asn-pdb"] = DockerService{
+		ContainerName: "asn-pdb",
+		Image:         "timescale/timescaledb:latest-pg18",
 		Restart:       "unless-stopped",
-		Ulimits: map[string]int{
-			"nofile": 100000,
-			"nproc":  65535,
-		},
-		Environment: map[string]string{
-			"MONGO_INITDB_ROOT_USERNAME": "amia",
-			"MONGO_INITDB_ROOT_PASSWORD": "${ASNC_MONGO_ROOT_PASSWORD:?set ASNC_MONGO_ROOT_PASSWORD}",
-		},
-		NetworkMode: "host",
-		Volumes:     []string{"./data/:/data/db"},
-		Command:     "--bind_ip_all --auth",
-	}
-	asncD.Services["asn-idb"] = DockerService{
-		ContainerName: "asn-idb",
-		Image:         "influxdb:2.7",
 		NetworkMode:   "host",
 		Environment: map[string]string{
-			"DOCKER_INFLUXDB_INIT_MODE":        "setup",
-			"DOCKER_INFLUXDB_INIT_USERNAME":    "amia",
-			"DOCKER_INFLUXDB_INIT_PASSWORD":    "${ASNC_INFLUXDB_ADMIN_PASSWORD:?set ASNC_INFLUXDB_ADMIN_PASSWORD}",
-			"DOCKER_INFLUXDB_INIT_ORG":         "amia",
-			"DOCKER_INFLUXDB_INIT_BUCKET":      "asn",
-			"DOCKER_INFLUXDB_INIT_ADMIN_TOKEN": "${ASNC_INFLUXDB_ADMIN_TOKEN:?set ASNC_INFLUXDB_ADMIN_TOKEN}",
-			"DOCKER_INFLUXDB_INIT_RETENTION":   "0",
+			"POSTGRES_USER":     "amia",
+			"POSTGRES_PASSWORD": "${ASNC_POSTGRES_PASSWORD:?set ASNC_POSTGRES_PASSWORD}",
+			"POSTGRES_DB":       "asn",
 		},
-		Volumes: []string{"influxdb_data:/var/lib/influxdb2"},
+		Volumes: []string{"postgres_data:/var/lib/postgresql"},
 		Ulimits: map[string]int{
 			"nofile": 100000,
 			"nproc":  65535,
@@ -196,11 +179,11 @@ func main() {
 	}
 	asncD.Services["sapphire-iam"] = DockerService{
 		ContainerName: "sapphire-iam",
-		Image:         "registry.amiasys.com/sapphire.iam:26.11.1",
+		Image:         "registry.amiasys.com/sapphire.iam:27.0.0",
 		NetworkMode:   "host",
 		Restart:       "unless-stopped",
 		Privileged:    true,
-		DependsOn:     []string{"asn-mdb", "asn-idb", "asn-rdb"},
+		DependsOn:     []string{"asn-pdb", "asn-rdb"},
 		Volumes: []string{
 			"./cert/:/etc/sapphire/cert/",
 			"./config/:/etc/sapphire/config/",
@@ -212,9 +195,9 @@ func main() {
 		},
 	}
 	asncD.Services["asnc"] = DockerService{
-		Image:       "registry.amiasys.com/asnc:26.10.11",
+		Image:       "registry.amiasys.com/asnc:26.25.6",
 		Restart:     "unless-stopped",
-		DependsOn:   []string{"asn-mdb", "asn-idb", "asn-rdb", "sapphire-iam"},
+		DependsOn:   []string{"asn-pdb", "asn-rdb", "sapphire-iam"},
 		NetworkMode: "host",
 		Ulimits: map[string]int{
 			"nofile": 100000,
@@ -288,7 +271,7 @@ func main() {
 		}
 
 		asnD.Services[fmt.Sprintf("asnsn-%d", i)] = DockerService{
-			Image:         "registry.amiasys.com/asnsn:26.10.11",
+			Image:         "registry.amiasys.com/asnsn:26.25.6",
 			ContainerName: fmt.Sprintf("asnsn-%d", i),
 			NetworkMode:   "host",
 			Environment: map[string]string{
@@ -382,11 +365,11 @@ echo "All tasks completed."`
 # Testing
 
 ## Services
-services_provisioned: [ asn, myservice ]
+services_provisioned: [ asn, swan, scarlette ]
 
 ## Mode
 # In dev mode, all verification codes will be returned directly through API, and the default log level will be "debug".
-mode: dev # pro | dev, Default: pro
+#mode: pro # pro | dev, Default: pro
 
 ## API Configurations
 #api:
@@ -399,58 +382,146 @@ mode: dev # pro | dev, Default: pro
 #      key_file: "/etc/sapphire/cert/server.key"
 
 ## Database Configurations
-#db:
-#  provider: "mongodb" # Supported: "mongodb" | "filedb". Default: "mongodb"
-#  url: "localhost:27017" # Default: "localhost:27017"
-#  username: "amia" # Default: "amia"
-#  password: "REPLACE_WITH_SECRET" # Default: generated secret
+# IAM shares the controller's PostgreSQL database (asn-pdb) as its own schemas.
+db:
+  provider: "postgres" # Supported: "postgres" (PostgreSQL 18) | "mongodb" | "filedb". Default: "postgres"
+  url: "localhost:5432/asn" # postgres: host:port/<database>[?options]
+  username: "amia"
+  password: "REPLACE_WITH_SECRET" # the asn-pdb password (ASNC_POSTGRES_PASSWORD)
+  name: "iam" # IAM database name, a schema; each service uses "<name>_<service>"
 
 ## Email Service
-#smtp: # SMTP email server config
-#  enabled: false # Default: false
-#  expire : 5 # in minutes, Default: 5
-#  resend_interval: 1 # in minutes, Default: 1
-#  tls: true
-#  host: "smtp.office365.com"
-#  email: "email@amiasys.com"
-#  username: "email@amiasys.com"
-#  password: ""
-#  port: 587
+mail: # Email service used to deliver verification codes
+  enabled: false # Default: false
+  # Only the keys of the selected type are read; the others are carried unread,
+  # so a deployment can switch back and forth by editing "type" alone.
+  provider:
+    type: "smtp" # Supported: "smtp" | "graph". Default: "smtp"
+    # For SMTP. Required when enabled: host, port, email.
+    tls: true # false skips verification of the relay's certificate (test relays only). Whether TLS is used at all follows the port.
+    host: "smtp.office365.com"
+    email: "email@amiasys.com"
+    username: "email@amiasys.com" # what authenticates; usually the same address
+    password: ""
+    port: 587
+    # For Graph. Required when enabled: tenant_id, client_id, certificate, mailbox.
+    # The registered application holds the Mail.Send APPLICATION permission, which
+    # reaches every mailbox in the tenant until an application access policy scopes
+    # it to the mailbox below. That policy is configured in the tenant.
+    tenant_id: "REPLACE_WITH_TENANT_ID"
+    client_id: "REPLACE_WITH_APPLICATION_ID"
+    certificate: "/etc/sapphire/cert/mailer.cert.pem" # PEM or legacy PKCS#12
+    private_key: "/etc/sapphire/cert/mailer.key.pem" # Leave out when one file holds both. An encrypted PEM key is not supported.
+    certificate_password: "" # PKCS#12 only. Default: none
+    mailbox: "noreply.swanarc@amianetworks.com" # the Exchange Online mailbox to send as
+  # Sender display name per service. It is what a recipient sees beside the address,
+  # and it titles the subject and the body, so a code sent for one product does not
+  # introduce itself as another. A service listed nowhere here sends as "IAM".
+  nicknames:
+    - service: "swan"
+      nickname: "SwanArc"
+
+## Verification Codes
+#
+# How long a code lives and how often one is sent, the same for SMS and email.
+# These were set under "mail" and "phone" before; a value still set there must
+# match the one here, or IAM does not start.
+verification_code:
+  expire: 5 # in minutes, Default: 5
+  # Resend interval uses exponential backoff based on outcome, per recipient.
+  # After success: interval = resend_success_base * resend_amp_factor^successCount, capped at resend_success_max.
+  # After failure: interval = resend_failure_base * resend_amp_factor^failureCount, capped at resend_failure_max.
+  # A success resets the failure count.
+  resend_success_base: 10    # in seconds, post-success cooldown base. Default: 10
+  resend_failure_base: 30    # in seconds, per-send/failure penalty base. Default: 30
+  resend_amp_factor: 2       # exponential amplification factor. Default: 2
+  resend_success_max: 120    # in seconds, cap for success-side cooldown. Default: 120
+  resend_failure_max: 3600   # in seconds, cap for failure-side penalty. Default: 3600
+  resend_failure_decay: 3600 # in seconds, time per failure-count level decayed when idle. 0 = no decay. Default: 3600
+  resend_success_decay: 86400 # in seconds, time per success-count level decayed when idle. 0 = no decay. Default: 86400
 
 ## Phone Service
+#
+# There are three modes for displaying phone country codes:
+# - all: all countries are displayed;
+# - include: only countries in the list are displayed;
+# - exclude: all countries except those in the list are displayed.
+#
 #phone:
 #  enabled: false # Default: false
-#  expire : 5 # in minutes, Default: 5
-#  resend_interval: 1 # in minutes, Default: 1
+#  country_code:
+#    mode: all # all | include | exclude, Default: all
+#    codes: ["86", "852", "1"] # Default: []
 #  services:
 #    86: # if multiple country codes are using the same config, use comma to separate them, i.e., 86,852,853
-#      provider: "aliyun" # "tencent" || "aliyun"
-#      app_id: ""
-#      app_secret: "" # not needed for tencent
-#      secret_id: "" # not needed for aliyun
-#      secret_key: "" # not needed for aliyun
-#      sign_name: ""
-#      template_id: "" # for SMS verification code
+#      provider: "aliyun" # "tencent" || "aliyun" || "twilio"
+#      app_id: "" # for Twilio, use Verify Service SID
+#      app_secret: "" # Aliyun only
+#      secret_id: "" # Tencent: Secret ID; Twilio: Account SID
+#      secret_key: "" # Tencent: Secret Key; Twilio: Auth Token
+#      sign_name: "" # Aliyun and Tencent needed
+#      template_id: "" # Aliyun and Tencent needed
+#      from: "18773124359" # Aliyun outside 86 only: the sender ID or number. Default: 18773124359
 #    1: # if multiple country codes are using the same config, use comma to separate them, i.e., 86,852,853
-#      provider: "tencent" # "tencent" || "aliyun"
-#      app_id: ""
-#      app_secret: "" # not needed for tencent
-#      secret_id: "" # not needed for aliyun
-#      secret_key: "" # not needed for aliyun
-#      sign_name: ""
-#      template_id: "" # for SMS verification code
+#      provider: "tencent" # "tencent" || "aliyun" || "twilio"
+#      app_id: "" # for Twilio, use Verify Service SID
+#      app_secret: "" # Aliyun only
+#      secret_id: "" # Tencent: Secret ID; Twilio: Account SID
+#      secret_key: "" # Tencent: Secret Key; Twilio: Auth Token
+#      sign_name: "" # Aliyun and Tencent needed
+#      template_id: "" # Aliyun and Tencent needed
+
+## Records of the verification codes sent in pro mode: to whom, when, through which provider and
+## what it answered, never the code. Kept in the IAM database, in verification_code_message and
+## verification_code_delivery. Disabled, codes go straight to the providers and nothing is kept.
+#code_records:
+#  enabled: true # Default: true
+#  retention: 0 # in days, 0 keeps them forever. Default: 0
 
 ## Sign In with Apple
 #apple:
 #  asn:
-#    - "xxx.xxx.xxx" # bundle ID
-#    - "xxx.xxx.xxx" # bundle ID
+#    bundle_ids:
+#      - "xxx.xxx.xxx" # bundle ID
+#      - "xxx.xxx.xxx" # bundle ID
+#    callback:
+#      android:
+#        package_name: "xxx.xxx.xxx" # package name
+#        host: "asnAppleLogin" # android:host
+#        scheme: "asnAppleLogin" # android:scheme
 #  swan:
-#    - "xxx.xxx.xxx" # bundle ID
-#    - "xxx.xxx.xxx" # bundle ID
+#    bundle_ids:
+#      - "xxx.xxx.xxx" # bundle ID
+#      - "xxx.xxx.xxx" # bundle ID
+#    callback:
+#      android:
+#        package_name: "xxx.xxx.xxx" # package name
+#        host: "swanAppleLogin" # android:host
+#        scheme: "swanAppleLogin" # android:scheme
 #  scarlette:
-#    - "xxx.xxx.xxx" # bundle ID
-#    - "xxx.xxx.xxx" # bundle ID
+#    bundle_ids:
+#      - "xxx.xxx.xxx" # bundle ID
+#      - "xxx.xxx.xxx" # bundle ID
+#    callback:
+#      android:
+#        package_name: "xxx.xxx.xxx" # package name
+#        host: "scarletteAppleLogin" # android:host
+#        scheme: "scarletteAppleLogin" # android:scheme
+
+## Sign In with Google
+#google:
+#  asn:
+#    client_ids:
+#      - "xxx.xxx.xxx" # client ID
+#      - "xxx.xxx.xxx" # client ID
+#  swan:
+#    client_ids:
+#      - "xxx.xxx.xxx" # client ID
+#      - "xxx.xxx.xxx" # client ID
+#  scarlette:
+#    client_ids:
+#      - "xxx.xxx.xxx" # client ID
+#      - "xxx.xxx.xxx" # client ID
 
 ## WeChat
 #wechat:
@@ -464,6 +535,32 @@ mode: dev # pro | dev, Default: pro
 #    appID1: appSecret1
 #    appID2: appSecret2
 
+# Passkey
+#
+# Passkey is used for WebAuthn registration and authentication.
+#passkey:
+#  asn:
+#    server_domains: [ "asn.amiasys.com" ] # Leave empty to disable Passkey registration / verification.
+#    display_name: "ASN" # Default: service name
+#    extra_allowed_origins: [] # By default, "https://"+server_domain is allowed for each server domain. If additional origins are needed, add them here.
+#    timeouts:
+#      login: 300 # session expiration in seconds, Default: 300
+#      registration: 300 # session expiration in seconds, Default: 300
+#  swan:
+#    server_domains: [ "swan.amiasys.com" ] # Leave empty to disable Passkey registration / verification.
+#    display_name: "SWAN" # Default: service name
+#    extra_allowed_origins: [ ] # By default, "https://"+server_domain is allowed for each server domain. If additional origins are needed, add them here.
+#    timeouts:
+#      login: 300 # session expiration in seconds, Default: 300
+#      registration: 300 # session expiration in seconds, Default: 300
+#  scarlette:
+#    server_domains: [ "scarlette.amiasys.com" ] # Leave empty to disable Passkey registration / verification.
+#    display_name: "Scarlette" # Default: service name
+#    extra_allowed_origins: [ ] # By default, "https://"+server_domain is allowed for each server domain. If additional origins are needed, add them here.
+#    timeouts:
+#      login: 300 # session expiration in seconds, Default: 300
+#      registration: 300 # session expiration in seconds, Default: 300
+
 ## LDAP Configurations
 #ldap:
 #  enabled: false # Default: false
@@ -471,7 +568,7 @@ mode: dev # pro | dev, Default: pro
 #  url: "ldap://localhost:389" # Default: "ldap://localhost:389"
 #  base_dn: "dc=amianetworks,dc=com" # Default: "dc=amianetworks,dc=com"
 #  password_cn: "cn=admin" # Default: "cn=admin"
-#  password: "REPLACE_WITH_SECRET" # Default: generated secret
+#  password: "REPLACE_WITH_SECRET" # Default: "2022"
 #  ous:
 #    account: "People"
 #    group: "Group"
@@ -489,12 +586,9 @@ mode: dev # pro | dev, Default: pro
 #  redis: # used only in distributed mode
 #    mode: "standard" # (standard | redlock) Default: "standard"
 #    nodes: # list of redis nodes. Only the first one is used in standard mode
-#      urls:
-#        - "localhost:6379" # Default: "localhost:6379"
-#      passwords:
-#        - "REPLACE_WITH_SECRET"
-#      dbs:
-#        - 0 # index: 0 ~ 15 (Default: 0)
+#      - url: "localhost:6379" # Default: "localhost:6379"
+#        passwords: "2023"
+#        dbs: 0 # index: 0 ~ 15 (Default: 0)
 
 ## Log Configurations
 #log:
@@ -504,7 +598,8 @@ mode: dev # pro | dev, Default: pro
 ## Account Configurations
 #account:
 #  special_key: "REPLACE_WITH_SECRET" # Used to create special accounts which skips MFA.
-#  password_algo: sha1 # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: sha256. CAUTION: more demanding algorithms like argon2id are not recommended in VMs.
+#  password_algo: sha256 # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: sha256. CAUTION: more demanding algorithms like argon2id are not recommended in VMs.
+#  rename: false # whether renaming an account's username is allowed. Default: false
 #
 #  # Username must be unique system wide, and it is the default identifier for login.
 #  # Other fields, like email and phone number, can also be used as login identifier, as soon as explicitly set below.
@@ -521,11 +616,9 @@ mode: dev # pro | dev, Default: pro
 #  # {m,n}: m to n (both inclusive)
 #  # If you need to customize the format, please refer to the regular expression syntax.
 #  format:
-#    name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#    name: "^[0-9a-zA-Z_.-]{2,36}$"
 #    password: "^[0-9a-zA-Z!@$._-]{6,128}$"
 #    email: "^(?:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})?$"
-#    country_code: "^(?:\\d{1,3})?$"
-#    phone: "^(?:$|[\\d\\s\\-\\(\\)\\.]{6,15})$"
 #
 #  # Provisioning Rules at Account Creation
 #  # Though all accounts are unique in the system, the service may not share users by default.
@@ -560,6 +653,8 @@ mode: dev # pro | dev, Default: pro
 #    wait_min: 1 # Minimum wait time after an attempt in second. Default: 1 Seconds
 #    wait_max: 43200 # Maximum waiting time after an attempt in second. Default: 43200 Seconds
 #    amp_factor: 2 # The waiting time after each failure will be extended according to the amplification factor. Default: 3
+#    mfa: 5 # Default: 5
+#    code_max_attempts: 0 # Wrong codes a verification code takes before a new one is needed. 0 = no limit. Default: 0
 #
 #  # Config the concurrent authentication to limit the number of concurrent authentication entity allowed per user.
 #  # You can configure the maximum number of entities allowed to log in, and if exceeded, it will be handled according to the auto replacement policy.
@@ -575,6 +670,56 @@ mode: dev # pro | dev, Default: pro
 #    totp:
 #      # The issuer indicates the provider or service this account is associated with, URL-encoded according to RFC 3986.
 #      issuer: "Amia Networks Inc."
+#
+#  # Device-Related Configurations
+#  # If enabled == false, or a limit is set to negative, device-related configurations will be ignored (unlimited).
+#  device_limit:
+#    enabled: true # Whether to enable device limit. Default: true
+#    eviction_mode: "inactive" # none | inactive | any. None means no eviction, inactive means only inactive devices are evicted, any means any device can be evicted. Default: inactive
+#    total: -1 # The total number of login devices allowed per user. Default: -1
+#    phone: -1 # The number of login devices under this category allowed per user. Default: -1
+#    tablet: -1 # The number of login devices under this category allowed per user. Default: -1
+#    wearable: -1 # The number of login devices under this category allowed per user. Default: -1
+#    browser: -1 # The number of login devices under this category allowed per user. Default: -1
+#    mini_program: -1 # The number of login devices under this category allowed per user. Default: -1
+#    pc: -1 # The number of login devices under this category allowed per user. Default: -1
+#    unknown: -1 # The number of login devices under this category allowed per user. Default: -1
+#
+#  # Password flow (forgot-password recovery and in-session change) configuration.
+#  password_reset:
+#    ttl: 10 # Flow token lifetime in minutes. Default: 10
+#    max_attempts: 5 # Failed verification attempts before the flow token is invalidated. Default: 5
+#
+#  # Auth flow (stateful login credential phase) configuration.
+#  auth_flow:
+#    ttl: 10 # Credential-phase flow token lifetime in minutes. Default: 10
+#    max_attempts: 5 # Failed verification attempts before the flow token is invalidated. Default: 5
+#
+#  # Session delegation: exchanging a live session for a one-time ticket that a second
+#  # device redeems into a session of its own (app -> browser hand-off, or a device that
+#  # cannot practically log in on its own). Disabled by default: delegation widens the
+#  # blast radius of a single stolen session, so it must be opted into deliberately.
+#  delegation:
+#    enabled: false # Whether to allow session delegation. Default: false
+#    ticket_expire: 60 # Ticket lifetime in SECONDS (not minutes) - it only has to survive one hop. Default: 60
+#    max_expire: 120 # Longest lifetime in minutes any delegated session may be granted. Non-positive means the parent session's own ceiling is the only limit. Default: 120
+#    allow_refresh: false # Whether a delegated session may be granted a refresh token. Without one it dies at its access token expiry and cannot be renewed. Default: false
+#    # Default lifetime in minutes per device category of the REDEEMING device, used when
+#    # the caller does not request one. 0 falls back to authorization.jwt.access.expire.
+#    # Every value is still clamped by max_expire and by the parent session's own ceiling.
+#    default_expire:
+#      phone: 0
+#      tablet: 0
+#      wearable: 0
+#      browser: 0
+#      mini_program: 0
+#      pc: 0
+#      unknown: 0
+#
+#  # How often (in seconds) the server flushes its batch of revoked access tokens to
+#  # connected clients over the ClientConnect stream. Lower = revocations propagate
+#  # faster but more frequent pushes. Non-positive falls back to 1. Default: 1
+#  revoke_sync_interval: 1
 
 ## Authorization Configurations
 #authorization:
@@ -591,33 +736,31 @@ mode: dev # pro | dev, Default: pro
 #    refresh_token:
 #      enabled: true # Support automatically obtaining access token through refresh token. Default: true
 #      expire: 600  # Refresh token expiration time in minutes. Default: 600 minutes.
-#
-#  access_control:
-#    format:
-#      role:
-#        name: "^[0-9a-zA-Z!@$._-]{6,128}$"
-#      policy:
-#        name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
-#        scope: "^[0-9a-zA-Z!@$._-/*?%&]{6,128}$"
-#        operation: "^[0-9a-zA-Z!@$._-]{6,128}$"
-#        time: "^[0-9a-zA-Z-:.]{6,128}$"
 
 ## Group Configurations
 #group:
-#  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#  name: "^[0-9a-zA-Z_.-]{2,36}$"
+#  # The following apply when a group is created with a prefix/suffix instead of an
+#  # exact name. The generated name is "<prefix><separator><token><separator><suffix>",
+#  # with empty parts and their separators omitted, and it must still match "name".
+#  affix: "^[0-9a-zA-Z_.-]{0,16}$" # pattern the prefix and suffix must match
+#  separator: "-"                  # joins prefix, token and suffix
+#  token_length: 8                 # length of the generated random token
+#  max_attempts: 5                 # retries when a generated name is already taken
 
 ## Role Configurations
 #role:
-#  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#  name: "^[0-9a-zA-Z_.-]{2,36}$"
 
 ## Policy Configurations
 #policy:
-#  name: "^[0-9a-zA-Z\u4e00-\u9fa5!@$._-]{2,36}$"
+#  name: "^[0-9a-zA-Z_.-]{2,36}$"
 
 ## Testing Configurations
 # Caution: This part should only be configured when testing.
 #testing:
 #  apple_token_secret: "REPLACE_WITH_SECRET"
+#  google_token_secret: "REPLACE_WITH_SECRET"
 #  wechat_bypass_server: true
 `
 	if err := os.WriteFile("controller/config/iam.yml", []byte(ymlIam), 0644); err != nil {

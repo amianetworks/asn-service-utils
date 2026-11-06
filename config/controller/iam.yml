@@ -40,32 +40,61 @@ services_provisioned: [ asn, swan, scarlette ]
 
 ## Database Configurations
 #db:
-#  provider: "mongodb" # Supported: "mongodb" | "filedb". Default: "mongodb"
-#  url: "localhost:27017" # Default: "localhost:27017"
+#  provider: "postgres" # Supported: "postgres" (PostgreSQL 18) | "mongodb" | "filedb". Default: "postgres"
+#  url: "localhost:5432/iam" # postgres: host:port/<database>[?options]; mongodb: host:port, e.g. "localhost:27017"; filedb: a directory. Default: "localhost:5432/iam"
 #  username: "amia" # Default: "amia"
-#  password: "REPLACE_WITH_SECRET" # Default: generated secret
+#  password: "REPLACE_WITH_SECRET" # Default: "2022"
+#  name: "iam" # IAM database name; each service uses "<name>_<service>". 1-32 of [A-Za-z0-9_-]. Changing it on an existing deployment points IAM at an empty database. Default: "iam"
 
 ## Email Service
-#smtp: # SMTP email server config
-#  enabled: false # Default: false
-#  expire : 5 # in minutes, Default: 5
-#  # Resend interval uses exponential backoff based on outcome.
-#  # After success: interval = resend_success_base * resend_amp_factor^successCount, capped at resend_success_max.
-#  # After failure: interval = resend_failure_base * resend_amp_factor^failureCount, capped at resend_failure_max.
-#  # A success resets the failure count.
-#  resend_success_base: 10    # in seconds, post-success cooldown base. Default: 10
-#  resend_failure_base: 30    # in seconds, per-send/failure penalty base. Default: 30
-#  resend_amp_factor: 2       # exponential amplification factor. Default: 2
-#  resend_success_max: 120    # in seconds, cap for success-side cooldown. Default: 120
-#  resend_failure_max: 3600   # in seconds, cap for failure-side penalty. Default: 3600
-#  resend_failure_decay: 3600 # in seconds, time per failure-count level decayed when idle. 0 = no decay. Default: 3600
-#  resend_success_decay: 86400 # in seconds, time per success-count level decayed when idle. 0 = no decay. Default: 86400
-#  tls: true
-#  host: "smtp.office365.com"
-#  email: "email@amiasys.com"
-#  username: "email@amiasys.com"
-#  password: ""
-#  port: 587
+mail: # Email service used to deliver verification codes
+  enabled: false # Default: false
+  # Only the keys of the selected type are read; the others are carried unread,
+  # so a deployment can switch back and forth by editing "type" alone.
+  provider:
+    type: "smtp" # Supported: "smtp" | "graph". Default: "smtp"
+    # For SMTP. Required when enabled: host, port, email.
+    tls: true # false skips verification of the relay's certificate (test relays only). Whether TLS is used at all follows the port.
+    host: "smtp.office365.com"
+    email: "email@amiasys.com"
+    username: "email@amiasys.com" # what authenticates; usually the same address
+    password: ""
+    port: 587
+    # For Graph. Required when enabled: tenant_id, client_id, certificate, mailbox.
+    # The registered application holds the Mail.Send APPLICATION permission, which
+    # reaches every mailbox in the tenant until an application access policy scopes
+    # it to the mailbox below. That policy is configured in the tenant.
+    tenant_id: "REPLACE_WITH_TENANT_ID"
+    client_id: "REPLACE_WITH_APPLICATION_ID"
+    certificate: "/etc/sapphire/cert/mailer.cert.pem" # PEM or legacy PKCS#12
+    private_key: "/etc/sapphire/cert/mailer.key.pem" # Leave out when one file holds both. An encrypted PEM key is not supported.
+    certificate_password: "" # PKCS#12 only. Default: none
+    mailbox: "noreply.swanarc@amianetworks.com" # the Exchange Online mailbox to send as
+  # Sender display name per service. It is what a recipient sees beside the address,
+  # and it titles the subject and the body, so a code sent for one product does not
+  # introduce itself as another. A service listed nowhere here sends as "IAM".
+  nicknames:
+    - service: "swan"
+      nickname: "SwanArc"
+
+## Verification Codes
+#
+# How long a code lives and how often one is sent, the same for SMS and email.
+# These were set under "mail" and "phone" before; a value still set there must
+# match the one here, or IAM does not start.
+verification_code:
+  expire: 5 # in minutes, Default: 5
+  # Resend interval uses exponential backoff based on outcome, per recipient.
+  # After success: interval = resend_success_base * resend_amp_factor^successCount, capped at resend_success_max.
+  # After failure: interval = resend_failure_base * resend_amp_factor^failureCount, capped at resend_failure_max.
+  # A success resets the failure count.
+  resend_success_base: 10    # in seconds, post-success cooldown base. Default: 10
+  resend_failure_base: 30    # in seconds, per-send/failure penalty base. Default: 30
+  resend_amp_factor: 2       # exponential amplification factor. Default: 2
+  resend_success_max: 120    # in seconds, cap for success-side cooldown. Default: 120
+  resend_failure_max: 3600   # in seconds, cap for failure-side penalty. Default: 3600
+  resend_failure_decay: 3600 # in seconds, time per failure-count level decayed when idle. 0 = no decay. Default: 3600
+  resend_success_decay: 86400 # in seconds, time per success-count level decayed when idle. 0 = no decay. Default: 86400
 
 ## Phone Service
 #
@@ -76,18 +105,6 @@ services_provisioned: [ asn, swan, scarlette ]
 #
 #phone:
 #  enabled: false # Default: false
-#  expire : 5 # in minutes, Default: 5
-#  # Resend interval uses exponential backoff based on outcome.
-#  # After success: interval = resend_success_base * resend_amp_factor^successCount, capped at resend_success_max.
-#  # After failure: interval = resend_failure_base * resend_amp_factor^failureCount, capped at resend_failure_max.
-#  # A success resets the failure count.
-#  resend_success_base: 10    # in seconds, post-success cooldown base. Default: 10
-#  resend_failure_base: 30    # in seconds, per-send/failure penalty base. Default: 30
-#  resend_amp_factor: 2       # exponential amplification factor. Default: 2
-#  resend_success_max: 120    # in seconds, cap for success-side cooldown. Default: 120
-#  resend_failure_max: 3600   # in seconds, cap for failure-side penalty. Default: 3600
-#  resend_failure_decay: 3600 # in seconds, time per failure-count level decayed when idle. 0 = no decay. Default: 3600
-#  resend_success_decay: 86400 # in seconds, time per success-count level decayed when idle. 0 = no decay. Default: 86400
 #  country_code:
 #    mode: all # all | include | exclude, Default: all
 #    codes: ["86", "852", "1"] # Default: []
@@ -100,6 +117,7 @@ services_provisioned: [ asn, swan, scarlette ]
 #      secret_key: "" # Tencent: Secret Key; Twilio: Auth Token
 #      sign_name: "" # Aliyun and Tencent needed
 #      template_id: "" # Aliyun and Tencent needed
+#      from: "18773124359" # Aliyun outside 86 only: the sender ID or number. Default: 18773124359
 #    1: # if multiple country codes are using the same config, use comma to separate them, i.e., 86,852,853
 #      provider: "tencent" # "tencent" || "aliyun" || "twilio"
 #      app_id: "" # for Twilio, use Verify Service SID
@@ -108,6 +126,13 @@ services_provisioned: [ asn, swan, scarlette ]
 #      secret_key: "" # Tencent: Secret Key; Twilio: Auth Token
 #      sign_name: "" # Aliyun and Tencent needed
 #      template_id: "" # Aliyun and Tencent needed
+
+## Records of the verification codes sent in pro mode: to whom, when, through which provider and
+## what it answered, never the code. Kept in the IAM database, in verification_code_message and
+## verification_code_delivery. Disabled, codes go straight to the providers and nothing is kept.
+#code_records:
+#  enabled: true # Default: true
+#  retention: 0 # in days, 0 keeps them forever. Default: 0
 
 ## Sign In with Apple
 #apple:
@@ -175,22 +200,22 @@ services_provisioned: [ asn, swan, scarlette ]
 #    display_name: "ASN" # Default: service name
 #    extra_allowed_origins: [] # By default, "https://"+server_domain is allowed for each server domain. If additional origins are needed, add them here.
 #    timeouts:
-#      login: 60 # session expiration in seconds, Default: 60
-#      registration: 60 # session expiration in seconds, Default: 60
+#      login: 300 # session expiration in seconds, Default: 300
+#      registration: 300 # session expiration in seconds, Default: 300
 #  swan:
 #    server_domains: [ "swan.amiasys.com" ] # Leave empty to disable Passkey registration / verification.
 #    display_name: "SWAN" # Default: service name
 #    extra_allowed_origins: [ ] # By default, "https://"+server_domain is allowed for each server domain. If additional origins are needed, add them here.
 #    timeouts:
-#      login: 60 # session expiration in seconds, Default: 60
-#      registration: 60 # session expiration in seconds, Default: 60
+#      login: 300 # session expiration in seconds, Default: 300
+#      registration: 300 # session expiration in seconds, Default: 300
 #  scarlette:
 #    server_domains: [ "scarlette.amiasys.com" ] # Leave empty to disable Passkey registration / verification.
 #    display_name: "Scarlette" # Default: service name
 #    extra_allowed_origins: [ ] # By default, "https://"+server_domain is allowed for each server domain. If additional origins are needed, add them here.
 #    timeouts:
-#      login: 60 # session expiration in seconds, Default: 60
-#      registration: 60 # session expiration in seconds, Default: 60
+#      login: 300 # session expiration in seconds, Default: 300
+#      registration: 300 # session expiration in seconds, Default: 300
 
 ## LDAP Configurations
 #ldap:
@@ -199,7 +224,7 @@ services_provisioned: [ asn, swan, scarlette ]
 #  url: "ldap://localhost:389" # Default: "ldap://localhost:389"
 #  base_dn: "dc=amianetworks,dc=com" # Default: "dc=amianetworks,dc=com"
 #  password_cn: "cn=admin" # Default: "cn=admin"
-#  password: "REPLACE_WITH_SECRET" # Default: generated secret
+#  password: "REPLACE_WITH_SECRET" # Default: "2022"
 #  ous:
 #    account: "People"
 #    group: "Group"
@@ -285,6 +310,7 @@ services_provisioned: [ asn, swan, scarlette ]
 #    wait_max: 43200 # Maximum waiting time after an attempt in second. Default: 43200 Seconds
 #    amp_factor: 2 # The waiting time after each failure will be extended according to the amplification factor. Default: 3
 #    mfa: 5 # Default: 5
+#    code_max_attempts: 0 # Wrong codes a verification code takes before a new one is needed. 0 = no limit. Default: 0
 #
 #  # Config the concurrent authentication to limit the number of concurrent authentication entity allowed per user.
 #  # You can configure the maximum number of entities allowed to log in, and if exceeded, it will be handled according to the auto replacement policy.
