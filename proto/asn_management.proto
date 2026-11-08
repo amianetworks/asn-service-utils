@@ -2734,6 +2734,20 @@ service Management {
       get: "/service"
     };
   }
+  // Get a service's catalog: its display, grouping, configuration schema,
+  // data items and packet capture need.
+  //
+  // Auth: any signed-in account.
+  //
+  // Request: `GET /service/catalog?service=<name>`; `service` defaults to
+  // `asn`.
+  //
+  // Errors: `shared.resource.not_found` when the service has no catalog.
+  rpc GetServiceCatalog       (ServiceCatalog.Req) returns (ServiceCatalog) {
+    option (google.api.http) = {
+      get: "/service/catalog"
+    };
+  }
   // List the services present on nodes of a network.
   //
   // Returns the distinct names of services that are in the install set of at
@@ -3149,6 +3163,27 @@ service Management {
       get: "/metrics/host/node"
     };
   }
+  // Get a node's sFlow collector (workflow/alpha/ASN.NetworkCollection.md
+  // §4.1): off by default, UDP port 6343.
+  //
+  // Auth: `view` or `manage` on the node's root, or system access.
+  rpc GetNodeSFlow                 (HostMetrics.NodeReq)                returns (HostMetrics.SFlow) {
+    option (google.api.http) = {
+      get: "/sflow/node"
+    };
+  }
+  // Set a node's sFlow collector; the node applies it at once when
+  // connected.
+  //
+  // Auth: `manage` on the node's root, or system `manage`.
+  //
+  // Errors: `shared.request.param_invalid` for a port out of 1-65535.
+  rpc SetNodeSFlow                 (HostMetrics.SFlow)                  returns (HostMetrics.SFlow) {
+    option (google.api.http) = {
+      put: "/sflow/node"
+      body: "*"
+    };
+  }
 
   // --- Events ---
   //
@@ -3325,6 +3360,79 @@ service Management {
   rpc ListDeliveries               (Events.DeliveryListReq)             returns (Events.DeliveryList) {
     option (google.api.http) = {
       get: "/events/deliveries"
+    };
+  }
+
+  // --- Logs ---
+  //
+  // Log collection (workflow/alpha/ASN.LogCollection.md): each node's syslog
+  // sources, the file parsers bound to node labels, and the stored lines.
+  // Times are unix ms; pages start at 1 with a size of 1-500. The export is
+  // a CSV download, `GET /logs/export` with the query of ListLogs.
+
+  // Get a node's log collection, with the defaults filled in.
+  //
+  // Auth: `view` or `manage` on the node's root, or system access.
+  rpc GetNodeLogCollection         (Logs.NodeRef)                       returns (Logs.NodeCollection) {
+    option (google.api.http) = {
+      get: "/logs/node"
+    };
+  }
+  // Set a node's log collection; the node applies it at once when connected.
+  //
+  // Auth: `manage` on the node's root, or system `manage`.
+  //
+  // Errors: `shared.request.param_invalid` for a protocol other than udp or
+  // tcp, or a port out of 1-65535.
+  rpc SetNodeLogCollection         (Logs.NodeCollection)                returns (Logs.NodeCollection) {
+    option (google.api.http) = {
+      put: "/logs/node"
+      body: "*"
+    };
+  }
+  // List the log parsers, the NGFW preset first.
+  //
+  // Auth: system access.
+  rpc ListLogParsers               (Empty)                              returns (Logs.ParserList) {
+    option (google.api.http) = {
+      get: "/logs/parsers"
+    };
+  }
+  // Create a file parser: a path read on the nodes of its platform labels, and grok
+  // patterns tried in order.
+  //
+  // Auth: system `manage`.
+  //
+  // Errors: `shared.request.param_invalid` (`errMeta.name`) for a pattern
+  // that does not compile; `asn.label.not_found`.
+  rpc CreateLogParser              (Logs.Parser)                        returns (Logs.Parser) {
+    option (google.api.http) = {
+      post: "/logs/parser"
+      body: "*"
+    };
+  }
+  // Replace a parser. The NGFW preset takes only its labels and enable.
+  rpc UpdateLogParser              (Logs.Parser)                        returns (Logs.Parser) {
+    option (google.api.http) = {
+      put: "/logs/parser"
+      body: "*"
+    };
+  }
+  // Delete a parser; its stored lines stay until retention.
+  //
+  // Errors: `shared.request.not_supported` for the NGFW preset.
+  rpc DeleteLogParser              (Logs.ParserRef)                     returns (Empty) {
+    option (google.api.http) = {
+      delete: "/logs/parser"
+    };
+  }
+  // List stored log lines, newest first: of a root (`rootId`), of the nodes
+  // now in a network (`networkId`, `includeSubnetwork`), or of nodes.
+  //
+  // Auth: `view` or `manage` on the root or network, or system access.
+  rpc ListLogs                     (Logs.Query)                         returns (Logs.Records) {
+    option (google.api.http) = {
+      get: "/logs"
     };
   }
 
@@ -5779,6 +5887,11 @@ message HostMetrics {
     int64 time = 2;
     map<string, double> fields = 3;
     map<string, string> tags = 4;
+    // ListHostMetrics only: the node's risk (`none`, or the highest level of
+    // its incidents open or opened within 24 hours) and open incidents
+    // (workflow/alpha/ASN.DeviceCloseOut.md §4).
+    string risk = 5;
+    int32 open_incidents = 6;
   }
   message List {
     repeated Latest nodes = 1;
@@ -5808,6 +5921,12 @@ message HostMetrics {
   message NodeReq {
     string node_id = 1;
   }
+  // A node's sFlow collector switch.
+  message SFlow {
+    string node_id = 1;
+    bool enable = 2;
+    int32 port = 3; // 0: 6343
+  }
   message Process {
     int32 pid = 1;
     string name = 2;
@@ -5822,11 +5941,42 @@ message HostMetrics {
     repeated Process memory = 3;
     repeated Process io = 4;
   }
+  // A node's host information from its last registration
+  // (workflow/alpha/ASN.DeviceCloseOut.md §3).
+  message HostInfo {
+    message Interface {
+      string name = 1;
+      string mac = 2;
+      repeated string addrs = 3; // CIDR
+      int32 mtu = 4;
+    }
+    string hostname = 1;
+    string os = 2;
+    string platform = 3;
+    string platform_version = 4;
+    string kernel_version = 5;
+    string arch = 6;
+    int64 boot_time = 7; // unix ms
+    string cpu_model = 8;
+    int32 cpu_cores = 9;
+    int32 cpu_threads = 10;
+    uint64 memory_total = 11; // bytes
+    uint64 disk_total = 12;   // bytes
+    repeated Interface interfaces = 13;
+    int64 reported_at = 14; // unix ms
+  }
   message Detail {
     Latest host = 1;
     repeated Latest disks = 2;
     repeated Latest gpus = 3;
     TopProcesses top = 4;
+    // Network data (workflow/alpha/ASN.NetworkCollection.md §6).
+    repeated Latest nics = 5;
+    repeated Latest sflow_interfaces = 6;
+    repeated Latest sflow_agents = 7;
+    HostInfo info = 8; // absent from a node that sends none
+    string risk = 9;
+    int32 open_incidents = 10;
   }
 }
 
@@ -5846,13 +5996,16 @@ message Events {
     string name = 1;
     string type = 2;
     repeated string values = 3;
+    string unit = 4;
   }
+  // demand: always, or onDemand (produced while a rule reads it).
   message Item {
     string name = 1;
     bool stored = 2;
     bool node = 3;
     repeated Field fields = 4;
     repeated Field tags = 5;
+    string demand = 6;
   }
   message Catalog {
     string service = 1;
@@ -5918,6 +6071,9 @@ message Events {
     repeated string capture = 18;
     int64 create_time = 19;
     int64 update_time = 20;
+    // An asn rule bound to a service reads only the nodes that carry it;
+    // set for a service context that is not super.
+    string bound = 21;
   }
   message RuleListReq {
     string root_id = 1;
@@ -5925,6 +6081,7 @@ message Events {
     string enable = 3; // "", "true" or "false"
     int32 page = 4;
     int32 page_size = 5;
+    string service = 6; // the namespace, asn by default
   }
   message RuleList {
     repeated Rule rules = 1;
@@ -5940,7 +6097,7 @@ message Events {
     int64 start = 7;
     int64 stop = 8;
     int32 page = 9;
-    int32 page_size = 10;
+    int32 page_size = 10;    string service = 11; // the namespace, asn by default
   }
   message Incident {
     string id = 1;
@@ -5971,6 +6128,7 @@ message Events {
     string keyword = 2;
     int32 page = 3;
     int32 page_size = 4;
+    string service = 5; // the namespace, asn by default
   }
   // A notify rule of a root or the platform scope. level_op ge (default),
   // le or eq; send_on: open, closed, recorded.
@@ -6443,5 +6601,99 @@ message Ops {
     string service_response = 4;
     // Error message returned by the service on the node, empty on success.
     string service_err = 5;
+  }
+}
+
+// A service catalog (workflow/alpha/ASN.ServiceCatalog.md §3).
+message ServiceCatalog {
+  message Req {
+    string service = 1; // asn by default
+  }
+  message Display {
+    map<string, string> name = 1; // language (zh-CN, en-US) -> name
+    string icon = 2;
+    int32 order = 3;
+    string url = 4;
+  }
+  // A configuration schema field: type string, int, bool, enum, duration,
+  // ip, cidr, list (elem), object (fields) or raw.
+  message Field {
+    string name = 1;
+    string type = 2;
+    bool required = 3;
+    optional double min = 4;
+    optional double max = 5;
+    repeated string values = 6;
+    Field elem = 7;
+    repeated Field fields = 8;
+    bool restart_required = 9;
+    map<string, string> label = 10;
+  }
+  string service = 1;
+  Display display = 2;
+  string grouping = 3; // asn-groups or none
+  bool has_config = 4; // false: the service declares no configuration schema
+  bool config_raw = 5; // the configuration takes any YAML
+  repeated Field config = 6;
+  repeated Events.Item items = 7;
+  bool packet_capture = 8;
+}
+
+// Log collection (workflow/alpha/ASN.LogCollection.md).
+message Logs {
+  message NodeRef {
+    string node_id = 1;
+  }
+  // A node's syslog sources: local syslog (on by default) and the network
+  // receiver (off by default, tcp 6514).
+  message NodeCollection {
+    string node_id = 1;
+    optional bool local = 2;
+    bool remote_enable = 3;
+    string remote_protocol = 4; // udp or tcp
+    int32 remote_port = 5;
+  }
+  message Parser {
+    string id = 1;
+    string name = 2;
+    string path = 3;              // the file read on each node
+    repeated string patterns = 4; // grok, %{PATTERN:name[:int|float|tag|string]}
+    repeated string label_ids = 5;
+    bool enable = 6;
+    bool builtin = 7;             // the NGFW preset: no path or patterns
+    int64 create_time = 8;
+    int64 update_time = 9;
+  }
+  message ParserList {
+    repeated Parser parsers = 1;
+  }
+  message ParserRef {
+    string id = 1;
+  }
+  message Query {
+    string item = 1; // asn.syslog (default), asn.log, asn.ngfw_ips, asn.ngfw_behavior
+    string root_id = 2;
+    string network_id = 3;
+    bool include_subnetwork = 4;
+    repeated string node_ids = 5;
+    int64 start = 6;
+    int64 stop = 7;
+    repeated string severities = 8; // emerg..debug
+    repeated string facilities = 9;
+    string app_name = 10;
+    string keyword = 11;            // in the message
+    string parser_id = 12;          // asn.log
+    int32 page = 13;
+    int32 page_size = 14;
+  }
+  message Record {
+    int64 time = 1;
+    string node_id = 2;
+    map<string, string> tags = 3;
+    map<string, string> fields = 4; // as text
+  }
+  message Records {
+    repeated Record records = 1;
+    int32 total = 2;
   }
 }
