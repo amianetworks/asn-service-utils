@@ -3082,6 +3082,252 @@ service Management {
     };
   }
 
+  // --- Host Metrics ---
+  //
+  // Host resource metrics of the nodes (workflow/alpha/ASN.HostResourceMetrics.md
+  // §7): CPU, memory, swap, load, processes, disks and GPUs, sampled on each
+  // node every `metrics.host.interval` and kept for `metrics.host.retention`.
+  // Items: `host` (one series per node), `host_disk` (one per mount, tags
+  // `Path`, `Device`), `host_gpu` (one per GPU, tags `Index`, `Name`). Values
+  // are in base units: bytes, bytes/s, %, seconds, °C, W; load is per logical
+  // CPU.
+  //
+  // Errors common to the host metric reads: `shared.system.unavailable` when
+  // the controller has no host metric store open.
+
+  // List the nodes of a network with the latest `host` fields of each.
+  //
+  // A node with no sample within the last day is listed with `time` 0 and
+  // no fields. Sorted by `sort` (a `host` field; nodes without it last),
+  // then by node name; without `sort`, by node name.
+  //
+  // Auth: `view` or `manage` access to the network.
+  //
+  // Request (query parameters): `networkId` (required), `includeSubnetwork`,
+  // `nodeIds` (optional, narrows the list), `sort`, `desc`, `page` (from 1),
+  // `pageSize` (1-100).
+  //
+  // Errors: `asn.network.not_found`; `shared.request.param_invalid` for an
+  // unknown `sort` or a `pageSize` out of range.
+  rpc ListHostMetrics              (HostMetrics.ListReq)                returns (HostMetrics.List) {
+    option (google.api.http) = {
+      get: "/metrics/host"
+    };
+  }
+  // Aggregate fields of an item over time for some nodes.
+  //
+  // One series per node (and mount or GPU), with one bucket per window of
+  // [start, stop). The window is the smallest multiple of the sample
+  // interval that keeps a series within 1000 buckets; it is returned.
+  //
+  // Auth: `view` or `manage` access to every node's network.
+  //
+  // Request (query parameters): `nodeIds` (1-20), `item` (`host`,
+  // `host_disk`, `host_gpu`), `fields` (1-8 fields of the item), `fn`
+  // (`mean`, `max`, `min`, `last`), `start` (unix ms, within the retention),
+  // `stop` (unix ms, default now).
+  //
+  // Errors: `shared.request.required_field_missing` (`node_ids`);
+  // `shared.request.param_invalid` with `errMeta.field` naming the
+  // parameter; `asn.node.not_found`; `shared.auth.permission_denied`.
+  rpc GetHostMetricSeries          (HostMetrics.SeriesReq)              returns (HostMetrics.SeriesList) {
+    option (google.api.http) = {
+      get: "/metrics/host/series"
+    };
+  }
+  // A node's latest `host` sample, its mounts and GPUs, and its top
+  // processes by CPU, memory and disk I/O (the latest list only; none until
+  // the node reports after a controller start).
+  //
+  // Auth: `view` or `manage` access to the node's network.
+  //
+  // Request (query parameters): `nodeId`.
+  //
+  // Errors: `asn.node.not_found`; `shared.auth.permission_denied`.
+  rpc GetNodeHostDetail            (HostMetrics.NodeReq)                returns (HostMetrics.Detail) {
+    option (google.api.http) = {
+      get: "/metrics/host/node"
+    };
+  }
+
+  // --- Events ---
+  //
+  // Event rules, incidents, notify rules, contact groups and deliveries
+  // (workflow/alpha/ASN.Events.md). Only the `asn` namespace until step 5a.
+  // A root is a root network ID, or `platform` for the platform scope
+  // (system access only). Times are unix ms; durations seconds; pages start
+  // at 1 with a size of 1-500. Objects a caller cannot read are
+  // `shared.resource.not_found`.
+
+  // The data items rules can read, with their fields and tags, and the
+  // condition modes, aggregates, levels and handlings.
+  //
+  // Auth: any signed-in account.
+  rpc GetEventCatalog              (Events.CatalogReq)                  returns (Events.Catalog) {
+    option (google.api.http) = {
+      get: "/events/catalog"
+    };
+  }
+  // List the event rules of a root, with the rules for all roots, or of the
+  // platform scope.
+  //
+  // Auth: `view` or `manage` on the root, or system access.
+  rpc ListEventRules               (Events.RuleListReq)                 returns (Events.RuleList) {
+    option (google.api.http) = {
+      get: "/events/rules"
+    };
+  }
+  // Get an event rule.
+  rpc GetEventRule                 (Events.Id)                          returns (Events.Rule) {
+    option (google.api.http) = {
+      get: "/events/rule"
+    };
+  }
+  // Create an event rule.
+  //
+  // Auth: `manage` on the root; system `manage` for `all_roots` and
+  // `platform`.
+  //
+  // Errors: `asn.event.undeclared_data` and `asn.event.type_mismatch`
+  // (`errMeta.name`); `asn.label.not_found`; `asn.node.not_found`;
+  // `shared.request.param_invalid`.
+  rpc CreateEventRule              (Events.Rule)                        returns (Events.Rule) {
+    option (google.api.http) = {
+      post: "/events/rule"
+      body: "*"
+    };
+  }
+  // Replace an event rule. Auth and errors as create, on both roots.
+  rpc UpdateEventRule              (Events.Rule)                        returns (Events.Rule) {
+    option (google.api.http) = {
+      put: "/events/rule"
+      body: "*"
+    };
+  }
+  // Delete an event rule.
+  //
+  // Errors: `asn.event.rule_in_use` (`errMeta.notify_rules`) while notify
+  // rules list it.
+  rpc DeleteEventRule              (Events.Id)                          returns (Empty) {
+    option (google.api.http) = {
+      delete: "/events/rule"
+    };
+  }
+  // Enable or disable an event rule.
+  rpc SetEventRuleEnable           (Events.Enable)                      returns (Empty) {
+    option (google.api.http) = {
+      put: "/events/rule/enable"
+      body: "*"
+    };
+  }
+  // List incidents, newest first: of a root (`rootId`) or of the nodes now
+  // in a network (`networkId`, `includeSubnetwork`).
+  //
+  // Auth: `view` or `manage` on the root or network, or system access.
+  rpc ListIncidents                (Events.IncidentListReq)             returns (Events.IncidentList) {
+    option (google.api.http) = {
+      get: "/events/incidents"
+    };
+  }
+  // Get an incident.
+  rpc GetIncident                  (Events.Id)                          returns (Events.Incident) {
+    option (google.api.http) = {
+      get: "/events/incident"
+    };
+  }
+  // Close an incident by hand.
+  //
+  // Auth: `manage` on its root, or system `manage`.
+  //
+  // Errors: `shared.resource.state_invalid` for an `auto` incident its rule
+  // still judges.
+  rpc ResolveIncident              (Events.Id)                          returns (Events.Incident) {
+    option (google.api.http) = {
+      put: "/events/incident/resolve"
+      body: "*"
+    };
+  }
+  // List the notify rules of a root or of the platform scope.
+  rpc ListNotifyRules              (Events.ScopedListReq)               returns (Events.NotifyRuleList) {
+    option (google.api.http) = {
+      get: "/events/notify-rules"
+    };
+  }
+  // Get a notify rule.
+  rpc GetNotifyRule                (Events.Id)                          returns (Events.NotifyRule) {
+    option (google.api.http) = {
+      get: "/events/notify-rule"
+    };
+  }
+  // Create a notify rule.
+  //
+  // Auth: `manage` on the root; system `manage` for `platform`.
+  //
+  // Errors: `asn.event.contact_namespace` for a contact group of another
+  // root; `shared.request.param_invalid` for an event rule the root does not
+  // see.
+  rpc CreateNotifyRule             (Events.NotifyRule)                  returns (Events.NotifyRule) {
+    option (google.api.http) = {
+      post: "/events/notify-rule"
+      body: "*"
+    };
+  }
+  // Replace a notify rule; its root stays.
+  rpc UpdateNotifyRule             (Events.NotifyRule)                  returns (Events.NotifyRule) {
+    option (google.api.http) = {
+      put: "/events/notify-rule"
+      body: "*"
+    };
+  }
+  // Delete a notify rule.
+  rpc DeleteNotifyRule             (Events.Id)                          returns (Empty) {
+    option (google.api.http) = {
+      delete: "/events/notify-rule"
+    };
+  }
+  // Enable or disable a notify rule.
+  rpc SetNotifyRuleEnable          (Events.Enable)                      returns (Empty) {
+    option (google.api.http) = {
+      put: "/events/notify-rule/enable"
+      body: "*"
+    };
+  }
+  // List the contact groups of a root or of the platform scope, by name.
+  rpc ListContactGroups            (Events.ScopedListReq)               returns (Events.ContactGroupList) {
+    option (google.api.http) = {
+      get: "/events/contact-groups"
+    };
+  }
+  // Create a contact group.
+  rpc CreateContactGroup           (Events.ContactGroup)                returns (Events.ContactGroup) {
+    option (google.api.http) = {
+      post: "/events/contact-group"
+      body: "*"
+    };
+  }
+  // Replace a contact group; its root stays.
+  rpc UpdateContactGroup           (Events.ContactGroup)                returns (Events.ContactGroup) {
+    option (google.api.http) = {
+      put: "/events/contact-group"
+      body: "*"
+    };
+  }
+  // Delete a contact group.
+  //
+  // Errors: `shared.resource.in_use` while a notify rule names it.
+  rpc DeleteContactGroup           (Events.Id)                          returns (Empty) {
+    option (google.api.http) = {
+      delete: "/events/contact-group"
+    };
+  }
+  // List the deliveries of a root's or the platform's notify rules, newest
+  // first, each dispatch with its mail deliveries.
+  rpc ListDeliveries               (Events.DeliveryListReq)             returns (Events.DeliveryList) {
+    option (google.api.http) = {
+      get: "/events/deliveries"
+    };
+  }
+
   // --- Service Metrics ---
 
   // Get the metrics templates of services for a network.
@@ -5516,6 +5762,290 @@ message Label {
 
 // Operation audit (workflow/alpha/ASN.OperationAudit.md). Times are unix
 // milliseconds.
+message HostMetrics {
+  message ListReq {
+    string network_id = 1;
+    bool include_subnetwork = 2;
+    repeated string node_ids = 3;
+    string sort = 4;
+    bool desc = 5;
+    int32 page = 6;
+    int32 page_size = 7;
+  }
+  // The latest sample of a series: its time (unix ms, 0 for none), its
+  // fields, and, for a mount or GPU, its tags.
+  message Latest {
+    string node_id = 1;
+    int64 time = 2;
+    map<string, double> fields = 3;
+    map<string, string> tags = 4;
+  }
+  message List {
+    repeated Latest nodes = 1;
+    int64 total = 2;
+  }
+  message SeriesReq {
+    repeated string node_ids = 1;
+    string item = 2;
+    repeated string fields = 3;
+    string fn = 4;
+    int64 start = 5;
+    int64 stop = 6;
+  }
+  message Bucket {
+    int64 time = 1; // window start, unix ms
+    map<string, double> values = 2;
+  }
+  message Series {
+    string node_id = 1;
+    map<string, string> tags = 2;
+    repeated Bucket buckets = 3;
+  }
+  message SeriesList {
+    repeated Series series = 1;
+    int64 window_seconds = 2;
+  }
+  message NodeReq {
+    string node_id = 1;
+  }
+  message Process {
+    int32 pid = 1;
+    string name = 2;
+    string user = 3;
+    double cpu = 4;    // % of one CPU
+    double rss = 5;    // bytes
+    double io_bps = 6; // bytes/s
+  }
+  message TopProcesses {
+    int64 time = 1; // unix ms of the sample
+    repeated Process cpu = 2;
+    repeated Process memory = 3;
+    repeated Process io = 4;
+  }
+  message Detail {
+    Latest host = 1;
+    repeated Latest disks = 2;
+    repeated Latest gpus = 3;
+    TopProcesses top = 4;
+  }
+}
+
+message Events {
+  message Id {
+    string id = 1;
+  }
+  message Enable {
+    string id = 1;
+    bool enable = 2;
+  }
+  message CatalogReq {
+    string service = 1; // default asn
+  }
+  // A declared field or tag: type number, enum or text; values of an enum.
+  message Field {
+    string name = 1;
+    string type = 2;
+    repeated string values = 3;
+  }
+  message Item {
+    string name = 1;
+    bool stored = 2;
+    bool node = 3;
+    repeated Field fields = 4;
+    repeated Field tags = 5;
+  }
+  message Catalog {
+    string service = 1;
+    repeated Item items = 2;
+    repeated string modes = 3;
+    repeated string aggregates = 4;
+    repeated string levels = 5;
+    repeated string handlings = 6;
+    repeated string compare_ops = 7;
+    repeated string changes = 8;
+  }
+  message TagFilter {
+    string tag = 1;
+    repeated string values = 2; // empty: the tag is present
+    bool exclude = 3;
+  }
+  // A condition, as am.modules event's: mode threshold, duration,
+  // aggregate, count, ratio, change, absence or instant.
+  message Condition {
+    string mode = 1;
+    string field = 2;
+    string tag = 3;
+    string op = 4;
+    double value = 5;
+    repeated string values = 6;
+    int64 window_seconds = 7;
+    string aggregate = 8;
+    int32 count = 9;
+    double percent = 10;
+    string change = 11;
+    int64 max_gap_seconds = 12;
+    map<string, TagValues> tags = 13;
+  }
+  message TagValues {
+    repeated string values = 1;
+  }
+  message LevelFrom {
+    string tag = 1;
+    string field = 2;
+    map<string, string> map = 3; // value -> level name
+    string default = 4;
+  }
+  // An event rule. scope: root (root_id), all_roots or platform; devices:
+  // all, label (label_id) or nodes (node_ids, a root rule only).
+  message Rule {
+    string id = 1;
+    string name = 2;
+    bool enable = 3;
+    string service = 4;
+    string scope = 5;
+    string root_id = 6;
+    string devices = 7;
+    string label_id = 8;
+    repeated string node_ids = 9;
+    string item = 10;
+    repeated TagFilter filters = 11;
+    repeated Condition conditions = 12;
+    repeated string group_by = 13;
+    string level = 14;
+    LevelFrom level_from = 15;
+    string handling = 16;
+    int64 resolve_after_seconds = 17;
+    repeated string capture = 18;
+    int64 create_time = 19;
+    int64 update_time = 20;
+  }
+  message RuleListReq {
+    string root_id = 1;
+    string keyword = 2;
+    string enable = 3; // "", "true" or "false"
+    int32 page = 4;
+    int32 page_size = 5;
+  }
+  message RuleList {
+    repeated Rule rules = 1;
+    int64 total = 2;
+  }
+  message IncidentListReq {
+    string root_id = 1;
+    string network_id = 2;
+    bool include_subnetwork = 3;
+    string rule_id = 4;
+    repeated string levels = 5;
+    string state = 6; // open, closed or recorded
+    int64 start = 7;
+    int64 stop = 8;
+    int32 page = 9;
+    int32 page_size = 10;
+  }
+  message Incident {
+    string id = 1;
+    string rule_id = 2;
+    string rule_name = 3;
+    string service = 4;
+    string root_id = 5;
+    string node_id = 6;
+    string node_name = 7; // the node's current name
+    map<string, string> group = 8;
+    string level = 9;
+    string state = 10;
+    double value = 11;
+    map<string, string> detail = 12;
+    int64 start_time = 13;
+    int64 clear_time = 14;
+    int64 end_time = 15;
+    string close_reason = 16;
+    string handling = 17;
+    string item = 18;
+  }
+  message IncidentList {
+    repeated Incident incidents = 1;
+    int64 total = 2;
+  }
+  message ScopedListReq {
+    string root_id = 1;
+    string keyword = 2;
+    int32 page = 3;
+    int32 page_size = 4;
+  }
+  // A notify rule of a root or the platform scope. level_op ge (default),
+  // le or eq; send_on: open, closed, recorded.
+  message NotifyRule {
+    string id = 1;
+    string name = 2;
+    bool enable = 3;
+    string service = 4;
+    string root_id = 5;
+    string level_op = 6;
+    string level = 7;
+    repeated string event_rule_ids = 8;
+    repeated string node_ids = 9;
+    repeated string send_on = 10;
+    int64 cooldown_seconds = 11;
+    int64 min_interval_seconds = 12;
+    repeated string contact_group_ids = 13;
+    int64 create_time = 14;
+    int64 update_time = 15;
+  }
+  message NotifyRuleList {
+    repeated NotifyRule rules = 1;
+    int64 total = 2;
+  }
+  message Recipient {
+    string address = 1;
+    string name = 2;
+  }
+  message ContactGroup {
+    string id = 1;
+    string name = 2;
+    string service = 3;
+    string root_id = 4;
+    repeated Recipient to = 5;
+    repeated Recipient cc = 6;
+    int64 create_time = 7;
+    int64 update_time = 8;
+  }
+  message ContactGroupList {
+    repeated ContactGroup groups = 1;
+    int64 total = 2;
+  }
+  message DeliveryListReq {
+    string root_id = 1;
+    string notify_rule_id = 2;
+    int64 start = 3;
+    int64 stop = 4;
+    int32 page = 5;
+    int32 page_size = 6;
+  }
+  // A mail delivery: status sent, failed, dropped or kind_unavailable.
+  message Mail {
+    repeated string addresses = 1;
+    string status = 2;
+    string error_code = 3;
+    string reason = 4;
+    int64 time = 5;
+  }
+  message Delivery {
+    string id = 1;
+    string notify_rule_id = 2;
+    string notify_rule_name = 3;
+    repeated string incident_ids = 4;
+    int32 omitted = 5;
+    string message_id = 6;
+    string error = 7;
+    int64 time = 8;
+    repeated Mail mails = 9;
+  }
+  message DeliveryList {
+    repeated Delivery deliveries = 1;
+    int64 total = 2;
+  }
+}
+
 message Audit {
   // A query: conditions, a time range and, per call, paging or buckets.
   // Conditions match exactly; a repeated condition matches any of its values;
