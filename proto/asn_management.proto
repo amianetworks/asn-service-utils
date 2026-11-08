@@ -53,24 +53,15 @@ service Management {
   // ---------------------------------------------------------------------------
   // 1 — Auth (Verification Codes, Login, MFA, Factors, Tokens, Logout)
   //
-  // Service context: every Auth RPC runs under one IAM service, named by the
-  // metadata key `asn-service` (REST: header `X-ASN-Service`). Absent or `asn`:
-  // `asn`. Any other value must be a loaded service that IAM provisions,
-  // otherwise `shared.service.not_found` (meta `service`). Under a service S:
-  // only accounts registered with S log in (others get IAM's
-  // `shared.account.not_found`); the login methods, MFA setting and
-  // third-party and passkey bindings are S's; tokens get S's lifetimes
-  // (`service[].login.expiration`, else `login.expiration`); login and factor
-  // records carry `Service` S. A token issued under S is valid wherever the
-  // account is registered, including the rest of this API (members of S are
-  // members of `asn`). Calls outside this section ignore the context.
+  // Every Auth RPC runs under the `asn` IAM service; this API carries no
+  // service context. A service logs its users in through the service API.
   // ---------------------------------------------------------------------------
 
   // --- Auth Login/Logout ---
 
-  // Lists the login credential methods enabled for the service context.
+  // Lists the login credential methods enabled for `asn`.
   //
-  // The set comes from the IAM configuration of the context's service. Use it
+  // The set comes from the IAM configuration of `asn`. Use it
   // to decide which login options to show and which `method` values
   // `AuthFlowInit` will accept; `AuthFlowInit` rejects a disabled method.
   //
@@ -6072,7 +6063,7 @@ message Events {
     int64 create_time = 19;
     int64 update_time = 20;
     // An asn rule bound to a service reads only the nodes that carry it;
-    // set for a service context that is not super.
+    // set or cleared by the caller.
     string bound = 21;
   }
   message RuleListReq {
