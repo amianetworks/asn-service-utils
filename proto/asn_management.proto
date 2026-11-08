@@ -52,13 +52,25 @@ service Management {
 
   // ---------------------------------------------------------------------------
   // 1 — Auth (Verification Codes, Login, MFA, Factors, Tokens, Logout)
+  //
+  // Service context: every Auth RPC runs under one IAM service, named by the
+  // metadata key `asn-service` (REST: header `X-ASN-Service`). Absent or `asn`:
+  // `asn`. Any other value must be a loaded service that IAM provisions,
+  // otherwise `shared.service.not_found` (meta `service`). Under a service S:
+  // only accounts registered with S log in (others get IAM's
+  // `shared.account.not_found`); the login methods, MFA setting and
+  // third-party and passkey bindings are S's; tokens get S's lifetimes
+  // (`service[].login.expiration`, else `login.expiration`); login and factor
+  // records carry `Service` S. A token issued under S is valid wherever the
+  // account is registered, including the rest of this API (members of S are
+  // members of `asn`). Calls outside this section ignore the context.
   // ---------------------------------------------------------------------------
 
   // --- Auth Login/Logout ---
 
-  // Lists the login credential methods enabled for ASN.
+  // Lists the login credential methods enabled for the service context.
   //
-  // The set comes from the IAM service configuration for the `asn` service. Use it
+  // The set comes from the IAM configuration of the context's service. Use it
   // to decide which login options to show and which `method` values
   // `AuthFlowInit` will accept; `AuthFlowInit` rejects a disabled method.
   //
@@ -490,6 +502,22 @@ service Management {
   rpc AuthResetPassword (Auth.ResetPassword) returns (Empty) {
     option (google.api.http) = {
       post: "/auth/password/reset"
+      body: "*"
+    };
+  }
+
+  // Sets a password on the caller's own account when it has none (an account
+  // created by a code or third-party login).
+  //
+  // Auth: requires `X-Auth-Token` with MFA verified; acts on the caller only.
+  //
+  // Request: `password` is required and checked by the IAM password policy.
+  //
+  // Errors: IAM refuses an account that already has a password (change it
+  // with the password flow); IAM errors are returned unchanged.
+  rpc AuthSetPassword (Auth.SetPassword) returns (Empty) {
+    option (google.api.http) = {
+      put: "/auth/password"
       body: "*"
     };
   }
@@ -1048,19 +1076,38 @@ service Management {
     };
   }
 
-  // Deletes an account from the `asn` IAM service.
+  // Deletes an account: removes it from every service it is registered with,
+  // then from `asn`, so no account is left in a service outside `asn`.
   //
   // Admin only (ASN admin, see `GetUsersByIDs`); otherwise
   // `shared.auth.permission_denied`.
   //
   // Query parameter `id` must be an account UUID, otherwise
   // `shared.request.param_invalid` (meta `field=id`). Deleting your own account is
-  // rejected with `shared.auth.permission_denied`. The controller performs no other
-  // cleanup itself; the delete is delegated to IAM and IAM errors are returned
-  // unchanged.
+  // rejected with `shared.auth.permission_denied`. IAM errors are returned
+  // unchanged; when one service fails, the services removed before it stay
+  // removed and the account remains, so the call can be repeated. The
+  // account's saved audit filters are deleted with it.
   rpc DeleteUser      (User.ID)             returns (Empty) {
     option (google.api.http) = {
       delete: "/user"
+    };
+  }
+
+  // Renames an account.
+  //
+  // Admin only (ASN admin, see `GetUsersByIDs`); otherwise
+  // `shared.auth.permission_denied`.
+  //
+  // `id` must be an account UUID, otherwise `shared.request.param_invalid`
+  // (meta `field=id`); `username` is required and checked by IAM. IAM refuses
+  // the rename when renames are disabled or the name is taken; IAM errors are
+  // returned unchanged. The account's existing tokens keep the old name until
+  // they are refreshed.
+  rpc RenameUser      (User.Rename)         returns (Empty) {
+    option (google.api.http) = {
+      put: "/user/name"
+      body: "*"
     };
   }
 
@@ -1086,6 +1133,24 @@ service Management {
   rpc AddUsersToService (User.ServiceReq)   returns (Empty) {
     option (google.api.http) = {
       post: "/user/service/users"
+      body: "*"
+    };
+  }
+
+  // Removes accounts from a service; they stay accounts of `asn`.
+  //
+  // Admin only (ASN admin, see `GetUsersByIDs`); otherwise
+  // `shared.auth.permission_denied`.
+  //
+  // `service` and `accountIds` are checked as for `AddUsersToService`. Removing
+  // yourself is rejected with `shared.auth.permission_denied`. IAM removes the
+  // registration and the account's data in the service (its bindings there);
+  // its tokens stop verifying for the service. An account not in the service
+  // is skipped. Not atomic: when IAM fails on an account, the accounts removed
+  // before it stay removed.
+  rpc RemoveUsersFromService (User.ServiceReq) returns (Empty) {
+    option (google.api.http) = {
+      put: "/user/service/users"
       body: "*"
     };
   }
@@ -3240,6 +3305,12 @@ message Auth {
     repeated CredentialMethod methods = 1;
   }
 
+  // Request of `AuthSetPassword`.
+  message SetPassword {
+    // Password to set on the caller's account. Required.
+    string password = 1;
+  }
+
   // Request of `AuthResetPassword` (administrator only).
   message ResetPassword {
     // Target account ID (UUID). Required.
@@ -3801,6 +3872,14 @@ message User {
   // Last account update time, UNIX seconds.
   int32 updated_at = 15;
 
+  // Request of `RenameUser`.
+  message Rename {
+    // Account ID (UUID string). Required.
+    string id = 1;
+    // New username. Required.
+    string username = 2;
+  }
+
   // Identifies one account.
   //
   // Used by `DeleteUser` (`DELETE /user?id=`) and the `AuthUnbind*` factor RPCs.
@@ -3814,7 +3893,7 @@ message User {
 
   // Request of `AddUsersToService` (`POST /user/service/users`).
   message ServiceReq {
-    // Loaded service to add the accounts to; not `asn`.
+    // Loaded service to add the accounts to or remove them from; not `asn`.
     string service = 1;
     // Account IDs (UUID strings) of `asn` accounts.
     repeated string account_ids = 2;
