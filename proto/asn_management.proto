@@ -3233,7 +3233,8 @@ service Management {
   // Delete an event rule.
   //
   // Errors: `asn.event.rule_in_use` (`errMeta.notify_rules`) while notify
-  // rules list it.
+  // rules list it; `asn.event.rule_builtin` (`errMeta.id`) for a built-in
+  // rule.
   rpc DeleteEventRule              (Events.Id)                          returns (Empty) {
     option (google.api.http) = {
       delete: "/events/rule"
@@ -3438,21 +3439,23 @@ service Management {
   // controller calls the services concurrently, each bounded to 3 s, and
   // fills no defaults.
   //
-  // Auth: requires `view` or `manage` access to the network.
+  // Auth: requires `view` or `manage` access to the network, or to the
+  // node's network.
   //
-  // Request: `GET /service/metric/template?networkId=<id>&serviceNames=a&serviceNames=b`;
-  // `networkId` is required. `serviceNames` is optional; when empty, the
-  // services of the network are covered.
+  // Request: `GET /service/metric/template?networkId=<id>&serviceNames=a&serviceNames=b`
+  // or `?nodeId=<id>`; exactly one of `networkId` and `nodeId`.
+  // `serviceNames` is optional; when empty, `asn` and the services of the
+  // network (of the node) are covered. `asn` is ASN's own provider.
   //
   // Response: `templates` is keyed by service name; each entry holds either
   // the template or `errorCode` (`asn.service.metrics_invalid` or
   // `asn.service.metrics_unavailable`). One service's failure does not fail
   // the call.
   //
-  // Errors: `shared.request.required_field_missing` (meta `field=network_id`);
-  // `asn.network.not_found` when the network does not exist;
-  // `shared.service.not_found` when a requested service is not loaded on the
-  // controller.
+  // Errors: `shared.request.param_invalid` (meta `field=target`) unless
+  // exactly one of `network_id` and `node_id`; `asn.network.not_found`;
+  // `asn.node.not_found`; `shared.service.not_found` when a requested
+  // service is not loaded on the controller.
   rpc GetMetricsTemplatesOfServices (Node.Service.MetricsTemplates.GetReq) returns (Node.Service.MetricsTemplates) {
     option (google.api.http) = {
       get: "/service/metric/template"
@@ -3468,14 +3471,19 @@ service Management {
   // a service-scope field does not follow the network. Each call to the
   // service is bounded to 3 s.
   //
-  // Auth: requires `view` or `manage` access to the network.
+  // Auth: requires `view` or `manage` access to the network, or to the
+  // node's network.
   //
-  // Request: `GET /service/metric?networkId=<id>&serviceName=<name>`; both are
-  // required.
+  // Request: `GET /service/metric?networkId=<id>&serviceName=<name>&window=24h`,
+  // or `nodeId` instead of `networkId`; `serviceName` is required (`asn` for
+  // ASN's own metrics); `window` is one of the template's `windows`, empty
+  // for its `default_window`.
   //
-  // Errors: `shared.request.required_field_missing` (meta `field=network_id`
-  // or `field=service_name`); `asn.network.not_found` when the network does
-  // not exist; `shared.service.not_found` when the service is not loaded on
+  // Errors: `shared.request.required_field_missing` (meta
+  // `field=service_name`); `shared.request.param_invalid` (meta
+  // `field=target` unless exactly one of `network_id` and `node_id`;
+  // `field=window` for a window the template does not serve);
+  // `asn.network.not_found`; `asn.node.not_found`; `shared.service.not_found` when the service is not loaded on
   // the controller; `asn.service.metrics_invalid` (meta `service`, `path`
   // when known) when the template or data breaks the contract;
   // `asn.service.metrics_unavailable` (meta `service`) when the service
@@ -5533,7 +5541,7 @@ message Node {
       }
     }
 
-    // Metrics a service reports for a network (GetMetricsOfService).
+    // Metrics a service reports for a network or node (GetMetricsOfService).
     message Metrics {
       reserved 1;
       reserved "metrics";
@@ -5544,10 +5552,15 @@ message Node {
 
       // Request of GetMetricsOfService.
       message GetReq {
-        // Network ID (required).
+        // Network ID; or node_id.
         string network_id = 1;
-        // Service name (required; a service loaded on the controller).
+        // Service name (required; `asn` or a service loaded on the
+        // controller).
         string service_name = 2;
+        // Node ID; or network_id.
+        string node_id = 3;
+        // One of the template's windows; empty for its default window.
+        string window = 4;
       }
     }
 
@@ -5568,12 +5581,14 @@ message Node {
 
       // Request of GetMetricsTemplatesOfServices.
       message GetReq {
-        // Network ID (required).
+        // Network ID; or node_id.
         string network_id = 1;
-        // Services to cover (repeated query parameter); empty means the
-        // services of the network. An unknown name fails with
-        // `shared.service.not_found`.
+        // Services to cover (repeated query parameter); empty means `asn`
+        // and the services of the network, or of the node. An unknown name
+        // fails with `shared.service.not_found`.
         repeated string service_names = 2;
+        // Node ID; or network_id.
+        string node_id = 3;
       }
     }
 
@@ -5593,6 +5608,11 @@ message Node {
       repeated MetricsPanel layout = 3;
       // Display text by language (`zh-CN`, `en-US`).
       map<string, MetricsDict> dict = 4;
+      // Windows the data is served for (`1h`, `24h`, `7d`); empty: the
+      // data has no window.
+      repeated string windows = 5;
+      // The window used when a data call names none; one of `windows`.
+      string default_window = 6;
     }
 
     // Display text of one language: key to text.
@@ -6065,6 +6085,9 @@ message Events {
     // An asn rule bound to a service reads only the nodes that carry it;
     // set or cleared by the caller.
     string bound = 21;
+    // Installed from a catalog's default rules: enabled, edited and copied,
+    // not deleted. Read only; an update keeps it.
+    bool builtin = 22;
   }
   message RuleListReq {
     string root_id = 1;
