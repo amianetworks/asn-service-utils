@@ -2300,8 +2300,9 @@ service Management {
   // Auth: a query is admitted when one access of the caller covers all of
   // it; otherwise `shared.auth.permission_denied`. The query is never
   // narrowed or widened.
-  // - System-level access: every query, the platform scope (`platform`) and
-  //   account history (`subjectId`) included.
+  // - System-level access: every query, the platform scope (`platform`),
+  //   account history (`subjectId`) and device history (`deviceId`)
+  //   included.
   // - `view` or `manage` access on a root network: queries naming
   //   `rootIds` among those roots, or a `networkId` under them.
   // - `view` or `manage` access on a network that is not a root: queries
@@ -2313,8 +2314,10 @@ service Management {
   // Errors common to the record, summary, trend and export reads:
   // - `shared.request.param_invalid`: `rootIds` and `networkId` both set
   //   (`errMeta.field` = `network_id`), `networkId` a root network, an
-  //   unknown condition value, or a range that is empty or longer than 92
-  //   days.
+  //   unknown condition value, a range that is empty or longer than 92
+  //   days, or `tags` (`errMeta.field` = `tags`) without `service`, not
+  //   `key=value`, with a key that service does not declare, or with
+  //   `Service`, `Caller`, `RootID` or `NodeID`.
   // - `asn.network.not_found`: `networkId` does not exist.
   // - `shared.auth.permission_denied`.
 
@@ -2378,8 +2381,8 @@ service Management {
   }
   // Save a filter: conditions and a time range, under a name unique in its
   // scope. A filter holds no root, network or node: the view it is applied
-  // in gives them; its tags are `service` and `caller` only. At most 20
-  // filters per scope owner.
+  // in gives them. Its `deviceId` and `tags` are kept, `tags` checked as in
+  // a query. At most 20 filters per scope owner.
   //
   // Auth: `account`: every signed-in account, for itself. `root`: `manage`
   // access on that root network itself, or system-level access.
@@ -6325,6 +6328,15 @@ message Audit {
     int64 bucket_seconds = 21;
     // GetAuditSummary: subjects in `topAlarmSubjects`; 0 means 10.
     int32 top = 22;
+    // The device an account acted from; device history, system-level
+    // access only.
+    string device_id = 23;
+    // A service's own tags, each `key=value`: a key matches any of its
+    // values, every key must match (`?tags=Role=admin&tags=Role=user`).
+    // Needs `service`, and every key one that service declares (see
+    // GetAuditCatalog `serviceTagKeys`); `Service`, `Caller`, `RootID` and
+    // `NodeID` are refused.
+    repeated string tags = 24;
   }
 
   // A record.
@@ -6413,6 +6425,14 @@ message Audit {
     map<string, Count> by_service = 7;
     map<string, Count> by_caller = 8;
     repeated Bucket trend = 9;
+    // With `service` in the query: by each value of each tag key that
+    // service declares; records without the key are not counted under it.
+    map<string, TagCounts> by_tag = 10;
+  }
+
+  // The counts of the values of one tag key.
+  message TagCounts {
+    map<string, Count> values = 1;
   }
 
   // Response of GetAuditTrend.
@@ -6455,6 +6475,15 @@ message Audit {
     repeated string risk_levels = 6;
     repeated string results = 7;
     repeated string time_presets = 8;
+    // The tag keys each loaded service declares for querying its records
+    // (`tags` of a query, `byTag` of a summary).
+    repeated ServiceTagKeys service_tag_keys = 9;
+  }
+
+  // The audit tag keys of one service.
+  message ServiceTagKeys {
+    string service = 1;
+    repeated string tag_keys = 2;
   }
 
   // A saved filter: the request and response of CreateAuditFilter and
