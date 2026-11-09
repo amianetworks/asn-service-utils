@@ -3175,6 +3175,29 @@ service Management {
       body: "*"
     };
   }
+  // Get a node's packet capture settings (workflow/alpha/ASN.ServiceApi271.md
+  // §7.2): off by default; `active` when enabled and a service installed on
+  // the node declares the need, listed in `demanders`.
+  //
+  // Auth: `view` or `manage` on the node's root, or system access.
+  rpc GetNodeCapture               (HostMetrics.NodeReq)                returns (HostMetrics.Capture) {
+    option (google.api.http) = {
+      get: "/capture/node"
+    };
+  }
+  // Set a node's packet capture settings; the node applies them at once
+  // when connected. Zero values take the defaults.
+  //
+  // Auth: `manage` on the node's root, or system `manage`.
+  //
+  // Errors: `shared.request.param_invalid` for a value out of range or a
+  // filter outside the supported subset (`field` names it).
+  rpc SetNodeCapture               (HostMetrics.Capture)                returns (HostMetrics.Capture) {
+    option (google.api.http) = {
+      put: "/capture/node"
+      body: "*"
+    };
+  }
 
   // --- Events ---
   //
@@ -5938,6 +5961,22 @@ message HostMetrics {
     bool enable = 2;
     int32 port = 3; // 0: 6343
   }
+  // A node's packet capture: a window of window_ms every interval_ms, at
+  // most max_packets headers of snap_len bytes per window and interface.
+  message Capture {
+    string node_id = 1;
+    bool enable = 2;
+    string backend = 3; // afpacket (default) or dcube
+    repeated string interfaces = 4;
+    int64 interval_ms = 5; // 0: 1000
+    int64 window_ms = 6; // 0: 200
+    int32 max_packets = 7; // 0: 30000; 1-100000
+    int32 snap_len = 8; // 0: 128; up to 256
+    string filter = 9;
+    bool ingress_only = 10; // dcube only
+    bool active = 11; // read only
+    repeated string demanders = 12; // read only
+  }
   message Process {
     int32 pid = 1;
     string name = 2;
@@ -6017,6 +6056,7 @@ message Events {
     repeated Field fields = 4;
     repeated Field tags = 5;
     string demand = 6;
+    repeated string modes = 7; // the condition modes the item takes: no absence on node data
   }
   message Catalog {
     string service = 1;
@@ -6096,6 +6136,11 @@ message Events {
     int32 page = 4;
     int32 page_size = 5;
     string service = 6; // the namespace, asn by default
+    repeated string items = 7; // rules on these data items
+    string scope = 8; // root, all_roots or platform
+    string devices = 9; // all, label or nodes
+    string node_id = 10; // rules whose devices include the node
+    string bound = 11; // asn rules bound to this service
   }
   message RuleList {
     repeated Rule rules = 1;
@@ -6111,7 +6156,11 @@ message Events {
     int64 start = 7;
     int64 stop = 8;
     int32 page = 9;
-    int32 page_size = 10;    string service = 11; // the namespace, asn by default
+    int32 page_size = 10;
+    string service = 11; // the namespace, asn by default
+    repeated string node_ids = 12; // incidents of these nodes
+    repeated string items = 13; // incidents of rules on these data items
+    string keyword = 14; // the rule name contains it, case-insensitive
   }
   message Incident {
     string id = 1;
@@ -6192,6 +6241,7 @@ message Events {
     int64 stop = 4;
     int32 page = 5;
     int32 page_size = 6;
+    string service = 7; // the namespace, asn by default
   }
   // A mail delivery: status sent, failed, dropped or kind_unavailable.
   message Mail {
