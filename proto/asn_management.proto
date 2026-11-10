@@ -2358,10 +2358,14 @@ service Management {
   //
   // Auth: every signed-in account.
   //
-  // Request (query parameter): `catalog`; empty or `asn` (the only catalog
-  // for now).
+  // Request (query parameter): `catalog`; empty or `asn` for ASN's own, or
+  // the name of a loaded service for the names of that service's records:
+  // its `eventTypes`, `operations` (no `objectType` or `riskLevel`),
+  // `objectTypes` and `tagKeys`. `subjectTypes`, `riskLevels`, `results`
+  // and `timePresets` are only in the `asn` catalog, `serviceTagKeys` too.
   //
-  // Errors: `shared.request.param_invalid` (`errMeta.field` = `catalog`).
+  // Errors: `shared.resource.not_found` (`errMeta.service`) for a service
+  // that is not loaded or declares no audit catalog.
   rpc GetAuditCatalog              (Audit.CatalogReq)                   returns (Audit.Catalog) {
     option (google.api.http) = {
       get: "/audit/catalog"
@@ -3421,15 +3425,22 @@ service Management {
   //
   // Auth: system `manage`.
   //
+  // `fields` name fields of the patterns for display: each `name` one a
+  // pattern declares, listed once, with `label` keys `zh-CN` / `en-US` of
+  // 1-64 characters, at least one; `type` is read only.
+  //
   // Errors: `shared.request.param_invalid` (`errMeta.name`) for a pattern
-  // that does not compile; `asn.label.not_found`.
+  // that does not compile, (`errMeta.field` = `fields`) for a field no
+  // pattern declares, listed twice or with a bad label; `asn.label.not_found`.
   rpc CreateLogParser              (Logs.Parser)                        returns (Logs.Parser) {
     option (google.api.http) = {
       post: "/logs/parser"
       body: "*"
     };
   }
-  // Replace a parser. The NGFW preset takes only its labels and enable.
+  // Replace a parser, with the rules of CreateLogParser; `fields` naming a
+  // field the new patterns no longer declare are refused, not dropped. The
+  // NGFW preset takes only its labels and enable.
   rpc UpdateLogParser              (Logs.Parser)                        returns (Logs.Parser) {
     option (google.api.http) = {
       put: "/logs/parser"
@@ -5974,7 +5985,7 @@ message HostMetrics {
     int64 interval_ms = 5; // 0: 1000
     int64 window_ms = 6; // 0: 200
     int32 max_packets = 7; // 0: 30000; 1-100000
-    int32 snap_len = 8; // 0: 128; up to 256
+    int32 snap_len = 8; // 0: 128; up to 2048; max_packets × snap_len ≤ 25600000
     string filter = 9;
     bool ingress_only = 10; // dcube only
     bool active = 11; // read only
@@ -6442,7 +6453,7 @@ message Audit {
 
   // Request of GetAuditCatalog.
   message CatalogReq {
-    // Empty or `asn`.
+    // Empty or `asn`, or a loaded service's name.
     string catalog = 1;
   }
 
@@ -6476,8 +6487,19 @@ message Audit {
     repeated string results = 7;
     repeated string time_presets = 8;
     // The tag keys each loaded service declares for querying its records
-    // (`tags` of a query, `byTag` of a summary).
+    // (`tags` of a query, `byTag` of a summary); `asn` catalog only.
     repeated ServiceTagKeys service_tag_keys = 9;
+    // A service catalog's dimensions with their display names and the
+    // values to offer (display only: a query may use other values).
+    repeated TagKey tag_keys = 10;
+  }
+
+  // A dimension a service declares: `values` use `key` for the value.
+  message TagKey {
+    string key = 1;
+    string name_en = 2;
+    string name_zh = 3;
+    repeated Name values = 4;
   }
 
   // The audit tag keys of one service.
@@ -6756,6 +6778,14 @@ message Logs {
     bool builtin = 7;             // the NGFW preset: no path or patterns
     int64 create_time = 8;
     int64 update_time = 9;
+    // Display names of fields of the patterns; optional.
+    repeated ParserField fields = 10;
+  }
+  // A field of a parser's patterns named for display.
+  message ParserField {
+    string name = 1;
+    map<string, string> label = 2; // zh-CN, en-US
+    string type = 3;               // read only: int, float, tag or string
   }
   message ParserList {
     repeated Parser parsers = 1;
