@@ -6817,6 +6817,8 @@ message Logs {
   }
   message Records {
     repeated Record records = 1;
+    // Lines matching the query, at most 10000: 10000 means at least that
+    // many.
     int32 total = 2;
   }
 }
