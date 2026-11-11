@@ -6177,6 +6177,9 @@ message Events {
     repeated string node_ids = 12; // incidents of these nodes
     repeated string items = 13; // incidents of rules on these data items
     string keyword = 14; // the rule name contains it, case-insensitive
+    // several namespaces, instead of service; "*" alone: every namespace,
+    // those of removed services too. One list, newest first.
+    repeated string services = 15;
   }
   message Incident {
     string id = 1;
