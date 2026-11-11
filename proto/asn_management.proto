@@ -3458,7 +3458,9 @@ service Management {
   // List stored log lines, newest first: of a root (`rootId`), of the nodes
   // now in a network (`networkId`, `includeSubnetwork`), or of nodes.
   //
-  // Auth: `view` or `manage` on the root or network, or system access.
+  // Auth: `view` or `manage` on the root network itself (for a `networkId`,
+  // on its root), or system access; access granted only on subnetworks is
+  // refused (`shared.auth.permission_denied`).
   rpc ListLogs                     (Logs.Query)                         returns (Logs.Records) {
     option (google.api.http) = {
       get: "/logs"
