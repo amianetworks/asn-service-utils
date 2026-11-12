@@ -3233,8 +3233,9 @@ service Management {
   // at 1 with a size of 1-500. Objects a caller cannot read are
   // `shared.resource.not_found`.
 
-  // The data items rules can read, with their fields and tags, and the
-  // condition modes, aggregates, levels and handlings.
+  // The data items rules can read, with their fields and tags and their
+  // display names, the condition modes, aggregates, levels and handlings,
+  // and the incident retention.
   //
   // Auth: any signed-in account.
   rpc GetEventCatalog              (Events.CatalogReq)                  returns (Events.Catalog) {
@@ -3243,7 +3244,9 @@ service Management {
     };
   }
   // List the event rules of a root, with the rules for all roots, or of the
-  // platform scope.
+  // platform scope, newest first: of the namespaces `services` names, every
+  // namespace when it is empty. Each rule says whether the caller may change
+  // (`writable`) and delete (`deletable`) it.
   //
   // Auth: `view` or `manage` on the root, or system access.
   rpc ListEventRules               (Events.RuleListReq)                 returns (Events.RuleList) {
@@ -3296,9 +3299,17 @@ service Management {
     };
   }
   // List incidents, newest first: of a root (`rootId`) or of the nodes now
-  // in a network (`networkId`, `includeSubnetwork`).
+  // in a network (`networkId`, `includeSubnetwork`); of the namespaces
+  // `services` names, every namespace (those of removed services too) when
+  // it is empty. Each incident says whether the caller may close it
+  // (`resolvable`).
   //
   // Auth: `view` or `manage` on the root or network, or system access.
+  //
+  // Errors: `shared.request.param_invalid` for a `states` or `scopes` value
+  // not listed, and for more than 1000 `ids` (`errMeta.field` names it);
+  // `shared.service.not_found` for a `services` name that is not asn, a
+  // loaded service or a service with a registered catalog.
   rpc ListIncidents                (Events.IncidentListReq)             returns (Events.IncidentList) {
     option (google.api.http) = {
       get: "/events/incidents"
@@ -3322,8 +3333,9 @@ service Management {
       body: "*"
     };
   }
-  // List the notify rules of a root or of the platform scope.
-  rpc ListNotifyRules              (Events.ScopedListReq)               returns (Events.NotifyRuleList) {
+  // List the notify rules of a root or of the platform scope, newest first:
+  // of the namespaces `services` names, every namespace when it is empty.
+  rpc ListNotifyRules              (Events.NotifyRuleListReq)           returns (Events.NotifyRuleList) {
     option (google.api.http) = {
       get: "/events/notify-rules"
     };
@@ -3369,8 +3381,9 @@ service Management {
       body: "*"
     };
   }
-  // List the contact groups of a root or of the platform scope, by name.
-  rpc ListContactGroups            (Events.ScopedListReq)               returns (Events.ContactGroupList) {
+  // List the contact groups of a root or of the platform scope, by name: of
+  // the namespaces `services` names, every namespace when it is empty.
+  rpc ListContactGroups            (Events.ContactGroupListReq)         returns (Events.ContactGroupList) {
     option (google.api.http) = {
       get: "/events/contact-groups"
     };
@@ -6203,15 +6216,24 @@ message Events {
     string id = 1;
     bool enable = 2;
   }
+  // An object an object names: its ID, and its current name, filled in on
+  // reads (empty when the object is gone). A write reads only `id`.
+  message Ref {
+    string id = 1;
+    string name = 2;
+  }
   message CatalogReq {
     string service = 1; // default asn
   }
   // A declared field or tag: type number, enum or text; values of an enum.
+  // label: display names by language (`zh-CN`, `en-US`), as the catalog's
+  // owner declares them; empty when it declares none.
   message Field {
     string name = 1;
     string type = 2;
     repeated string values = 3;
     string unit = 4;
+    map<string, string> label = 5;
   }
   // demand: always, or onDemand (produced while a rule reads it).
   message Item {
@@ -6222,6 +6244,7 @@ message Events {
     repeated Field tags = 5;
     string demand = 6;
     repeated string modes = 7; // the condition modes the item takes: no absence on node data
+    map<string, string> label = 8; // as Field.label
   }
   message Catalog {
     string service = 1;
@@ -6232,6 +6255,9 @@ message Events {
     repeated string handlings = 6;
     repeated string compare_ops = 7;
     repeated string changes = 8;
+    // How long incidents are kept (`events.retention`): a notify rule's
+    // cooldown and minimum interval are at most this.
+    int64 retention_seconds = 9;
   }
   message TagFilter {
     string tag = 1;
@@ -6265,8 +6291,11 @@ message Events {
     string default = 4;
   }
   // An event rule. scope: root (root_id), all_roots or platform; devices:
-  // all, label (label_id) or nodes (node_ids, a root rule only).
+  // all, label (label) or nodes (nodes, a root rule only). A write reads
+  // the `id` of label and nodes.
   message Rule {
+    reserved 8, 9;
+    reserved "label_id", "node_ids";
     string id = 1;
     string name = 2;
     bool enable = 3;
@@ -6274,8 +6303,8 @@ message Events {
     string scope = 5;
     string root_id = 6;
     string devices = 7;
-    string label_id = 8;
-    repeated string node_ids = 9;
+    Ref label = 23;
+    repeated Ref nodes = 24;
     string item = 10;
     repeated TagFilter filters = 11;
     repeated Condition conditions = 12;
@@ -6293,42 +6322,57 @@ message Events {
     // Installed from a catalog's default rules: enabled, edited and copied,
     // not deleted. Read only; an update keeps it.
     bool builtin = 22;
+    // Read only: the caller may change the rule (manage on its root; system
+    // manage for all_roots and platform rules).
+    bool writable = 25;
+    // Read only: writable and not built in.
+    bool deletable = 26;
   }
   message RuleListReq {
+    reserved 6;
+    reserved "service";
     string root_id = 1;
     string keyword = 2;
     string enable = 3; // "", "true" or "false"
     int32 page = 4;
     int32 page_size = 5;
-    string service = 6; // the namespace, asn by default
+    repeated string services = 12; // namespaces; empty: every namespace
     repeated string items = 7; // rules on these data items
     string scope = 8; // root, all_roots or platform
     string devices = 9; // all, label or nodes
     string node_id = 10; // rules whose devices include the node
     string bound = 11; // asn rules bound to this service
+    // Rules of these fixed levels; a rule whose level comes from the data
+    // (level_from) matches none.
+    repeated string levels = 13;
+    string builtin = 14; // "", "true" or "false"
   }
   message RuleList {
     repeated Rule rules = 1;
     int64 total = 2;
   }
   message IncidentListReq {
+    reserved 6, 11;
+    reserved "state", "service";
     string root_id = 1;
     string network_id = 2;
     bool include_subnetwork = 3;
     string rule_id = 4;
     repeated string levels = 5;
-    string state = 6; // open, closed or recorded
+    repeated string states = 16; // open, closed, recorded
     int64 start = 7;
     int64 stop = 8;
     int32 page = 9;
     int32 page_size = 10;
-    string service = 11; // the namespace, asn by default
     repeated string node_ids = 12; // incidents of these nodes
     repeated string items = 13; // incidents of rules on these data items
     string keyword = 14; // the rule name contains it, case-insensitive
-    // several namespaces, instead of service; "*" alone: every namespace,
-    // those of removed services too. One list, newest first.
+    // Namespaces; empty: every namespace, those of removed services too.
     repeated string services = 15;
+    // Incidents of rules of these scopes: root, all_roots, platform.
+    repeated string scopes = 17;
+    // These incidents, at most 1000.
+    repeated string ids = 18;
   }
   message Incident {
     string id = 1;
@@ -6349,24 +6393,46 @@ message Events {
     string close_reason = 16;
     string handling = 17;
     string item = 18;
+    // Read only: the caller may close it by hand (manage on its root) and it
+    // is open. An auto incident its rule still judges is refused all the
+    // same (`shared.resource.state_invalid`).
+    bool resolvable = 19;
   }
   message IncidentList {
     repeated Incident incidents = 1;
     int64 total = 2;
   }
-  message ScopedListReq {
+  message NotifyRuleListReq {
     string root_id = 1;
     string keyword = 2;
     int32 page = 3;
     int32 page_size = 4;
-    string service = 5; // the namespace, asn by default
+    repeated string services = 5; // namespaces; empty: every namespace
+    string enable = 6; // "", "true" or "false"
+    // Rules by level of these levels; a rule by event rules matches none.
+    repeated string levels = 7;
+    repeated string send_on = 8; // rules sending on any of these
+    string devices = 9; // all (no node_ids) or nodes
+    string contact_group_id = 10; // rules naming this contact group
+  }
+  message ContactGroupListReq {
+    string root_id = 1;
+    string keyword = 2;
+    int32 page = 3;
+    int32 page_size = 4;
+    repeated string services = 5; // namespaces; empty: every namespace
+    // Groups with a to or cc address containing it, case-insensitive.
+    string address = 6;
   }
   // A notify rule of a root or the platform scope. It selects incidents
   // either by level (level, with level_op ge (default), le or eq: every
-  // rule of the namespace) or by event rules (event_rule_ids, at least one;
-  // no level or level_op), never both; read back the same way.
+  // rule of the namespace) or by event rules (event_rules, at least one;
+  // no level or level_op), never both; read back the same way. A write
+  // reads the `id` of event_rules and contact_groups.
   // send_on: open, closed, recorded.
   message NotifyRule {
+    reserved 8, 13;
+    reserved "event_rule_ids", "contact_group_ids";
     string id = 1;
     string name = 2;
     bool enable = 3;
@@ -6374,14 +6440,17 @@ message Events {
     string root_id = 5;
     string level_op = 6;
     string level = 7;
-    repeated string event_rule_ids = 8;
+    repeated Ref event_rules = 16;
     repeated string node_ids = 9;
     repeated string send_on = 10;
     int64 cooldown_seconds = 11;
     int64 min_interval_seconds = 12;
-    repeated string contact_group_ids = 13;
+    repeated Ref contact_groups = 17;
     int64 create_time = 14;
     int64 update_time = 15;
+    // Read only: the caller may change it (manage on its root; system
+    // manage for platform rules).
+    bool writable = 18;
   }
   message NotifyRuleList {
     repeated NotifyRule rules = 1;
@@ -6400,6 +6469,10 @@ message Events {
     repeated Recipient cc = 6;
     int64 create_time = 7;
     int64 update_time = 8;
+    // Read only: the caller may change it, as NotifyRule.writable.
+    bool writable = 9;
+    // Read only: how many notify rules name it.
+    int32 notify_rules = 10;
   }
   message ContactGroupList {
     repeated ContactGroup groups = 1;
@@ -6466,16 +6539,17 @@ message Audit {
     repeated string subject_ids = 25;
     // `account`, `service`, `system`.
     repeated string subject_types = 8;
-    // Event types, such as `asn.node`; see GetAuditCatalog.
+    // Event types, such as `asn.node`; see GetAuditCatalog. Needs `service`:
+    // event types, operations and object types are a catalog's.
     repeated string event_types = 9;
-    // Operation codes; see GetAuditCatalog.
+    // Operation codes; see GetAuditCatalog. Needs `service`.
     repeated int64 operations = 10;
     // `success`, `failed`.
     repeated string results = 11;
     // `info`, `warn`, `low`, `medium`, `high`, `critical`; `low` and above
     // are alarms.
     repeated string risk_levels = 12;
-    // Object types, such as `node`; see GetAuditCatalog.
+    // Object types, such as `node`; see GetAuditCatalog. Needs `service`.
     repeated string object_types = 13;
     // Object IDs.
     repeated string object_ids = 14;
