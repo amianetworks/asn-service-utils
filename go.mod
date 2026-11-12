@@ -2,15 +2,16 @@ module asn.amiasys.com
 
 go 1.26.5
 
-replace asn.amiasys.com/asn-service-api/v27 => github.com/amianetworks/asn-service-api/v27 v27.3.0
+replace asn.amiasys.com/asn-service-api/v27 => github.com/amianetworks/asn-service-api/v27 v27.4.0
 
 require (
-	asn.amiasys.com/asn-service-api/v27 v27.3.0
+	asn.amiasys.com/asn-service-api/v27 v27.4.0
 	github.com/amianetworks/am.drivers.sapphire.iam/v27 v27.0.2
-	github.com/amianetworks/am.modules/v27 v27.0.8
+	github.com/amianetworks/am.modules/v27 v27.0.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.33.0
+	github.com/jackc/pgx/v5 v5.12.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/shirou/gopsutil/v3 v3.24.5
@@ -54,7 +55,6 @@ require (
 	github.com/influxdata/line-protocol v0.0.0-20210922203350-b1ad95c89adf // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.12.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.20.1 // indirect

@@ -1077,8 +1077,7 @@ service Management {
   // `shared.request.param_invalid` (meta `field=id`). Deleting your own account is
   // rejected with `shared.auth.permission_denied`. IAM errors are returned
   // unchanged; when one service fails, the services removed before it stay
-  // removed and the account remains, so the call can be repeated. The
-  // account's saved audit filters are deleted with it.
+  // removed and the account remains, so the call can be repeated.
   rpc DeleteUser      (User.ID)             returns (Empty) {
     option (google.api.http) = {
       delete: "/user"
@@ -2300,8 +2299,7 @@ service Management {
   // Auth: a query is admitted when one access of the caller covers all of
   // it; otherwise `shared.auth.permission_denied`. The query is never
   // narrowed or widened.
-  // - System-level access: every query, the platform scope (`platform`),
-  //   account history (`subjectId`) and device history (`deviceId`)
+  // - System-level access: every query, the platform scope (`platform`)
   //   included.
   // - `view` or `manage` access on a root network: queries naming
   //   `rootIds` among those roots, or a `networkId` under them.
@@ -2309,7 +2307,9 @@ service Management {
   //   naming that `networkId`, or one under it.
   // - `manage` access on service X (its service admin): queries with
   //   `service` X or `caller` X, over every root and the platform scope.
-  // Other queries name `rootIds` or `networkId`.
+  // Other queries name `rootIds` or `networkId`. `subjectIds` and
+  // `deviceId` are conditions like the others: a root admin selects the
+  // accounts or a device within its roots.
   //
   // Errors common to the record, summary, trend and export reads:
   // - `shared.request.param_invalid`: `rootIds` and `networkId` both set
@@ -2369,72 +2369,6 @@ service Management {
   rpc GetAuditCatalog              (Audit.CatalogReq)                   returns (Audit.Catalog) {
     option (google.api.http) = {
       get: "/audit/catalog"
-    };
-  }
-  // List the saved filters the caller may read, newest first: the caller's
-  // own (`account`), those of each root it may read (`root`), and, with
-  // system-level access, the platform's (`platform`). `writable` marks those
-  // the caller may change.
-  //
-  // Request (query parameter): `keyword`, a case-insensitive substring of
-  // the name; optional.
-  rpc ListAuditFilters             (Audit.FilterListReq)                returns (Audit.Filters) {
-    option (google.api.http) = {
-      get: "/audit/filter"
-    };
-  }
-  // Save a filter: conditions and a time range, under a name unique in its
-  // scope. A filter holds no root, network or node: the view it is applied
-  // in gives them. Its `deviceId` and `tags` are kept, `tags` checked as in
-  // a query. At most 20 filters per scope owner.
-  //
-  // Auth: `account`: every signed-in account, for itself. `root`: `manage`
-  // access on that root network itself, or system-level access.
-  // `platform`: system-level access.
-  //
-  // Request: `scope` (required), `rootId` (scope `root`), `name` (required),
-  // `query` (conditions and range; `rootIds`, `networkId`,
-  // `includeSubnetwork`, `nodeIds`, `page`, `size`, `bucketSeconds` and
-  // `top` must be empty).
-  //
-  // Errors:
-  // - `shared.request.param_invalid`: a field above set, a bad scope, an
-  //   unknown condition value or time preset.
-  // - `shared.resource.already_exists`: the name is taken in the scope.
-  // - `shared.resource.limit_reached`: the owner has 20 filters.
-  // - `asn.network.not_found`: `rootId` does not exist.
-  // - `shared.auth.permission_denied`.
-  rpc CreateAuditFilter            (Audit.Filter)                       returns (Audit.Filter) {
-    option (google.api.http) = {
-      post: "/audit/filter"
-      body: "*"
-    };
-  }
-  // Change a saved filter's name, conditions or range.
-  //
-  // Auth: as CreateAuditFilter, by the filter's scope.
-  //
-  // Request: `id`, `scope` and `rootId` naming the filter, and its new
-  // `name` and `query`.
-  //
-  // Errors: as CreateAuditFilter; `shared.resource.not_found` when the
-  // filter does not exist in the scope.
-  rpc UpdateAuditFilter            (Audit.Filter)                       returns (Audit.Filter) {
-    option (google.api.http) = {
-      put: "/audit/filter"
-      body: "*"
-    };
-  }
-  // Delete a saved filter.
-  //
-  // Auth: as CreateAuditFilter, by the filter's scope.
-  //
-  // Request (query parameters): `id`, `scope`, `rootId` (scope `root`).
-  //
-  // Errors: `shared.resource.not_found`, `shared.auth.permission_denied`.
-  rpc DeleteAuditFilter            (Audit.FilterRef)                    returns (Empty) {
-    option (google.api.http) = {
-      delete: "/audit/filter"
     };
   }
   // The records of a query are exported by `GET /audit/export` with the
@@ -3161,6 +3095,90 @@ service Management {
       get: "/metrics/host/node"
     };
   }
+  // Resource dashboard (workflow/alpha/ASN.ResourceDashboard.md): read-only
+  // figures over the nodes of a scope. The scope is the nodes of `networkId`
+  // (`includeSubnetwork`), narrowed to those carrying any of `labelIds` (at
+  // most 32) and to `nodeIds` (at most 100) when given; an empty scope is not
+  // an error. Time: `history` seconds back from now, or `start` (unix ms,
+  // required without `history`) and `stop` (default now).
+  //
+  // Auth: `view` or `manage` on the network, or system access.
+  //
+  // Errors: `asn.network.not_found`; `asn.label.not_found`;
+  // `shared.request.required_field_missing` (`network_id`, `start`);
+  // `shared.request.param_invalid` (`label_ids`, `node_ids`, `history`,
+  // `start`, `stop`, `sort_item`).
+  //
+  // The overview: CPU and load averaged over the nodes' latest samples,
+  // memory and disk as 100 x sum used / sum total, traffic summed with the
+  // up interfaces' speed as `maxSpeed` (bps), and the incidents of the
+  // nodes started within the time range, every namespace, by level.
+  rpc GetDashboardOverview         (Dashboard.Req)                        returns (Dashboard.Overview) {
+    option (google.api.http) = {
+      get: "/dashboard/resource-overview"
+    };
+  }
+  // Series of CPU percent (total, user, system, iowait), averaged over the nodes.
+  // One point per window, the smallest multiple of the sample interval
+  // keeping 1000 points.
+  rpc GetDashboardCPU              (Dashboard.Req)                        returns (Dashboard.CPUSeries) {
+    option (google.api.http) = {
+      get: "/dashboard/cpu"
+    };
+  }
+  // Series of memory bytes (used, available, total), summed over the nodes.
+  // One point per window, the smallest multiple of the sample interval
+  // keeping 1000 points.
+  rpc GetDashboardMemory           (Dashboard.Req)                        returns (Dashboard.MemorySeries) {
+    option (google.api.http) = {
+      get: "/dashboard/memory"
+    };
+  }
+  // Series of disk I/O (iops, read and write bytes/s, their sum), summed.
+  // One point per window, the smallest multiple of the sample interval
+  // keeping 1000 points.
+  rpc GetDashboardDisk             (Dashboard.Req)                        returns (Dashboard.DiskSeries) {
+    option (google.api.http) = {
+      get: "/dashboard/disk"
+    };
+  }
+  // Series of traffic (bps of the host, pps of the physical interfaces), summed.
+  // One point per window, the smallest multiple of the sample interval
+  // keeping 1000 points.
+  rpc GetDashboardNet              (Dashboard.Req)                        returns (Dashboard.NetSeries) {
+    option (google.api.http) = {
+      get: "/dashboard/net"
+    };
+  }
+  // Series of load averages, averaged over the nodes.
+  // One point per window, the smallest multiple of the sample interval
+  // keeping 1000 points.
+  rpc GetDashboardLoad             (Dashboard.Req)                        returns (Dashboard.LoadSeries) {
+    option (google.api.http) = {
+      get: "/dashboard/load"
+    };
+  }
+  // The 10 processes highest by CPU over the nodes' latest reports, by name:
+  // `sortItem` `average` or `total` (default), descending.
+  rpc GetDashboardProcessCPU       (Dashboard.ProcessReq)                 returns (Dashboard.ProcessCPUList) {
+    option (google.api.http) = {
+      get: "/dashboard/process-cpu"
+    };
+  }
+  // The 10 processes highest by memory over the nodes' latest reports, by name:
+  // `sortItem` `average` or `total` (default), descending.
+  rpc GetDashboardProcessMemory    (Dashboard.ProcessReq)                 returns (Dashboard.ProcessMemoryList) {
+    option (google.api.http) = {
+      get: "/dashboard/process-memory"
+    };
+  }
+  // The 10 processes highest by disk I/O over the nodes' latest reports, by name:
+  // `sortItem` `average` or `total` (default), descending.
+  rpc GetDashboardProcessDisk      (Dashboard.ProcessReq)                 returns (Dashboard.ProcessDiskList) {
+    option (google.api.http) = {
+      get: "/dashboard/process-disk"
+    };
+  }
   // Get a node's sFlow collector (workflow/alpha/ASN.NetworkCollection.md
   // §4.1): off by default, UDP port 6343.
   //
@@ -3322,14 +3340,16 @@ service Management {
   //
   // Errors: `asn.event.contact_namespace` for a contact group of another
   // root; `shared.request.param_invalid` for an event rule the root does not
-  // see.
+  // see, for both or neither of `level` and `event_rule_ids` (`field=level`),
+  // and for `level_op` with `event_rule_ids` (`field=level_op`).
   rpc CreateNotifyRule             (Events.NotifyRule)                  returns (Events.NotifyRule) {
     option (google.api.http) = {
       post: "/events/notify-rule"
       body: "*"
     };
   }
-  // Replace a notify rule; its root stays.
+  // Replace a notify rule; its root stays. It may switch between by level
+  // and by event rules. Errors: as CreateNotifyRule.
   rpc UpdateNotifyRule             (Events.NotifyRule)                  returns (Events.NotifyRule) {
     option (google.api.http) = {
       put: "/events/notify-rule"
@@ -5920,6 +5940,135 @@ message Label {
 
 // Operation audit (workflow/alpha/ASN.OperationAudit.md). Times are unix
 // milliseconds.
+// Resource dashboard (workflow/alpha/ASN.ResourceDashboard.md). Field names
+// keep the dashboard web JSON.
+message Dashboard {
+  message Req {
+    string network_id = 1;
+    bool include_subnetwork = 2;
+    repeated string label_ids = 3; // any of
+    repeated string node_ids = 4;
+    int64 history = 5; // seconds back from now
+    int64 start = 6;   // unix ms
+    int64 stop = 7;    // unix ms, default now
+  }
+  message ProcessReq {
+    string network_id = 1;
+    bool include_subnetwork = 2;
+    repeated string label_ids = 3;
+    repeated string node_ids = 4;
+    string sort_item = 5; // average or total (default)
+  }
+  message Value {
+    double value = 1;
+    int64 timestamp = 2; // unix ms of the newest sample used, 0 for none
+  }
+  message NetTraffic {
+    double recv_bit_persec = 1;
+    double sent_bit_persec = 2;
+    double max_speed = 3; // bps
+    int64 timestamp = 4;
+  }
+  message Load {
+    double load1 = 1;
+    double load5 = 2;
+    double load15 = 3;
+    int64 timestamp = 4;
+  }
+  message AlertEvents {
+    int32 total = 1;
+    int32 info = 2;
+    int32 warn = 3;
+    int32 low = 4;
+    int32 medium = 5;
+    int32 high = 6;
+    int32 critical = 7;
+    int64 timestamp = 8;
+  }
+  message Overview {
+    Value cpu_usage = 1;
+    Value mem_usage = 2;
+    Value disk_usage = 3;
+    NetTraffic net_traffic = 4;
+    Load system_load = 5;
+    AlertEvents alert_events = 6;
+  }
+  message CPUPoint {
+    double total = 1;
+    double user = 2;
+    double system = 3;
+    double iowait = 4;
+    int64 timestamp = 5; // window start, unix ms
+  }
+  message CPUSeries {
+    repeated CPUPoint points = 1;
+    int64 window_seconds = 2;
+  }
+  message MemoryPoint {
+    double used = 1;
+    double available = 2;
+    double total = 3;
+    int64 timestamp = 4;
+  }
+  message MemorySeries {
+    repeated MemoryPoint points = 1;
+    int64 window_seconds = 2;
+  }
+  message DiskPoint {
+    double iops = 1;
+    double r_bps = 2 [json_name = "rBps"];
+    double w_bps = 3 [json_name = "wBps"];
+    double throughput = 4;
+    int64 timestamp = 5;
+  }
+  message DiskSeries {
+    repeated DiskPoint points = 1;
+    int64 window_seconds = 2;
+  }
+  message NetPoint {
+    double recv_bit_persec = 1;
+    double sent_bit_persec = 2;
+    double recv_pps = 3 [json_name = "recvPPS"];
+    double sent_pps = 4 [json_name = "sentPPS"];
+    int64 timestamp = 5;
+  }
+  message NetSeries {
+    repeated NetPoint points = 1;
+    int64 window_seconds = 2;
+  }
+  message LoadSeries {
+    repeated Load points = 1;
+    int64 window_seconds = 2;
+  }
+  message ProcessCPU {
+    string name = 1;
+    double avg_usage = 2;
+    double total_usage = 3;
+  }
+  message ProcessCPUList {
+    repeated ProcessCPU data = 1;
+    int64 timestamp = 2;
+  }
+  message ProcessMemory {
+    string name = 1;
+    double avg_usage = 2; // % of the node's memory
+    double total_rss = 3; // bytes
+  }
+  message ProcessMemoryList {
+    repeated ProcessMemory data = 1;
+    int64 timestamp = 2;
+  }
+  message ProcessDisk {
+    string name = 1;
+    double avg_throughput = 2; // bytes/s
+    double total_throughput = 3;
+  }
+  message ProcessDiskList {
+    repeated ProcessDisk data = 1;
+    int64 timestamp = 2;
+  }
+}
+
 message HostMetrics {
   message ListReq {
     string network_id = 1;
@@ -6212,8 +6361,11 @@ message Events {
     int32 page_size = 4;
     string service = 5; // the namespace, asn by default
   }
-  // A notify rule of a root or the platform scope. level_op ge (default),
-  // le or eq; send_on: open, closed, recorded.
+  // A notify rule of a root or the platform scope. It selects incidents
+  // either by level (level, with level_op ge (default), le or eq: every
+  // rule of the namespace) or by event rules (event_rule_ids, at least one;
+  // no level or level_op), never both; read back the same way.
+  // send_on: open, closed, recorded.
   message NotifyRule {
     string id = 1;
     string name = 2;
@@ -6292,6 +6444,8 @@ message Audit {
   // Conditions match exactly; a repeated condition matches any of its values;
   // every condition set must match.
   message Query {
+    reserved 7;
+    reserved "subject_id";
     // The `Service` tag: the service whose data or function the record is
     // about; `asn` for ASN's own.
     string service = 1;
@@ -6308,8 +6462,8 @@ message Audit {
     bool include_subnetwork = 5;
     // Nodes the records are on.
     repeated string node_ids = 6;
-    // Who acted: an account ID, a service name; account history.
-    string subject_id = 7;
+    // Who acted: account IDs or service names, any of them.
+    repeated string subject_ids = 25;
     // `account`, `service`, `system`.
     repeated string subject_types = 8;
     // Event types, such as `asn.node`; see GetAuditCatalog.
@@ -6344,8 +6498,7 @@ message Audit {
     int64 bucket_seconds = 21;
     // GetAuditSummary: subjects in `topAlarmSubjects`; 0 means 10.
     int32 top = 22;
-    // The device an account acted from; device history, system-level
-    // access only.
+    // The device an account acted from.
     string device_id = 23;
     // A service's own tags, each `key=value`: a key matches any of its
     // values, every key must match (`?tags=Role=admin&tags=Role=user`).
@@ -6511,42 +6664,6 @@ message Audit {
   message ServiceTagKeys {
     string service = 1;
     repeated string tag_keys = 2;
-  }
-
-  // A saved filter: the request and response of CreateAuditFilter and
-  // UpdateAuditFilter, and an item of ListAuditFilters.
-  message Filter {
-    // Filter ID (UUID), assigned at create.
-    string id = 1;
-    // `account` (the caller's own), `root`, `platform`.
-    string scope = 2;
-    // The root network of a `root` filter.
-    string root_id = 3;
-    // 1 to 128 characters, unique in the scope.
-    string name = 4;
-    // Conditions and range; see CreateAuditFilter for the fields it holds.
-    Query query = 5;
-    int64 create_time = 6;
-    int64 update_time = 7;
-    // Response only: the caller may change or delete it.
-    bool writable = 8;
-  }
-
-  // Request of DeleteAuditFilter.
-  message FilterRef {
-    string id = 1;
-    string scope = 2;
-    string root_id = 3;
-  }
-
-  // Request of ListAuditFilters.
-  message FilterListReq {
-    string keyword = 1;
-  }
-
-  // Response of ListAuditFilters.
-  message Filters {
-    repeated Filter filters = 1;
   }
 }
 

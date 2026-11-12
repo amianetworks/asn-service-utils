@@ -5,10 +5,10 @@ github.com/AzureAD/microsoft-authentication-library-for-go v1.10.1/go.mod h1:xdY
 github.com/RaveNoX/go-jsoncommentstrip v1.0.0/go.mod h1:78ihd09MekBnJnxpICcwzCMzGrKSKYe4AqU6PDYYpjk=
 github.com/amianetworks/am.drivers.sapphire.iam/v27 v27.0.2 h1:eqPVBifDlV/Zm+yozSOXuBiwO5ohhb5OWR9CtrVbc+w=
 github.com/amianetworks/am.drivers.sapphire.iam/v27 v27.0.2/go.mod h1:cleyLYWD/o4ih4UKelNdyK60oWlI8XP6nA0JFxHI8XU=
-github.com/amianetworks/am.modules/v27 v27.0.8 h1:oKYCOnyBTaQdM1aPEQ8LrUYZKJ5bUd3PECKUjE10MSA=
-github.com/amianetworks/am.modules/v27 v27.0.8/go.mod h1:bA0awFVBI8LsvhFVoEzL749oV0tkqtWf3DK35yQ0a5Q=
-github.com/amianetworks/asn-service-api/v27 v27.3.0 h1:2HY5D9wztHxS8tl20Og8WjfK1eHu5qcjNCA7DeeBtOQ=
-github.com/amianetworks/asn-service-api/v27 v27.3.0/go.mod h1:X6C2uc2eacjvRXkedxQ+9eEIhL5jpTw0e/djLHcDs5g=
+github.com/amianetworks/am.modules/v27 v27.0.9 h1:29dvYaiz7SuNu51bMuqFsjRPPc92oEdLz6WoUqqe1nU=
+github.com/amianetworks/am.modules/v27 v27.0.9/go.mod h1:bA0awFVBI8LsvhFVoEzL749oV0tkqtWf3DK35yQ0a5Q=
+github.com/amianetworks/asn-service-api/v27 v27.4.0 h1:2o0wGKKl49zGqD+cDlOcGmMa4coltG57/FRLsLnorms=
+github.com/amianetworks/asn-service-api/v27 v27.4.0/go.mod h1:X6C2uc2eacjvRXkedxQ+9eEIhL5jpTw0e/djLHcDs5g=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0 h1:axGnT1gRIfimI7gJifB699GoE/oq+F2MU7Dml6nw9rQ=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0/go.mod h1:lvDnEdqiQrp0O42VQGgmlKpxL1AP2+08jFMw88y4klk=
 github.com/bmatcuk/doublestar v1.1.1/go.mod h1:UD6OnuiIn0yFxxA2le/rnRU1G4RaI4UvFv1sNto9p6w=
