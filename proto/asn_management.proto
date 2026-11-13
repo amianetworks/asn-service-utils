@@ -1027,20 +1027,30 @@ service Management {
     };
   }
 
-  // Creates a new account in the `asn` IAM service.
+  // Creates an account in `asn`, or adds an existing one to it, and returns its
+  // ID.
   //
   // Admin only (ASN admin, see `GetUsersByIDs`); otherwise
   // `shared.auth.permission_denied`.
   //
-  // `username`, `password`, `email` and `phone` are passed to IAM as given; email
-  // and phone are stored without sending a verification code. A leading `+` in
-  // `phone.countryCode` is stripped. Field validation (username/email/phone
-  // uniqueness and format, password policy) is performed by IAM, whose error code
-  // is returned unchanged.
+  // Accounts are global: a username names the same person in `asn` and in every
+  // other service. When no account has the username, a new one is created:
+  // `username`, `password`, `email` and `phone` are passed to IAM as given, and
+  // email and phone are stored without sending a verification code. When an
+  // account already has the username but is not in `asn` (for example it is
+  // still in a service ASN does not manage), that account is added to `asn`
+  // with its own password, email and phone; the ones in the request are
+  // neither checked nor written, and `existed` is true. To create a different
+  // person, use another username. A username already in `asn` fails with
+  // `shared.account.name_already_exists`.
   //
-  // The new account is not added to any user group; use `AddUsersToGroup`
+  // A leading `+` in `phone.countryCode` is stripped. Field validation
+  // (username/email/phone uniqueness and format, password policy) is performed
+  // by IAM, whose error code is returned unchanged.
+  //
+  // The account is not added to any user group; use `AddUsersToGroup`
   // (`POST /user/group/users`) to grant it access.
-  rpc CreateUser      (User.Create)         returns (Empty) {
+  rpc CreateUser      (User.Create)         returns (User.CreateRes) {
     option (google.api.http) = {
       post: "/user"
       body: "*"
@@ -4432,6 +4442,17 @@ message User {
     // Phone number; stored without verification. A leading `+` in `countryCode`
     // is stripped.
     Phone phone = 4;
+  }
+
+  // Response of `CreateUser` (`POST /user`).
+  message CreateRes {
+    // Account ID (UUID string): the new account's, or the existing one's when
+    // `existed` is true.
+    string id = 1;
+    // True when the username already belonged to an account outside `asn`, which
+    // was added to `asn` unchanged: its password, email and phone are its own,
+    // not the request's.
+    bool existed = 2;
   }
 
   // Request of `UpdateUser` (`PUT /user`).
