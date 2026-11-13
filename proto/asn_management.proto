@@ -1014,10 +1014,9 @@ service Management {
   //   `shared.service.not_found`.
   // - `keyword` (optional): case-insensitive substring of the username, email,
   //   phone number, or a third-party binding's name or email.
-  // - `offset`: accounts to skip; negative fails with
-  //   `shared.request.param_invalid` (meta `field=offset`).
-  // - `limit`: page size; 0 means 20, above 500 fails with
-  //   `shared.query.page_too_large`.
+  // - `page`: from 1; `pageSize`: 1-500 (required). Out of range fails with
+  //   `shared.request.param_invalid` (`errMeta.field` `page` or
+  //   `page_size`).
   //
   // Accounts are ordered oldest first. Each has the same fields as in
   // `GetUsersByIDs`, as seen from the first listed service (`asn` when none).
@@ -2324,9 +2323,11 @@ service Management {
   // List records, newest first, one page at a time.
   //
   // Request (query parameters): the conditions and range of `Audit.Query`,
-  // `page` and `size`.
+  // `page` (from 1) and `pageSize` (1-500, required).
   //
-  // Errors: as above; `shared.query.page_too_large` when `size` is above 500.
+  // Errors: as above; `shared.request.param_invalid` (`errMeta.field`
+  // `page` or `page_size`) out of range; `shared.query.page_too_large` when
+  // `page` × `pageSize` is above 10000.
   rpc ListAuditRecords             (Audit.Query)                        returns (Audit.Records) {
     option (google.api.http) = {
       get: "/audit/record"
@@ -2354,7 +2355,7 @@ service Management {
   }
   // What the records of a catalog mean: event types, operation codes with
   // their names and default risk levels, object types, subject types, risk
-  // levels, results, origins and the time presets.
+  // levels, results and the time presets.
   //
   // Auth: every signed-in account.
   //
@@ -3238,15 +3239,19 @@ service Management {
   // and the incident retention.
   //
   // Auth: any signed-in account.
+  //
+  // Errors: `shared.service.not_found` (`errMeta.service`) for a service
+  // that is not asn, a loaded service or a service with a registered
+  // catalog.
   rpc GetEventCatalog              (Events.CatalogReq)                  returns (Events.Catalog) {
     option (google.api.http) = {
       get: "/events/catalog"
     };
   }
-  // List the event rules of a root, with the rules for all roots, or of the
-  // platform scope, newest first: of the namespaces `services` names, every
-  // namespace when it is empty. Each rule says whether the caller may change
-  // (`writable`) and delete (`deletable`) it.
+  // List the event rules of a root or of the platform scope, newest first:
+  // of the namespaces `services` names, every namespace when it is empty.
+  // Each rule says whether the caller may change (`writable`) and delete
+  // (`deletable`) it, and how many notify rules name it (`notify_rules`).
   //
   // Auth: `view` or `manage` on the root, or system access.
   rpc ListEventRules               (Events.RuleListReq)                 returns (Events.RuleList) {
@@ -3262,8 +3267,7 @@ service Management {
   }
   // Create an event rule.
   //
-  // Auth: `manage` on the root; system `manage` for `all_roots` and
-  // `platform`.
+  // Auth: `manage` on the root; system `manage` for `platform`.
   //
   // Errors: `asn.event.undeclared_data` and `asn.event.type_mismatch`
   // (`errMeta.name`); `asn.label.not_found`; `asn.node.not_found`;
@@ -3283,9 +3287,9 @@ service Management {
   }
   // Delete an event rule.
   //
-  // Errors: `asn.event.rule_in_use` (`errMeta.notify_rules`) while notify
-  // rules list it; `asn.event.rule_builtin` (`errMeta.id`) for a built-in
-  // rule.
+  // Errors: `asn.event.rule_in_use` while notify rules name it
+  // (`errMeta.notify_rules`: their IDs, sorted, comma-separated);
+  // `asn.event.rule_builtin` (`errMeta.id`) for a built-in rule.
   rpc DeleteEventRule              (Events.Id)                          returns (Empty) {
     option (google.api.http) = {
       delete: "/events/rule"
@@ -3306,8 +3310,8 @@ service Management {
   //
   // Auth: `view` or `manage` on the root or network, or system access.
   //
-  // Errors: `shared.request.param_invalid` for a `states` or `scopes` value
-  // not listed, and for more than 1000 `ids` (`errMeta.field` names it);
+  // Errors: `shared.request.param_invalid` for a `states` value not
+  // listed, and for more than 1000 `ids` (`errMeta.field` names it);
   // `shared.service.not_found` for a `services` name that is not asn, a
   // loaded service or a service with a registered catalog.
   rpc ListIncidents                (Events.IncidentListReq)             returns (Events.IncidentList) {
@@ -3335,6 +3339,8 @@ service Management {
   }
   // List the notify rules of a root or of the platform scope, newest first:
   // of the namespaces `services` names, every namespace when it is empty.
+  // Each rule says whether the caller may change (`writable`) and delete
+  // (`deletable`) it.
   rpc ListNotifyRules              (Events.NotifyRuleListReq)           returns (Events.NotifyRuleList) {
     option (google.api.http) = {
       get: "/events/notify-rules"
@@ -3351,9 +3357,10 @@ service Management {
   // Auth: `manage` on the root; system `manage` for `platform`.
   //
   // Errors: `asn.event.contact_namespace` for a contact group of another
-  // root; `shared.request.param_invalid` for an event rule the root does not
-  // see, for both or neither of `level` and `event_rule_ids` (`field=level`),
-  // and for `level_op` with `event_rule_ids` (`field=level_op`).
+  // root; `shared.request.param_invalid` for an event rule of another root
+  // or namespace, for both or neither of `level` and `event_rules`
+  // (`field=level`), and for `level_op` with `event_rules`
+  // (`field=level_op`).
   rpc CreateNotifyRule             (Events.NotifyRule)                  returns (Events.NotifyRule) {
     option (google.api.http) = {
       post: "/events/notify-rule"
@@ -3382,7 +3389,9 @@ service Management {
     };
   }
   // List the contact groups of a root or of the platform scope, by name: of
-  // the namespaces `services` names, every namespace when it is empty.
+  // the namespaces `services` names, every namespace when it is empty. Each
+  // group says how many notify rules name it (`notify_rules`) and whether
+  // the caller may change (`writable`) and delete (`deletable`) it.
   rpc ListContactGroups            (Events.ContactGroupListReq)         returns (Events.ContactGroupList) {
     option (google.api.http) = {
       get: "/events/contact-groups"
@@ -3404,7 +3413,8 @@ service Management {
   }
   // Delete a contact group.
   //
-  // Errors: `shared.resource.in_use` while a notify rule names it.
+  // Errors: `shared.resource.in_use` while notify rules name it
+  // (`errMeta.notify_rules`: their IDs, sorted, comma-separated).
   rpc DeleteContactGroup           (Events.Id)                          returns (Empty) {
     option (google.api.http) = {
       delete: "/events/contact-group"
@@ -4372,16 +4382,18 @@ message User {
 
   // Request of `ListUsersPaged` (`GET /user/page`).
   message PageReq {
+    reserved 3, 4;
+    reserved "offset", "limit";
     // IAM services whose accounts are listed, as repeated query keys. Empty
     // lists `asn` only.
     repeated string service_names = 1;
     // Case-insensitive substring of the username, email, phone number, or a
     // third-party binding's name or email. Optional.
     string keyword = 2;
-    // Accounts to skip; must not be negative.
-    int32 offset = 3;
-    // Page size; 0 means 20, at most 500.
-    int32 limit = 4;
+    // Page from 1.
+    int32 page = 5;
+    // Accounts per page, 1-500 (required).
+    int32 page_size = 6;
   }
 
   // Response of `ListUsersPaged` (`GET /user/page`).
@@ -5908,6 +5920,16 @@ message Label {
   string name = 2;
   // Root network of a root label; `platform` for a platform label.
   string root_id = 3;
+  // The fields below are read only and set by ListLabels and
+  // ListPlatformLabels; the labels of a node carry the three above only.
+  // Read only: the caller may rename it (as CreateLabel, by its scope).
+  bool writable = 4;
+  // Read only: writable, and rules and bindings 0.
+  bool deletable = 5;
+  // Read only: how many event rules of any namespace name it.
+  int32 rules = 6;
+  // Read only: how many log parser bindings name it.
+  int32 bindings = 7;
 
   // Request of ListLabels (`GET /node/label`).
   message ListReq {
@@ -6290,17 +6312,17 @@ message Events {
     map<string, string> map = 3; // value -> level name
     string default = 4;
   }
-  // An event rule. scope: root (root_id), all_roots or platform; devices:
-  // all, label (label) or nodes (nodes, a root rule only). A write reads
-  // the `id` of label and nodes.
+  // An event rule of a root (root_id) or of the platform (root_id
+  // `platform`, the points of no root). devices: all, label (label) or
+  // nodes (nodes, a root rule only). A write reads the `id` of label and
+  // nodes.
   message Rule {
-    reserved 8, 9;
-    reserved "label_id", "node_ids";
+    reserved 5, 8, 9;
+    reserved "scope", "label_id", "node_ids";
     string id = 1;
     string name = 2;
     bool enable = 3;
     string service = 4;
-    string scope = 5;
     string root_id = 6;
     string devices = 7;
     Ref label = 23;
@@ -6323,14 +6345,17 @@ message Events {
     // not deleted. Read only; an update keeps it.
     bool builtin = 22;
     // Read only: the caller may change the rule (manage on its root; system
-    // manage for all_roots and platform rules).
+    // manage for platform rules).
     bool writable = 25;
-    // Read only: writable and not built in.
+    // Read only: writable, not built in, and notify_rules 0.
     bool deletable = 26;
+    // Read only: how many notify rules name it; a rule with any is not
+    // deleted (`asn.event.rule_in_use`).
+    int32 notify_rules = 27;
   }
   message RuleListReq {
-    reserved 6;
-    reserved "service";
+    reserved 6, 8, 9, 11;
+    reserved "service", "scope", "devices", "bound";
     string root_id = 1;
     string keyword = 2;
     string enable = 3; // "", "true" or "false"
@@ -6338,10 +6363,7 @@ message Events {
     int32 page_size = 5;
     repeated string services = 12; // namespaces; empty: every namespace
     repeated string items = 7; // rules on these data items
-    string scope = 8; // root, all_roots or platform
-    string devices = 9; // all, label or nodes
     string node_id = 10; // rules whose devices include the node
-    string bound = 11; // asn rules bound to this service
     // Rules of these fixed levels; a rule whose level comes from the data
     // (level_from) matches none.
     repeated string levels = 13;
@@ -6352,8 +6374,8 @@ message Events {
     int64 total = 2;
   }
   message IncidentListReq {
-    reserved 6, 11;
-    reserved "state", "service";
+    reserved 6, 11, 17;
+    reserved "state", "service", "scopes";
     string root_id = 1;
     string network_id = 2;
     bool include_subnetwork = 3;
@@ -6369,8 +6391,6 @@ message Events {
     string keyword = 14; // the rule name contains it, case-insensitive
     // Namespaces; empty: every namespace, those of removed services too.
     repeated string services = 15;
-    // Incidents of rules of these scopes: root, all_roots, platform.
-    repeated string scopes = 17;
     // These incidents, at most 1000.
     repeated string ids = 18;
   }
@@ -6403,36 +6423,36 @@ message Events {
     int64 total = 2;
   }
   message NotifyRuleListReq {
+    reserved 7, 8, 9;
+    reserved "levels", "send_on", "devices";
     string root_id = 1;
     string keyword = 2;
     int32 page = 3;
     int32 page_size = 4;
     repeated string services = 5; // namespaces; empty: every namespace
     string enable = 6; // "", "true" or "false"
-    // Rules by level of these levels; a rule by event rules matches none.
-    repeated string levels = 7;
-    repeated string send_on = 8; // rules sending on any of these
-    string devices = 9; // all (no node_ids) or nodes
     string contact_group_id = 10; // rules naming this contact group
   }
   message ContactGroupListReq {
+    reserved 6;
+    reserved "address";
     string root_id = 1;
+    // Groups whose name, or a to or cc address, contains it,
+    // case-insensitive.
     string keyword = 2;
     int32 page = 3;
     int32 page_size = 4;
     repeated string services = 5; // namespaces; empty: every namespace
-    // Groups with a to or cc address containing it, case-insensitive.
-    string address = 6;
   }
   // A notify rule of a root or the platform scope. It selects incidents
   // either by level (level, with level_op ge (default), le or eq: every
   // rule of the namespace) or by event rules (event_rules, at least one;
   // no level or level_op), never both; read back the same way. A write
-  // reads the `id` of event_rules and contact_groups.
+  // reads the `id` of event_rules, nodes and contact_groups.
   // send_on: open, closed, recorded.
   message NotifyRule {
-    reserved 8, 13;
-    reserved "event_rule_ids", "contact_group_ids";
+    reserved 8, 9, 13;
+    reserved "event_rule_ids", "node_ids", "contact_group_ids";
     string id = 1;
     string name = 2;
     bool enable = 3;
@@ -6441,7 +6461,7 @@ message Events {
     string level_op = 6;
     string level = 7;
     repeated Ref event_rules = 16;
-    repeated string node_ids = 9;
+    repeated Ref nodes = 19; // empty: every node
     repeated string send_on = 10;
     int64 cooldown_seconds = 11;
     int64 min_interval_seconds = 12;
@@ -6451,6 +6471,8 @@ message Events {
     // Read only: the caller may change it (manage on its root; system
     // manage for platform rules).
     bool writable = 18;
+    // Read only: writable; nothing refers to a notify rule.
+    bool deletable = 20;
   }
   message NotifyRuleList {
     repeated NotifyRule rules = 1;
@@ -6471,8 +6493,11 @@ message Events {
     int64 update_time = 8;
     // Read only: the caller may change it, as NotifyRule.writable.
     bool writable = 9;
-    // Read only: how many notify rules name it.
+    // Read only: how many notify rules name it; a group with any is not
+    // deleted (`shared.resource.in_use`).
     int32 notify_rules = 10;
+    // Read only: writable and notify_rules 0.
+    bool deletable = 11;
   }
   message ContactGroupList {
     repeated ContactGroup groups = 1;
@@ -6517,8 +6542,8 @@ message Audit {
   // Conditions match exactly; a repeated condition matches any of its values;
   // every condition set must match.
   message Query {
-    reserved 7;
-    reserved "subject_id";
+    reserved 7, 15;
+    reserved "subject_id", "origins";
     // The `Service` tag: the service whose data or function the record is
     // about; `asn` for ASN's own.
     string service = 1;
@@ -6537,6 +6562,9 @@ message Audit {
     repeated string node_ids = 6;
     // Who acted: account IDs or service names, any of them.
     repeated string subject_ids = 25;
+    // Who acted: account usernames as the records were written with, any of
+    // them; with `subject_ids` both must match.
+    repeated string usernames = 26;
     // `account`, `service`, `system`.
     repeated string subject_types = 8;
     // Event types, such as `asn.node`; see GetAuditCatalog. Needs `service`:
@@ -6553,9 +6581,6 @@ message Audit {
     repeated string object_types = 13;
     // Object IDs.
     repeated string object_ids = 14;
-    // Where the record was made: `local` for the controller, a node ID for
-    // what a node reported.
-    repeated string origins = 15;
     // Range start, inclusive (unix ms). With `stop`, unless `timePreset`.
     int64 start = 16;
     // Range end, exclusive (unix ms).
@@ -6563,10 +6588,10 @@ message Audit {
     // A preset of GetAuditCatalog, such as `last_24_hours`, instead of
     // `start` and `stop`.
     string time_preset = 18;
-    // ListAuditRecords: page from 0.
+    // ListAuditRecords: page from 1; `page` × `page_size` at most 10000.
     int32 page = 19;
-    // ListAuditRecords: records per page; 0 means 50, at most 500.
-    int32 size = 20;
+    // ListAuditRecords: records per page, 1-500 (required).
+    int32 page_size = 20;
     // GetAuditSummary, GetAuditTrend: trend bucket width in seconds
     // (required); at most 2000 buckets in the range.
     int64 bucket_seconds = 21;
@@ -6590,7 +6615,8 @@ message Audit {
     // Account ID, service name, empty for ASN itself; `unknownUser` for a
     // refused login no account matched.
     string subject_id = 3;
-    // The account's username when the subject is an account.
+    // The account's username when the record was written, when the subject
+    // is an account.
     string username = 4;
     // The device an account acted from.
     string device_id = 5;
@@ -6619,6 +6645,8 @@ message Audit {
     map<string, string> fields = 20;
     // A service's own tags.
     map<string, string> tags = 21;
+    // The node's current name; empty for a node no longer there.
+    string node_name = 22;
   }
 
   // Response of ListAuditRecords.
@@ -6641,6 +6669,9 @@ message Audit {
     // Of its latest alarm.
     string subject_type = 2;
     int64 alarms = 3;
+    // An account's name in its latest record of the range; empty for a
+    // subject that is not an account.
+    string username = 4;
   }
 
   // The records of [start, stop).
@@ -6976,6 +7007,10 @@ message Logs {
     int64 update_time = 9;
     // Display names of fields of the patterns; optional.
     repeated ParserField fields = 10;
+    // Read only: the caller may save it (system `manage`).
+    bool writable = 11;
+    // Read only: writable and not built in.
+    bool deletable = 12;
   }
   // A field of a parser's patterns named for display.
   message ParserField {
@@ -7010,6 +7045,7 @@ message Logs {
     string node_id = 2;
     map<string, string> tags = 3;
     map<string, string> fields = 4; // as text
+    string node_name = 5; // the node's current name; empty for a node no longer there
   }
   message Records {
     repeated Record records = 1;
