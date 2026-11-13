@@ -1877,7 +1877,6 @@ service Management {
   // Node Lifecycle API. Every call returning Node.Script hands out a token for
   // the public GET /enrollment/script?token= endpoint (curl ... | sudo bash);
   // an empty token means there is nothing to run on the host.
-  // See workflow/design/NodeEnrollment.md.
 
   // Get an install token for a node (install or upgrade).
   //
@@ -2155,8 +2154,8 @@ service Management {
 
   // Node Label API
   //
-  // Node labels (workflow/alpha/ASN.NodeLabels.md): a root label belongs to
-  // one root network and goes only on that root's nodes; a platform label
+  // Node labels: a root label belongs to one root network and goes only on
+  // that root's nodes; a platform label
   // (`rootId` `platform`) goes on any node. Nodes carry labels by ID, so a
   // rename changes only the name. A label name has 1 to 64 characters with no
   // leading or trailing whitespace and is unique within its root, or among
@@ -2290,8 +2289,7 @@ service Management {
 
   // Operation Audit API
   //
-  // Operation audit (workflow/alpha/ASN.OperationAudit.md §8): one record per
-  // business operation on ASN, by an account, a service or ASN itself, kept
+  // Operation audit: one record per business operation on ASN, by an account, a service or ASN itself, kept
   // with its result. Records are read by conditions over a time range of at
   // most 92 days; conditions match exactly, with no keywords.
   //
@@ -3031,9 +3029,8 @@ service Management {
 
   // --- Host Metrics ---
   //
-  // Host resource metrics of the nodes (workflow/alpha/ASN.HostResourceMetrics.md
-  // §7): CPU, memory, swap, load, processes, disks and GPUs, sampled on each
-  // node every `metrics.host.interval` and kept for `metrics.host.retention`.
+  // Host resource metrics of the nodes: CPU, memory, swap, load, processes,
+  // disks and GPUs, sampled on each node every `metrics.host.interval` and kept for `metrics.host.retention`.
   // Items: `host` (one series per node), `host_disk` (one per mount, tags
   // `Path`, `Device`), `host_gpu` (one per GPU, tags `Index`, `Name`). Values
   // are in base units: bytes, bytes/s, %, seconds, °C, W; load is per logical
@@ -3096,8 +3093,7 @@ service Management {
       get: "/metrics/host/node"
     };
   }
-  // Resource dashboard (workflow/alpha/ASN.ResourceDashboard.md): read-only
-  // figures over the nodes of a scope. The scope is the nodes of `networkId`
+  // Resource dashboard: read-only figures over the nodes of a scope. The scope is the nodes of `networkId`
   // (`includeSubnetwork`), narrowed to those carrying any of `labelIds` (at
   // most 32) and to `nodeIds` (at most 100) when given; an empty scope is not
   // an error. Time: `history` seconds back from now, or `start` (unix ms,
@@ -3180,8 +3176,7 @@ service Management {
       get: "/dashboard/process-disk"
     };
   }
-  // Get a node's sFlow collector (workflow/alpha/ASN.NetworkCollection.md
-  // §4.1): off by default, UDP port 6343.
+  // Get a node's sFlow collector: off by default, UDP port 6343.
   //
   // Auth: `view` or `manage` on the node's root, or system access.
   rpc GetNodeSFlow                 (HostMetrics.NodeReq)                returns (HostMetrics.SFlow) {
@@ -3201,9 +3196,8 @@ service Management {
       body: "*"
     };
   }
-  // Get a node's packet capture settings (workflow/alpha/ASN.ServiceApi271.md
-  // §7.2): off by default; `active` when enabled and a service installed on
-  // the node declares the need, listed in `demanders`.
+  // Get a node's packet capture settings: off by default; `active` when
+  // enabled and a service installed on the node declares the need, listed in `demanders`.
   //
   // Auth: `view` or `manage` on the node's root, or system access.
   rpc GetNodeCapture               (HostMetrics.NodeReq)                returns (HostMetrics.Capture) {
@@ -3227,8 +3221,7 @@ service Management {
 
   // --- Events ---
   //
-  // Event rules, incidents, notify rules, contact groups and deliveries
-  // (workflow/alpha/ASN.Events.md). Only the `asn` namespace until step 5a.
+  // Event rules, incidents, notify rules, contact groups and deliveries.
   // A root is a root network ID, or `platform` for the platform scope
   // (system access only). Times are unix ms; durations seconds; pages start
   // at 1 with a size of 1-500. Objects a caller cannot read are
@@ -3278,7 +3271,9 @@ service Management {
       body: "*"
     };
   }
-  // Replace an event rule. Auth and errors as create, on both roots.
+  // Replace an event rule. Auth and errors as create. The root does not
+  // change: an empty `root_id` keeps it, another is
+  // `shared.request.param_invalid` (`errMeta.field` `root_id`).
   rpc UpdateEventRule              (Events.Rule)                        returns (Events.Rule) {
     option (google.api.http) = {
       put: "/events/rule"
@@ -3430,8 +3425,7 @@ service Management {
 
   // --- Logs ---
   //
-  // Log collection (workflow/alpha/ASN.LogCollection.md): each node's syslog
-  // sources, the file parsers bound to node labels, and the stored lines.
+  // Log collection: each node's syslog sources, the file parsers bound to node labels, and the stored lines.
   // Times are unix ms; pages start at 1 with a size of 1-500. The export is
   // a CSV download, `GET /logs/export` with the query of ListLogs.
 
@@ -5973,9 +5967,9 @@ message Label {
   }
 }
 
-// Operation audit (workflow/alpha/ASN.OperationAudit.md). Times are unix
+// Operation audit. Times are unix
 // milliseconds.
-// Resource dashboard (workflow/alpha/ASN.ResourceDashboard.md). Field names
+// Resource dashboard. Field names
 // keep the dashboard web JSON.
 message Dashboard {
   message Req {
@@ -6122,8 +6116,7 @@ message HostMetrics {
     map<string, double> fields = 3;
     map<string, string> tags = 4;
     // ListHostMetrics only: the node's risk (`none`, or the highest level of
-    // its incidents open or opened within 24 hours) and open incidents
-    // (workflow/alpha/ASN.DeviceCloseOut.md §4).
+    // its incidents open or opened within 24 hours) and open incidents.
     string risk = 5;
     int32 open_incidents = 6;
   }
@@ -6191,8 +6184,7 @@ message HostMetrics {
     repeated Process memory = 3;
     repeated Process io = 4;
   }
-  // A node's host information from its last registration
-  // (workflow/alpha/ASN.DeviceCloseOut.md §3).
+  // A node's host information from its last registration.
   message HostInfo {
     message Interface {
       string name = 1;
@@ -6220,7 +6212,7 @@ message HostMetrics {
     repeated Latest disks = 2;
     repeated Latest gpus = 3;
     TopProcesses top = 4;
-    // Network data (workflow/alpha/ASN.NetworkCollection.md §6).
+    // Network data.
     repeated Latest nics = 5;
     repeated Latest sflow_interfaces = 6;
     repeated Latest sflow_agents = 7;
@@ -6946,7 +6938,7 @@ message Ops {
   }
 }
 
-// A service catalog (workflow/alpha/ASN.ServiceCatalog.md §3).
+// A service catalog.
 message ServiceCatalog {
   message Req {
     string service = 1; // asn by default
@@ -6981,7 +6973,7 @@ message ServiceCatalog {
   bool packet_capture = 8;
 }
 
-// Log collection (workflow/alpha/ASN.LogCollection.md).
+// Log collection.
 message Logs {
   message NodeRef {
     string node_id = 1;
