@@ -24,7 +24,7 @@ services:
     volumes:
       - redis_data:/data
   sapphire-iam:
-    image: registry.amiasys.com/sapphire.iam:27.0.1
+    image: registry.amiasys.com/sapphire.iam:27.1.1
     container_name: sapphire-iam
     privileged: true
     restart: always
