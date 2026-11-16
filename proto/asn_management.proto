@@ -3402,6 +3402,13 @@ service Management {
       get: "/events/contact-groups"
     };
   }
+  // Get a contact group, with `notify_rules`, `writable` and `deletable` as
+  // ListContactGroups lists it.
+  rpc GetContactGroup              (Events.Id)                          returns (Events.ContactGroup) {
+    option (google.api.http) = {
+      get: "/events/contact-group"
+    };
+  }
   // Create a contact group.
   rpc CreateContactGroup           (Events.ContactGroup)                returns (Events.ContactGroup) {
     option (google.api.http) = {
