@@ -339,6 +339,7 @@ verification_code:
 #    browser: -1 # The number of login devices under this category allowed per user. Default: -1
 #    mini_program: -1 # The number of login devices under this category allowed per user. Default: -1
 #    pc: -1 # The number of login devices under this category allowed per user. Default: -1
+#    agent: -1 # Software agents such as MCP clients. 0 forbids agent logins. Default: -1
 #    unknown: -1 # The number of login devices under this category allowed per user. Default: -1
 #
 #  # Password flow (forgot-password recovery and in-session change) configuration.
@@ -370,6 +371,7 @@ verification_code:
 #      browser: 0
 #      mini_program: 0
 #      pc: 0
+#      agent: 0
 #      unknown: 0
 #
 #  # How often (in seconds) the server flushes its batch of revoked access tokens to
