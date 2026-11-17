@@ -7,7 +7,7 @@ replace asn.amiasys.com/asn-service-api/v27 => github.com/amianetworks/asn-servi
 require (
 	asn.amiasys.com/asn-service-api/v27 v27.8.0
 	github.com/amianetworks/am.drivers.sapphire.iam/v27 v27.1.1
-	github.com/amianetworks/am.modules/v27 v27.0.16
+	github.com/amianetworks/am.modules/v27 v27.0.17
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.33.0
@@ -16,6 +16,7 @@ require (
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
 	github.com/vjeantet/grok v1.0.1
 	go.mongodb.org/mongo-driver/v2 v2.9.3
 	golang.org/x/net v0.61.0
@@ -79,7 +80,6 @@ require (
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/shoenig/go-m1cpu v0.2.1 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/tidwall/gjson v1.20.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
