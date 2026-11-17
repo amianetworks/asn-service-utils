@@ -51,6 +51,139 @@ service Management {
   }
 
   // ---------------------------------------------------------------------------
+  // Controller packages
+  //
+  // What is installed on the controller is decided by a package list: asnc,
+  // the controller service packages and their web packages. These RPCs query
+  // it and change it while asnc runs. A change computes the new list, downloads
+  // the packages, checks them and switches the list; the controller then
+  // restarts and installs the new list (except `UpgradeWebPackages`, which
+  // installs the web packages at once and does not restart). Rollback is not an
+  // API operation: it runs on the controller host
+  // (`docker compose run --rm asnc rollback`, then
+  // `docker compose up -d --force-recreate asnc`).
+  //
+  // Package operations run only on a container deployment; on a host
+  // deployment every one fails with `shared.request.not_supported`.
+  //
+  // Errors of every package RPC:
+  // - `shared.request.not_supported`: a host deployment.
+  // - `asn.package.busy`: another package operation is in progress, or the
+  //   controller is restarting after a switch.
+  // - `asn.package.mismatch` (meta `packages`): the installed packages differ
+  //   from the package list (for example after a rollback that has not been
+  //   followed by `docker compose up -d --force-recreate asnc`); the reason
+  //   names the command to run. Changes only.
+  // - `asn.package.refused` (meta `packages`, or `problems` for a refused
+  //   precheck, or `version` when the current image cannot run the new asnc):
+  //   the operation is refused; nothing changed. Changes and
+  //   `ListPackageUpdates` only.
+  // - `asn.package.failed`: the operation failed; the reason says why.
+  // ---------------------------------------------------------------------------
+
+  // List the installed packages.
+  //
+  // Reads the package list and the installed packages; nothing is downloaded
+  // or changed. Lists asnc, every controller service package and every web
+  // package with its version, marks a package whose installed state differs
+  // from the list, gives the rollback point and the last package operation.
+  //
+  // Auth: `view` or `manage` access on the `asn` scope.
+  rpc ListPackages (Empty) returns (Package.Listing) {
+    option (google.api.http) = {
+      get: "/package"
+    };
+  }
+  // List the available updates.
+  //
+  // Refreshes the ASN repository index and lists, by the same selection as
+  // `UpgradePackages` and `UpgradeWebPackages`, the version each installed
+  // package would be upgraded to, the higher lines in the repository and, for
+  // each line, the installed services that have no version there. Nothing is
+  // downloaded or installed.
+  //
+  // Auth: `view` or `manage` access on the `asn` scope.
+  rpc ListPackageUpdates (Empty) returns (Package.Updates) {
+    option (google.api.http) = {
+      get: "/package/updates"
+    };
+  }
+  // Install controller service packages.
+  //
+  // Adds the named controller service packages and their web packages; every
+  // installed service goes to the newest version of its line. With `dryRun`
+  // only the plan is returned. Otherwise the list is switched and the
+  // controller restarts after the response (`restart` true, status
+  // `switched`).
+  //
+  // Auth: `manage` access on the `asn` scope. Recorded in the operation audit
+  // (dry runs and calls that change nothing are not).
+  //
+  // Request: `packages` (required), `dryRun`.
+  rpc InstallPackages (Package.Request) returns (Package.Result) {
+    option (google.api.http) = {
+      post: "/package/install"
+      body: "*"
+    };
+  }
+  // Remove controller service packages.
+  //
+  // Removes the named controller service packages and their web packages; the
+  // other services go to the newest version of their line. Restarts as
+  // `InstallPackages`.
+  //
+  // Auth: `manage` access on the `asn` scope; audited as `InstallPackages`.
+  //
+  // Request: `packages` (required), `dryRun`.
+  rpc RemovePackages (Package.Request) returns (Package.Result) {
+    option (google.api.http) = {
+      post: "/package/remove"
+      body: "*"
+    };
+  }
+  // Upgrade asnc and the controller service packages.
+  //
+  // Without `packages`: asnc and every service to the newest version of the
+  // target line, their web packages following. `to` empty keeps asnc's line;
+  // `X.Y` names a line (higher or lower) and keeps asnc's PRO or DEV mode;
+  // `X.Y.B` names an asnc version, which may be a downgrade or the other mode.
+  // Services follow the line and mode of the selected asnc; a service with no
+  // version there refuses the call and is listed. With `packages` (`asnc`
+  // and/or installed services, not combinable with `to`): only the named
+  // packages and their web packages move to the newest version of their line;
+  // the others stay; an unnamed service that is not compatible with the
+  // selected asnc refuses the call and is listed. An installed version is
+  // never downgraded automatically. Restarts as `InstallPackages`.
+  //
+  // Auth: `manage` access on the `asn` scope; audited as `InstallPackages`.
+  //
+  // Request: `packages`, `to`, `dryRun`. `to` with `packages` fails with
+  // `shared.request.param_invalid` (meta `field=to`).
+  rpc UpgradePackages (Package.UpgradeRequest) returns (Package.Result) {
+    option (google.api.http) = {
+      post: "/package/upgrade"
+      body: "*"
+    };
+  }
+  // Upgrade web packages only.
+  //
+  // Without `packages`: every web package of the list, and the web package of
+  // every installed backend that has none, to the newest version in the
+  // repository. With `packages`: only the named web packages, each of which
+  // must belong to a backend in the list. The web packages are installed at
+  // once; the controller does not restart (status `applied`).
+  //
+  // Auth: `manage` access on the `asn` scope; audited as `InstallPackages`.
+  //
+  // Request: `packages`, `dryRun`.
+  rpc UpgradeWebPackages (Package.Request) returns (Package.Result) {
+    option (google.api.http) = {
+      post: "/package/upgrade/web"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // 1 — Auth (Verification Codes, Login, MFA, Factors, Tokens, Logout)
   //
   // Every Auth RPC runs under the `asn` IAM service; this API carries no
@@ -4266,6 +4399,144 @@ message UpdatePortReq {
   // New Service Node listening port, 1-65535. Required; 0 or values above 65535
   // fail with `shared.request.param_invalid` (meta `field=port`).
   uint32 port = 1;
+}
+
+/*
+ * Controller packages
+ */
+
+// Requests and results of the controller package RPCs (`/package`).
+//
+// `kind` of a package is `asnc`, `service` (a controller service package) or
+// `web` (a web package; `webFor` names its backend package). Versions are
+// Debian versions; an empty version means the package is not there.
+message Package {
+  // Request of `InstallPackages`, `RemovePackages` and `UpgradeWebPackages`.
+  message Request {
+    // Package names. Required for install and remove; for
+    // `UpgradeWebPackages` empty means every web package.
+    repeated string packages = 1;
+    // Only compute and return the plan; nothing changes.
+    bool dry_run = 2;
+  }
+  // Request of `UpgradePackages`.
+  message UpgradeRequest {
+    // `asnc` and/or installed controller service packages; empty means asnc
+    // and every service.
+    repeated string packages = 1;
+    // Target: empty for asnc's current line, `X.Y` for a line, `X.Y.B` for an
+    // asnc version. Not combinable with `packages`.
+    string to = 2;
+    // Only compute and return the plan; nothing changes.
+    bool dry_run = 3;
+  }
+  // One package of an operation's target list.
+  message PlanItem {
+    string package = 1;
+    string kind = 2;
+    string web_for = 3;
+    // The current version; empty when the package is added.
+    string from = 4;
+    // The target version; empty when the package is removed.
+    string to = 5;
+  }
+  // A version change of one package.
+  message Change {
+    string package = 1;
+    string from = 2;
+    string to = 3;
+  }
+  // A configuration file whose packaged default changes. The file on the
+  // controller is kept; `diff` shows the default's change.
+  message Conffile {
+    string package = 1;
+    string path = 2;
+    string diff = 3;
+  }
+  // Result of a package change.
+  message Result {
+    // `install`, `remove`, `upgrade` or `upgrade-web`.
+    string op = 1;
+    // `no-change` (the target equals the current list; nothing happens),
+    // `planned` (dry run), `switched` (the list changed; the controller
+    // restarts after this response and installs it) or `applied` (installed
+    // now; `UpgradeWebPackages`).
+    string status = 2;
+    // Every package of the target list, and the removed ones.
+    repeated PlanItem items = 3;
+    // The packages whose version changes.
+    repeated Change changes = 4;
+    // Backends with no web package in the repository.
+    repeated string backends_without_web = 5;
+    // Configuration files whose packaged default changes.
+    repeated Conffile conffiles = 6;
+    // The controller restarts to install the change (`switched`), or would
+    // (`planned`).
+    bool restart = 7;
+  }
+  // One package of `ListPackages`.
+  message Installed {
+    string package = 1;
+    string kind = 2;
+    string web_for = 3;
+    // The version in the package list; empty when installed but not listed.
+    string listed = 4;
+    // The installed version; empty when not installed.
+    string installed = 5;
+    // The package manager's state when the package is not plainly installed.
+    string status = 6;
+    // The installed state differs from the list.
+    bool mismatch = 7;
+  }
+  // One package operation record.
+  message HistoryRecord {
+    // RFC 3339 time.
+    string time = 1;
+    string op = 2;
+    // The caller's account name, `local` for a command on the controller
+    // host, `asnc` for the record written at start.
+    string actor = 3;
+    // `switched`, `applied`, `not-applied` or `failed`.
+    string result = 4;
+    repeated Change changes = 5;
+    string detail = 6;
+  }
+  // Response of `ListPackages`.
+  message Listing {
+    repeated Installed packages = 1;
+    // A rollback point exists; `rollbackPoint` lists how its versions differ
+    // from the current list (empty: the same versions).
+    bool has_rollback_point = 2;
+    // `from` is the current version, `to` the rollback point's.
+    repeated Change rollback_point = 3;
+    // The last package operation; absent when there is none.
+    HistoryRecord last = 4;
+  }
+  // One package of `ListPackageUpdates`.
+  message UpdateItem {
+    string package = 1;
+    string kind = 2;
+    string web_for = 3;
+    string current = 4;
+    string available = 5;
+    // `available` equals `current`.
+    bool latest = 6;
+  }
+  // A line higher than asnc's current one.
+  message Line {
+    // `X.Y`.
+    string line = 1;
+    // The asnc version an upgrade to the line selects.
+    string asnc = 2;
+    // Installed services with no version on the line; an upgrade to it is
+    // refused while any is listed.
+    repeated string missing = 3;
+  }
+  // Response of `ListPackageUpdates`.
+  message Updates {
+    repeated UpdateItem items = 1;
+    repeated Line lines = 2;
+  }
 }
 
 /*
