@@ -179,7 +179,7 @@ func main() {
 	}
 	asncD.Services["sapphire-iam"] = DockerService{
 		ContainerName: "sapphire-iam",
-		Image:         "registry.amiasys.com/sapphire.iam:27.1.2",
+		Image:         "registry.amiasys.com/sapphire.iam:27.1.3",
 		NetworkMode:   "host",
 		Restart:       "unless-stopped",
 		Privileged:    true,

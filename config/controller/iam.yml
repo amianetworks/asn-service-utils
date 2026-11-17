@@ -253,7 +253,7 @@ verification_code:
 
 ## Account Configurations
 #account:
-#  special_key: "REPLACE_WITH_SECRET" # Used to create special accounts which skips MFA.
+#  special_key: "REPLACE_WITH_SECRET" # Secret for creating special accounts, which skip MFA. No default; empty disables special accounts. Use a long random value.
 #  password_algo: sha256 # argon2id | bcrypt | md5 | pbkdf2 | scrypt | sha1 | sha256 | sha512, Default: sha256. CAUTION: more demanding algorithms like argon2id are not recommended in VMs.
 #  rename: false # whether renaming an account's username is allowed. Default: false
 #
@@ -359,12 +359,29 @@ verification_code:
 #  delegation:
 #    enabled: false # Whether to allow session delegation. Default: false
 #    ticket_expire: 60 # Ticket lifetime in SECONDS (not minutes) - it only has to survive one hop. Default: 60
-#    max_expire: 120 # Longest lifetime in minutes any delegated session may be granted. Non-positive means the parent session's own ceiling is the only limit. Default: 120
+#    max_expire: 120 # Longest lifetime in minutes any delegated session may be granted, for every category without its own category_max_expire entry. Non-positive means no cap of its own. Default: 120
 #    allow_refresh: false # Whether a delegated session may be granted a refresh token. Without one it dies at its access token expiry and cannot be renewed. Default: false
-#    # Default lifetime in minutes per device category of the REDEEMING device, used when
-#    # the caller does not request one. 0 falls back to authorization.jwt.access.expire.
-#    # Every value is still clamped by max_expire and by the parent session's own ceiling.
+#    bind_lifetime_to_parent: true # Whether a delegated session is also capped by the delegating session's own refresh (or access) expiry. false lets it outlive its parent, bounded only by the caps (or, with no cap, by authorization.jwt lifetimes). Default: true
+#    cascade_revoke: true # Whether ending the delegating session (revoke, logout of that device, device delete, device-limit eviction) also ends the sessions it delegated. Logout of all devices and a password change end them regardless. Default: true
+#    # Default ACCESS lifetime in minutes per device category of the REDEEMING device, used
+#    # when the caller does not request one. 0 falls back to authorization.jwt.access_token.expire.
+#    # Every value is still clamped by the session's ceiling.
 #    default_expire:
+#      phone: 0
+#      tablet: 0
+#      wearable: 0
+#      browser: 0
+#      mini_program: 0
+#      pc: 0
+#      agent: 0
+#      unknown: 0
+#    # Cap in minutes per REDEEMING device category. A positive value REPLACES max_expire
+#    # for that category (it may be larger), and with allow_refresh it is also the refresh
+#    # token's lifetime; authorization.jwt.refresh_token.expire does not narrow it.
+#    # 0 falls back to max_expire. Example: agent: 129600 (90 days) with
+#    # bind_lifetime_to_parent: false and cascade_revoke: false lets a browser session
+#    # hand an Agent a 90-day session that survives the browser's logout.
+#    category_max_expire:
 #      phone: 0
 #      tablet: 0
 #      wearable: 0
