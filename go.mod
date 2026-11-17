@@ -2,12 +2,12 @@ module asn.amiasys.com
 
 go 1.26.5
 
-replace asn.amiasys.com/asn-service-api/v27 => github.com/amianetworks/asn-service-api/v27 v27.7.0
+replace asn.amiasys.com/asn-service-api/v27 => github.com/amianetworks/asn-service-api/v27 v27.8.0
 
 require (
-	asn.amiasys.com/asn-service-api/v27 v27.7.0
+	asn.amiasys.com/asn-service-api/v27 v27.8.0
 	github.com/amianetworks/am.drivers.sapphire.iam/v27 v27.1.1
-	github.com/amianetworks/am.modules/v27 v27.0.14
+	github.com/amianetworks/am.modules/v27 v27.0.15
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.33.0
