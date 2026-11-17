@@ -35,8 +35,15 @@ services:
       - ./iam-cert/:/etc/sapphire/cert/
       - ./iam-config/:/etc/sapphire/config/
       - ./iam-log/:/var/log/sapphire/
+  # asnc, its services and their web come from the package list in ./asn-pkg
+  # (installed by the image's entry on every start); the image tag fixes only
+  # the first asnc version. Upgrade with `docker compose exec asnc asnctl
+  # package ...`; first deploy with `docker compose run --rm asnc install
+  # <service packages>...` (ASN ControllerUpgrade CU-D13–CU-D15).
   asnc:
-    restart: always
+    # not `always`: a stopped asnc must stay stopped across a Docker restart
+    # during a migration
+    restart: unless-stopped
     image: registry.amiasys.com/asnc:26.25.6
     network_mode: host
     depends_on:
@@ -48,8 +55,7 @@ services:
       - ./asn-config/:/etc/asn/controller/config
       - ./asn-cert/:/etc/asn/controller/cert
       - ./asn-log/:/var/log/asn/controller
-      - ./asn-services:/usr/local/asn/controller/services
-      - ./asn-web:/var/www/asn/controller
+      - ./asn-pkg:/var/lib/asn/pkg
 
 volumes:
   postgres_data:

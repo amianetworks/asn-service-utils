@@ -109,7 +109,9 @@ func main() {
 		panic(err)
 	}
 
-	err = os.MkdirAll("controller/services", 0755)
+	// The controller's package list volume: asnc, its services and web come
+	// from the list, not from a services directory (ASN ControllerUpgrade CU-D15).
+	err = os.MkdirAll("controller/asn-pkg", 0755)
 	if err != nil {
 		panic(err)
 	}
@@ -206,7 +208,7 @@ func main() {
 		Volumes: []string{
 			"./config/:/etc/asn/controller/config",
 			"./log/asn/:/var/log/asn/controller",
-			"./services:/usr/local/asn/controller/services",
+			"./asn-pkg:/var/lib/asn/pkg",
 		},
 	}
 
