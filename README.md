@@ -104,6 +104,13 @@ API's `X.Y`, when the lane `ASN_RUNTIME_MODE` selects is empty, or when both
 lanes are set and their builder Go versions differ. A lane is empty only at the
 start of a line, before it has a build of that kind.
 
+The project's own version is `X.Y.n` on the API line, for ASN and for every
+service built with this builder: `VERSION` must be the API's `X.Y`; PRO builds
+are numbered below 100 (`BUILD` at most 98 before a PRO build) and DEV builds
+from 100 (`BUILD_DEV` at least 99). `make check-version` fails otherwise. A
+service's plugin reports the same version as its deb (`StaticResource().Version()`),
+and its controller and node packages carry one version and are published together.
+
 ## Makefile Control Order
 
 A typical consuming service Makefile includes files in this order:

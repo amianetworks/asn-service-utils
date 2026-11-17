@@ -125,7 +125,7 @@ check-version:
 		--manifest "$(BUILD_MANIFEST_FILE)" \
 		--go-version "$(GO_VERSION)" \
 		$(BUILD_MANIFEST_ARGS)
-	@$(ASN_VERSION_POLICY_CMD)
+	@$(ASN_VERSION_POLICY_CMD) --version "$(VERSION)" --build-mode "$(BUILD_MODE)" --build "$(BUILD)" --build-dev "$(BUILD_DEV)"
 
 check-build:
 	@$(BUILD_MANIFEST_CMD) check-build \

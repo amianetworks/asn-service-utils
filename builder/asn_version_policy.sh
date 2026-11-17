@@ -6,7 +6,11 @@
 #   - asn-service-api is released only as X.Y.0;
 #   - every runtime lane that is set (ASN_RUNTIME_VERSION_PRO / _DEV) is on the
 #     API's X.Y, and the lane ASN_RUNTIME_MODE selects is set;
-#   - PRO and DEV build with the same Go toolchain.
+#   - PRO and DEV build with the same Go toolchain;
+#   - the project's own version is X.Y.n on the API line: VERSION is the API's
+#     X.Y, a PRO build number stays below 100 and a DEV build number starts at
+#     100 (ASN workflow/alpha/ASN.ControllerUpgrade.md CU-D1). This holds for
+#     ASN and for every service built with this builder.
 # A lane may be empty: when a line starts, the lane that has no build on it yet
 # is cleared by ASN `make set-version` rather than left on the previous line.
 # Every violation is reported before failing, so one run shows the whole fix.
@@ -23,6 +27,10 @@ runtime_dev="${ASN_RUNTIME_VERSION_DEV:-}"
 go_pro="${ASN_BUILDER_GO_VERSION_PRO:-}"
 go_dev="${ASN_BUILDER_GO_VERSION_DEV:-}"
 mode="${ASN_RUNTIME_MODE:-pro}"
+version="${VERSION:-}"
+build_mode="${BUILD_MODE:-}"
+build="${BUILD:-}"
+build_dev="${BUILD_DEV:-}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -32,6 +40,10 @@ while [ "$#" -gt 0 ]; do
         --builder-go-version-pro) shift; go_pro="${1:-}" ;;
         --builder-go-version-dev) shift; go_dev="${1:-}" ;;
         --runtime-mode) shift; mode="${1:-}" ;;
+        --version) shift; version="${1:-}" ;;
+        --build-mode) shift; build_mode="${1:-}" ;;
+        --build) shift; build="${1:-}" ;;
+        --build-dev) shift; build_dev="${1:-}" ;;
         *) echo "asn_version_policy ERROR: unknown option: $1" >&2; exit 2 ;;
     esac
     shift
@@ -80,6 +92,34 @@ if [ -n "$runtime_pro" ] && [ -n "$runtime_dev" ] && [ -n "$go_pro" ] && [ -n "$
     [ "$go_pro" != "$go_dev" ]; then
     add "ASN_BUILDER_GO_VERSION_PRO $go_pro differs from ASN_BUILDER_GO_VERSION_DEV $go_dev; one line builds PRO and DEV with one toolchain"
 fi
+
+# The project's version X.Y.n: X.Y is the API line; n < 100 is PRO, n >= 100
+# is DEV. BUILD and BUILD_DEV are the last builds of each lane, so the next
+# build is one higher.
+if [ -z "$version" ]; then
+    add "VERSION is not set; it must be the API line $api_line"
+elif ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+$'; then
+    add "VERSION '$version' is not X.Y; the version is X.Y.n with X.Y the API line $api_line"
+elif [ -n "$api_line" ] && [ "$version" != "$api_line" ]; then
+    add "VERSION $version is not the API line $api_line (ASN_SERVICE_API_VERSION $api); the version is X.Y.n on the API line"
+fi
+case "$build_mode" in
+    pro)
+        if ! printf '%s\n' "$build" | grep -Eq '^[0-9]+$'; then
+            add "BUILD '$build' is not a number"
+        elif [ "$build" -ge 99 ]; then
+            add "BUILD $build leaves no PRO build below 100 on $version; PRO builds are $version.0 to $version.99"
+        fi
+        ;;
+    dev)
+        if ! printf '%s\n' "$build_dev" | grep -Eq '^[0-9]+$'; then
+            add "BUILD_DEV '$build_dev' is not a number"
+        elif [ "$build_dev" -lt 99 ]; then
+            add "BUILD_DEV $build_dev would build DEV below 100; DEV builds start at $version.100 (set BUILD_DEV to 99 or more)"
+        fi
+        ;;
+    *) add "BUILD_MODE must be pro or dev, got '$build_mode'" ;;
+esac
 
 if [ -n "$errors" ]; then
     printf '%s' "$errors" | sed 's/^/check-version ERROR: /' >&2
