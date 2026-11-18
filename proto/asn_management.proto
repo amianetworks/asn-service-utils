@@ -4418,6 +4418,10 @@ message Package {
     repeated string packages = 1;
     // Only compute and return the plan; nothing changes.
     bool dry_run = 2;
+    // `InstallPackages` only: select the named services from DEV versions
+    // (`n` >= 100) whatever asnc's mode. A service installed at a DEV version
+    // stays DEV in later operations. Refused by remove and web upgrades.
+    bool dev = 3;
   }
   // Request of `UpgradePackages`.
   message UpgradeRequest {
@@ -4429,6 +4433,10 @@ message Package {
     string to = 2;
     // Only compute and return the plan; nothing changes.
     bool dry_run = 3;
+    // Select the named services (every service when `packages` is empty) from
+    // DEV versions (`n` >= 100) whatever asnc's mode. A service installed at a
+    // DEV version stays DEV in later operations.
+    bool dev = 4;
   }
   // One package of an operation's target list.
   message PlanItem {
