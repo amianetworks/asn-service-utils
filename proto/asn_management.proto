@@ -55,7 +55,21 @@ service Management {
   //
   // What is installed on the controller is decided by a package list: asnc,
   // the controller service packages and their web packages. These RPCs query
-  // it and change it while asnc runs. A change computes the new list, downloads
+  // it and change it while asnc runs.
+  //
+  // Names: a change names services (`service[].name` in asn.conf, whose
+  // `controller.package` is the service's controller package) and `asnc`;
+  // `UpgradeWebPackages` also takes web package names. A web package belongs
+  // to the backend its `ASN-Web-For` field names (asnc, or a service's
+  // controller package); a backend may have several.
+  //
+  // Mode: every package is PRO or DEV. asnc and service packages by their
+  // build number (`n` < 100 PRO, >= 100 DEV), web packages by the suite
+  // (`apt_repo.suites.pro` / `.dev`) they were selected from. `mode` of a
+  // change (`pro` or `dev`) puts the packages the change targets in that mode;
+  // empty keeps each package in its installed mode (a package added takes its
+  // backend's mode). Newer versions are compared within a mode only; a mode
+  // switch may select a lower version. A change computes the new list, downloads
   // the packages, checks them and switches the list; the controller then
   // restarts and installs the new list (except `UpgradeWebPackages`, which
   // installs the web packages at once and does not restart). Rollback is not an
@@ -96,11 +110,12 @@ service Management {
   }
   // List the available updates.
   //
-  // Refreshes the ASN repository index and lists, by the same selection as
-  // `UpgradePackages` and `UpgradeWebPackages`, the version each installed
-  // package would be upgraded to, the higher lines in the repository and, for
-  // each line, the installed services that have no version there. Nothing is
-  // downloaded or installed.
+  // Refreshes the ASN repository index and lists, for each installed package,
+  // the newest PRO and the newest DEV version it can take: asnc on its line,
+  // a service on asnc's line and compatible with the installed asnc, a web
+  // package in its repository. Also lists the higher lines in the repository
+  // in each mode and, for each line, the installed services that have no
+  // version there. Nothing is downloaded or installed.
   //
   // Auth: `view` or `manage` access on the `asn` scope.
   rpc ListPackageUpdates (Empty) returns (Package.Updates) {
@@ -108,56 +123,57 @@ service Management {
       get: "/package/updates"
     };
   }
-  // Install controller service packages.
+  // Install services.
   //
-  // Adds the named controller service packages and their web packages; every
-  // installed service goes to the newest version of its line. With `dryRun`
-  // only the plan is returned. Otherwise the list is switched and the
-  // controller restarts after the response (`restart` true, status
-  // `switched`).
+  // Adds the named services' controller packages and their web packages;
+  // every installed service goes to the newest version of its line. `mode`
+  // applies to the named services and their web packages. With `dryRun` only
+  // the plan is returned. Otherwise the list is switched and the controller
+  // restarts after the response (`restart` true, status `switched`).
   //
   // Auth: `manage` access on the `asn` scope. Recorded in the operation audit
   // (dry runs and calls that change nothing are not).
   //
-  // Request: `packages` (required), `dryRun`.
+  // Request: `names` (required: services), `mode`, `dryRun`.
   rpc InstallPackages (Package.Request) returns (Package.Result) {
     option (google.api.http) = {
       post: "/package/install"
       body: "*"
     };
   }
-  // Remove controller service packages.
+  // Remove services.
   //
-  // Removes the named controller service packages and their web packages; the
-  // other services go to the newest version of their line. Restarts as
-  // `InstallPackages`.
+  // Removes the named services' controller packages and their web packages;
+  // the other services go to the newest version of their line. Restarts as
+  // `InstallPackages`. `mode` is refused.
   //
   // Auth: `manage` access on the `asn` scope; audited as `InstallPackages`.
   //
-  // Request: `packages` (required), `dryRun`.
+  // Request: `names` (required: services), `dryRun`.
   rpc RemovePackages (Package.Request) returns (Package.Result) {
     option (google.api.http) = {
       post: "/package/remove"
       body: "*"
     };
   }
-  // Upgrade asnc and the controller service packages.
+  // Upgrade asnc and services.
   //
-  // Without `packages`: asnc and every service to the newest version of the
-  // target line, their web packages following. `to` empty keeps asnc's line;
-  // `X.Y` names a line (higher or lower) and keeps asnc's PRO or DEV mode;
-  // `X.Y.B` names an asnc version, which may be a downgrade or the other mode.
-  // Services follow the line and mode of the selected asnc; a service with no
-  // version there refuses the call and is listed. With `packages` (`asnc`
-  // and/or installed services, not combinable with `to`): only the named
-  // packages and their web packages move to the newest version of their line;
-  // the others stay; an unnamed service that is not compatible with the
-  // selected asnc refuses the call and is listed. An installed version is
-  // never downgraded automatically. Restarts as `InstallPackages`.
+  // Without `names`: asnc, every service and every web package to the newest
+  // version of the target line; `mode` applies to all of them. `to` empty
+  // keeps asnc's line; `X.Y` names a line (higher or lower); `X.Y.B` names an
+  // asnc version, which may be a downgrade or the other mode, and refuses
+  // `mode`. A service with no version on the target line in its mode refuses
+  // the call and is listed. With `names` (`asnc` and/or installed services,
+  // not combinable with `to`): only the named ones and their web packages
+  // move; `mode` applies to them; the others stay, and an unnamed service
+  // that is not compatible with the selected asnc refuses the call and is
+  // listed. Within a mode an installed version is never downgraded. A web
+  // package with no version in its mode keeps its version and is listed.
+  // Restarts as `InstallPackages`.
   //
   // Auth: `manage` access on the `asn` scope; audited as `InstallPackages`.
   //
-  // Request: `packages`, `to`, `dryRun`. `to` with `packages` fails with
+  // Request: `names`, `to`, `mode`, `dryRun`. `to` with `names` fails with
   // `shared.request.param_invalid` (meta `field=to`).
   rpc UpgradePackages (Package.UpgradeRequest) returns (Package.Result) {
     option (google.api.http) = {
@@ -167,15 +183,17 @@ service Management {
   }
   // Upgrade web packages only.
   //
-  // Without `packages`: every web package of the list, and the web package of
-  // every installed backend that has none, to the newest version in the
-  // repository. With `packages`: only the named web packages, each of which
-  // must belong to a backend in the list. The web packages are installed at
-  // once; the controller does not restart (status `applied`).
+  // Without `names`: every web package of every backend in the list. With
+  // `names`: a service or `asnc` stands for all of its web packages, a web
+  // package name for that package only. `mode` applies to the selected web
+  // packages. A web package named directly with no version in its mode
+  // refuses the call; one reached through its backend keeps its version and
+  // is listed. The web packages are installed at once; the controller does
+  // not restart (status `applied`).
   //
   // Auth: `manage` access on the `asn` scope; audited as `InstallPackages`.
   //
-  // Request: `packages`, `dryRun`.
+  // Request: `names`, `mode`, `dryRun`.
   rpc UpgradeWebPackages (Package.Request) returns (Package.Result) {
     option (google.api.http) = {
       post: "/package/upgrade/web"
@@ -4408,35 +4426,39 @@ message UpdatePortReq {
 // Requests and results of the controller package RPCs (`/package`).
 //
 // `kind` of a package is `asnc`, `service` (a controller service package) or
-// `web` (a web package; `webFor` names its backend package). Versions are
+// `web` (a web package; `webFor` names its backend package). `service` is the
+// service name of a service package and of a service's web package (`asnc`
+// for asnc and its web packages); `mode` is `pro` or `dev`. Versions are
 // Debian versions; an empty version means the package is not there.
 message Package {
   // Request of `InstallPackages`, `RemovePackages` and `UpgradeWebPackages`.
   message Request {
-    // Package names. Required for install and remove; for
-    // `UpgradeWebPackages` empty means every web package.
-    repeated string packages = 1;
+    // Services (and `asnc`; web package names for `UpgradeWebPackages`).
+    // Required for install and remove; for `UpgradeWebPackages` empty means
+    // every web package.
+    repeated string names = 1;
     // Only compute and return the plan; nothing changes.
     bool dry_run = 2;
-    // `InstallPackages` only: select the named services from DEV versions
-    // (`n` >= 100) whatever asnc's mode. A service installed at a DEV version
-    // stays DEV in later operations. Refused by remove and web upgrades.
-    bool dev = 3;
+    reserved 3;
+    reserved "dev";
+    // `pro`, `dev`, or empty to keep each package's installed mode. Refused
+    // by `RemovePackages`.
+    string mode = 4;
   }
   // Request of `UpgradePackages`.
   message UpgradeRequest {
-    // `asnc` and/or installed controller service packages; empty means asnc
-    // and every service.
-    repeated string packages = 1;
+    // `asnc` and/or installed services; empty means asnc and every service.
+    repeated string names = 1;
     // Target: empty for asnc's current line, `X.Y` for a line, `X.Y.B` for an
-    // asnc version. Not combinable with `packages`.
+    // asnc version. Not combinable with `names`.
     string to = 2;
     // Only compute and return the plan; nothing changes.
     bool dry_run = 3;
-    // Select the named services (every service when `packages` is empty) from
-    // DEV versions (`n` >= 100) whatever asnc's mode. A service installed at a
-    // DEV version stays DEV in later operations.
-    bool dev = 4;
+    reserved 4;
+    reserved "dev";
+    // `pro`, `dev`, or empty to keep each package's installed mode. Refused
+    // with `to` `X.Y.B`.
+    string mode = 5;
   }
   // One package of an operation's target list.
   message PlanItem {
@@ -4447,6 +4469,12 @@ message Package {
     string from = 4;
     // The target version; empty when the package is removed.
     string to = 5;
+    string service = 6;
+    // The mode of `to` (of `from` when removed).
+    string mode = 7;
+    // The version stays and only its mode changes to `mode` (a web package
+    // put in the other mode with `--pro` / `--dev`).
+    bool mode_changed = 8;
   }
   // A version change of one package.
   message Change {
@@ -4481,6 +4509,9 @@ message Package {
     // The controller restarts to install the change (`switched`), or would
     // (`planned`).
     bool restart = 7;
+    // Web packages kept at their version because their mode has no version
+    // in the repository (or their installed version was withdrawn).
+    repeated string kept_web = 8;
   }
   // One package of `ListPackages`.
   message Installed {
@@ -4495,6 +4526,9 @@ message Package {
     string status = 6;
     // The installed state differs from the list.
     bool mismatch = 7;
+    string service = 8;
+    // The mode of the listed version; empty when it cannot be told.
+    string mode = 9;
   }
   // One package operation record.
   message HistoryRecord {
@@ -4526,11 +4560,20 @@ message Package {
     string kind = 2;
     string web_for = 3;
     string current = 4;
-    string available = 5;
-    // `available` equals `current`.
+    reserved 5;
+    reserved "available";
+    // The version of the installed mode equals `current`.
     bool latest = 6;
+    string service = 7;
+    // The installed mode; empty when it cannot be told.
+    string mode = 8;
+    // The newest PRO version the package can take; empty when its repository
+    // has no PRO suite or no PRO version for it.
+    string pro = 9;
+    // The newest DEV version, as `pro`.
+    string dev = 10;
   }
-  // A line higher than asnc's current one.
+  // A line higher than asnc's current one, in one mode.
   message Line {
     // `X.Y`.
     string line = 1;
@@ -4539,6 +4582,8 @@ message Package {
     // Installed services with no version on the line; an upgrade to it is
     // refused while any is listed.
     repeated string missing = 3;
+    // `pro` or `dev`.
+    string mode = 4;
   }
   // Response of `ListPackageUpdates`.
   message Updates {

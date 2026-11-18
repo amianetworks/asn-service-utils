@@ -24,7 +24,7 @@ services:
     volumes:
       - redis_data:/data
   sapphire-iam:
-    image: registry.amiasys.com/sapphire.iam:27.1.3
+    image: registry.amiasys.com/sapphire.iam:27.1.5
     container_name: sapphire-iam
     privileged: true
     restart: always
@@ -38,8 +38,8 @@ services:
   # asnc, its services and their web come from the package list in ./asn-pkg
   # (installed by the image's entry on every start); the image tag fixes only
   # the first asnc version. Upgrade with `docker compose exec asnc asnctl
-  # package ...`; first deploy with `docker compose run --rm asnc install
-  # <service packages>...` (ASN ControllerUpgrade CU-D13–CU-D15).
+  # package ...`; first deploy with `docker compose exec asnc asnctl package
+  # install <service>...` (services named as in asn.conf `service[].name`).
   asnc:
     # not `always`: a stopped asnc must stay stopped across a Docker restart
     # during a migration
