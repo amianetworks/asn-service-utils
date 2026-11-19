@@ -15,9 +15,10 @@ service Management {
   // Returns Controller version information and the Service Node gRPC port.
   //
   // Reports the running Controller version, the version of every loaded ASN
-  // service, the port the Controller currently listens on for Service Node gRPC
-  // connections, and the port saved by a previous `UpdatePort` that is not yet in
-  // effect (`portPending` is 0 when no change is pending in this process).
+  // service and the port the Controller listens on for Service Node gRPC
+  // connections. The port is set only in the Controller configuration
+  // (`api.grpc_c`), together with `servicenode.advertise_address` and the
+  // nodes' own configuration.
   //
   // Auth: public; no `X-Auth-Token` is needed and no permission is checked.
   //
@@ -25,28 +26,6 @@ service Management {
   rpc GetInfo     (Empty)         returns (ControllerInfo) {
     option (google.api.http) = {
       get: "/info"
-    };
-  }
-
-  // Changes the Service Node gRPC port saved in the Controller configuration.
-  //
-  // Writes `:<port>` to the `api.grpc_c` key of the Controller configuration file.
-  // The running listener is not restarted: the new port takes effect on the next
-  // Controller start, and until then `GetInfo` reports it as `portPending`.
-  //
-  // Auth: requires `X-Auth-Token`; the caller must be an ASN administrator (holds an
-  // access granting the `manage` operation on the `asn` scope).
-  //
-  // Request: `port` is required and must be 1-65535.
-  //
-  // Errors:
-  // - `shared.auth.permission_denied`: the caller is not an administrator.
-  // - `shared.request.param_invalid` (meta `field=port`): port is 0 or above 65535.
-  // - `shared.system.internal`: the lock or the configuration write failed.
-  rpc UpdatePort  (UpdatePortReq) returns (Empty) {
-    option (google.api.http) = {
-      post: "/info/port"
-      body: "*"
     };
   }
 
@@ -1912,7 +1891,9 @@ service Management {
   // - `shared.request.required_field_missing` (`errMeta.field` = `op_params`).
   // - `asn.node.not_found`: the node does not exist.
   // - `shared.service.not_found`: `serviceName` is not a service known to this
-  //   controller.
+  //   controller, or the node is not eligible for it (not in its services;
+  //   assign it with `AddNodeService` first). Ops never add the service to a
+  //   node.
   rpc AddNodeConfigOps             (Node.SetConfigOp)                   returns (Ops.Responses) {
     option (google.api.http) = {
       post: "/node/config_op"
@@ -3436,7 +3417,8 @@ service Management {
   }
   // Replace an event rule. Auth and errors as create. The root does not
   // change: an empty `root_id` keeps it, another is
-  // `shared.request.param_invalid` (`errMeta.field` `root_id`).
+  // `shared.request.param_invalid` (`errMeta.field` `root_id`); a built-in
+  // rule is `asn.event.rule_builtin` (`errMeta.id`).
   rpc UpdateEventRule              (Events.Rule)                        returns (Events.Rule) {
     option (google.api.http) = {
       put: "/events/rule"
@@ -4403,22 +4385,8 @@ message ControllerInfo {
   // TCP port the controller is currently listening on for Service Node
   // connections (the mTLS controller gRPC listener).
   uint32 port = 3;
-  // Port saved by `UpdatePort` (`POST /info/port`) during this controller run but
-  // not yet in effect; it is used after the controller restarts. 0 when no change
-  // is pending.
-  uint32 port_pending = 4;
-}
-
-// Request of `UpdatePort` (`POST /info/port`).
-//
-// Admin only (ASN admin); otherwise `shared.auth.permission_denied`. The new port
-// is written to the controller config file and reported as
-// `ControllerInfo.portPending`; the running listener is not changed until the
-// controller restarts.
-message UpdatePortReq {
-  // New Service Node listening port, 1-65535. Required; 0 or values above 65535
-  // fail with `shared.request.param_invalid` (meta `field=port`).
-  uint32 port = 1;
+  reserved 4;
+  reserved "port_pending";
 }
 
 /*
@@ -5181,7 +5149,8 @@ message Network {
     string name = 3;
     // New description (empty clears it).
     string description = 4;
-    // New tier labels (empty clears them); each must be in the root network's tier vocabulary.
+    // New tier labels (empty clears them). For a subnetwork each must be in the root network's
+    // tier vocabulary, otherwise `shared.request.not_supported`; a root network's own labels are free.
     repeated string network_tiers = 5;
     // New location (omitted clears it); validated as in `CreateNetwork`.
     Location location = 6;
@@ -5226,7 +5195,8 @@ message Node {
   string network_id = 5;
   // Physical location of the node; null when not set.
   Location location = 6;
-  // Operator-set flag stored with the node; the controller does not act on it.
+  // Records whether the node is managed by ASN or only registered with it.
+  // Set by the operator; the controller stores it and does not act on it.
   bool managed = 7;
   // Topology info of the node (interfaces, IPMI, management address, device
   // info).
@@ -5411,15 +5381,18 @@ message Node {
     string name = 3;
     // Free-text description.
     string description = 4;
-    // Operator-set flag stored with the node.
+    // Whether the node is managed by ASN or only registered with it; see
+    // `Node.managed`.
     bool managed = 5;
     // Location (optional). Latitude must be within [-90, 90] and longitude
     // within [-180, 180], and the location tier must be valid for the nearest
     // ancestor network that has a location.
     Location location = 6;
     // Topology info (optional): `interfaces`, `ipmi`, `management` and `info`
-    // are stored; `param` and the `verify` flags are ignored. The host reports
-    // its own info when it registers, which replaces this.
+    // are stored; `param` is ignored. When the controller verifies nodes of
+    // this type (asn.conf `network.spec_verification`), a registration whose
+    // reported info conflicts with this is refused; otherwise the info the host
+    // reports when it registers replaces this.
     NodeInfo info = 7;
     // Initial service set; the install script installs these services. Every
     // name must be a service known to this controller. May be empty.
@@ -5437,13 +5410,13 @@ message Node {
     string name = 4;
     // New description.
     string description = 5;
-    // New value of the operator-set flag.
+    // New value of `Node.managed`.
     bool managed = 6;
     // New location; same validation as `Node.Create.location`.
     Location location = 7;
     // New topology info: `ipmi`, `management` and `info` replace the stored
-    // values; `interfaces`, `param` and the `verify` flags are ignored (use the
-    // `/node/interface` endpoints for interfaces).
+    // values; `interfaces` and `param` are ignored (use the `/node/interface`
+    // endpoints for interfaces).
     NodeInfo info = 8;
     // Services are changed only through AddNodeService / RemoveNodeService.
     reserved 9, 10;
@@ -5491,8 +5464,8 @@ message Node {
 
     // IPMI access details.
     message Ipmi {
-      // Not used: ignored in requests, always false in responses.
-      bool verify = 1;
+      reserved 1;
+      reserved "verify";
       // IPMI IP address.
       string ip = 2;
       // IPMI user name.
@@ -5503,8 +5476,8 @@ message Node {
 
     // Management address of the node.
     message Management {
-      // Not used: ignored in requests, always false in responses.
-      bool verify = 1;
+      reserved 1;
+      reserved "verify";
       // Management host name.
       string hostname = 2;
       // Management IP address.
@@ -5513,8 +5486,8 @@ message Node {
 
     // Device identification.
     message Info {
-      // Not used: ignored in requests, always false in responses.
-      bool verify = 1;
+      reserved 1;
+      reserved "verify";
       // Vendor name.
       string vendor = 2;
       // Model name.
@@ -6687,8 +6660,9 @@ message Events {
     // An asn rule bound to a service reads only the nodes that carry it;
     // set or cleared by the caller.
     string bound = 21;
-    // Installed from a catalog's default rules: enabled, edited and copied,
-    // not deleted. Read only; an update keeps it.
+    // Installed from a catalog's default rules: it follows the declaration,
+    // so it is enabled/disabled and copied, never updated or deleted
+    // (`asn.event.rule_builtin`). Read only.
     bool builtin = 22;
     // Read only: the caller may change the rule (manage on its root; system
     // manage for platform rules).
@@ -7392,6 +7366,12 @@ message Logs {
     map<string, string> tags = 3;
     map<string, string> fields = 4; // as text
     string node_name = 5; // the node's current name; empty for a node no longer there
+    // asn.log only: the current name of the parser in tag `Parser`, and the
+    // display names of its named fields (the keys of `tags` and `fields`
+    // the patterns produce). Empty for other items and for a parser no
+    // longer there. Filled for any reader, who may not read the parsers.
+    string parser_name = 6;
+    repeated ParserField parser_fields = 7;
   }
   message Records {
     repeated Record records = 1;
