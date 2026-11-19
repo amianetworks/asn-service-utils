@@ -1502,8 +1502,10 @@ service Management {
   //
   // REST: this rpc has no gateway mapping; it is served by a hand-written handler at
   // `GET /network/topo/file?networkId=<id>`. On success the response is NOT the JSON envelope: it is
-  // the raw YAML with `Content-Type: application/x-yaml` and
-  // `Content-Disposition: attachment; filename="topo-<networkId>.yaml"`. Errors still use the
+  // the raw YAML with `Content-Type: application/x-yaml` and a `Content-Disposition` attachment
+  // named after the root network, `topo-<name>.yaml`: `filename*` carries the UTF-8 name, and
+  // `filename` is the same name when it is ASCII, otherwise `topo-<networkId>.yaml`. In the name,
+  // `/ \ : * ? " < > |` and control characters become `_`. Errors still use the
   // JSON error envelope. The YAML format is described on the `NetworkTopo` message, and an exported
   // file can be imported again with `ImportTopoFromFile`.
   //
